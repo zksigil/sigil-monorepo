@@ -1,0 +1,13 @@
+diff --git a/Common/cpp/reanimated/Fabric/ReanimatedMountHook.cpp b/Common/cpp/reanimated/Fabric/ReanimatedMountHook.cpp
+index 88cf5c67122c4c61da32b7358fd14a2a06b3842f..b73a84169111834f8655893445ce8bc88249baa6 100644
+--- a/Common/cpp/reanimated/Fabric/ReanimatedMountHook.cpp
++++ b/Common/cpp/reanimated/Fabric/ReanimatedMountHook.cpp
+@@ -18,7 +18,7 @@ ReanimatedMountHook::~ReanimatedMountHook() noexcept {
+ 
+ void ReanimatedMountHook::shadowTreeDidMount(
+     const RootShadowNode::Shared &rootShadowNode,
+-    double) noexcept {
++    HighResTimeStamp) noexcept {
+   auto reaShadowNode =
+       std::reinterpret_pointer_cast<ReanimatedCommitShadowNode>(
+           std::const_pointer_cast<RootShadowNode>(rootShadowNode));

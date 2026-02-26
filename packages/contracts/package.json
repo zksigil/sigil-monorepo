@@ -1,0 +1,11 @@
+{
+  "name": "contracts",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "build": "forge build",
+    "test": "forge test -vvv",
+    "test:coverage": "forge coverage",
+    "deploy:base-sepolia": "forge script script/DeployVerificationRegistry.s.sol --rpc-url base_sepolia --broadcast --verify -vvvv"
+  }
+}

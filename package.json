@@ -1,0 +1,37 @@
+{
+  "name": "zkproof-verifier",
+  "version": "0.0.0",
+  "private": true,
+  "engines": {
+    "node": ">=20.0.0",
+    "pnpm": ">=10.0.0"
+  },
+  "scripts": {
+    "mobile": "pnpm --filter mobile start",
+    "mobile:ios": "pnpm --filter mobile ios",
+    "mobile:android": "pnpm --filter mobile android",
+    "contracts:build": "pnpm --filter contracts build",
+    "contracts:sync-abi": "node scripts/sync-abi.mjs",
+    "contracts:test": "pnpm --filter contracts test",
+    "typecheck": "pnpm --filter mobile typecheck && pnpm --filter shared-types typecheck"
+  },
+  "devDependencies": {
+    "typescript": "^5.5.0"
+  },
+  "pnpm": {
+    "overrides": {
+      "viem": "^2.23.0",
+      "valtio": "2.1.8",
+      "@walletconnect/universal-provider": "2.21.10",
+      "commander": "^7.2.0"
+    },
+    "onlyBuiltDependencies": [
+      "bufferutil",
+      "keccak",
+      "utf-8-validate"
+    ],
+    "patchedDependencies": {
+      "react-native@0.81.5": "patches/react-native@0.81.5.patch"
+    }
+  }
+}

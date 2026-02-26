@@ -1,0 +1,36 @@
+# Node
+node_modules/
+
+# Expo / React Native
+.expo/
+dist/
+*.orig.*
+*.jks
+*.p8
+*.p12
+*.key
+*.mobileprovision
+web-build/
+android/.gradle/
+android/app/build/
+android/build/
+ios/Pods/
+ios/build/
+ios/DerivedData/
+.idea/
+*.xcworkspace
+!default.xcworkspace
+**/.DS_Store
+*.log
+
+# Foundry
+packages/contracts/cache/
+packages/contracts/out/
+
+# Environment
+.env
+.env.*
+!.env.example
+
+# TypeScript
+*.tsbuildinfo
