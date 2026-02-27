@@ -17,7 +17,7 @@
       "bundleIdentifier": "com.zkidentity.app",
       "buildNumber": "1",
       "infoPlist": {
-        "NSCameraUsageDescription": "Camera is used to scan QR codes for wallet connection.",
+        "NSCameraUsageDescription": "Camera is used to scan QR codes for wallet connection and to help you read your passport MRZ for NFC access.",
         "NFCReaderUsageDescription": "NFC is used to read your passport chip for identity verification. Your passport data never leaves this device.",
         "LSApplicationQueriesSchemes": [
           "metamask",
@@ -40,6 +40,12 @@
       ]
     },
     "plugins": [
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "Camera is used to scan QR codes for wallet connection and to help you read your passport MRZ for NFC access."
+        }
+      ],
       [
         "expo-build-properties",
         {

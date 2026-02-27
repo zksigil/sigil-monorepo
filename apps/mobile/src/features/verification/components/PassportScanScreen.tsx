@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useRef } from 'react';
 import {
   View,
   Text,
@@ -6,9 +6,12 @@ import {
   Pressable,
   ActivityIndicator,
   ScrollView,
+  Linking,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
+import { CameraView, useCameraPermissions } from 'expo-camera';
+import TextRecognition from '@react-native-ml-kit/text-recognition';
 import type { RootStackNavigationProp } from '../../../app/navigation/types';
 import { useNFCReader } from '../hooks/useNFCReader';
 import type { NFCReadResult, NFCError } from '../../../infrastructure/nfc';
@@ -19,6 +22,7 @@ import type { NFCReadResult, NFCError } from '../../../infrastructure/nfc';
 
 type MRZTab = 'manual' | 'camera';
 type NFCScanState = 'ready' | 'scanning' | 'success' | 'error';
+type MRZScanState = 'idle' | 'capturing' | 'processing' | 'success' | 'failed';
 type ScreenStep = 'mrz-entry' | 'nfc-scan';
 
 interface MRZInput {
@@ -39,6 +43,130 @@ interface NFCSuccessResult {
   data: NFCSuccessData;
   rawDG1Hex?: string;
   bacUsed?: boolean;
+}
+
+// ---------------------------------------------------------------------------
+// MRZ OCR parsing
+// ---------------------------------------------------------------------------
+
+/**
+ * Strip noise and whitespace from a raw OCR line, keeping only characters
+ * that could plausibly appear in an MRZ (A-Z, 0-9, < and common OCR look-alikes
+ * like '.', '-', 'O', 'I', 'S', 'B', 'G', 'Z'). Spaces are removed so that
+ * OCR word-breaks inside a single MRZ field don't split the token.
+ */
+function normalizeMRZLine(raw: string): string {
+  return raw
+    .toUpperCase()
+    .replace(/\s+/g, '')
+    .replace(/[^A-Z0-9<.\-]/g, '')  // strip chars with no MRZ equivalent
+    .replace(/\./g, '<')            // full-stop → filler
+    .replace(/-/g, '<');            // hyphen → filler
+}
+
+/**
+ * Correct a character that must be a digit (0-9 or '<').
+ * Common OCR substitutions: S↔5, I/L↔1, O↔0, B↔8, G↔6, Z↔2, T↔7.
+ */
+function toDigit(ch: string): string {
+  switch (ch) {
+    case 'O': return '0';
+    case 'I': case 'L': return '1';
+    case 'Z': return '2';
+    case 'S': return '5';
+    case 'G': return '6';
+    case 'T': return '7';
+    case 'B': return '8';
+    default:  return ch;
+  }
+}
+
+/**
+ * Correct a character that must be alpha (A-Z or '<').
+ * Common OCR substitutions: 0↔O, 1↔I, 8↔B, 6↔G.
+ */
+function toAlpha(ch: string): string {
+  switch (ch) {
+    case '0': return 'O';
+    case '1': return 'I';
+    case '8': return 'B';
+    case '6': return 'G';
+    default:  return ch;
+  }
+}
+
+/**
+ * Apply position-aware character corrections to a 44-character TD3 line 2.
+ *
+ * TD3 line 2 layout (ICAO 9303):
+ *   [0-8]   Document number  — alphanumeric (no correction: could be letter or digit)
+ *   [9]     Check digit      — digit only
+ *   [10-12] Nationality      — alpha only
+ *   [13-18] Date of birth    — digit only (YYMMDD)
+ *   [19]    Check digit      — digit only
+ *   [20]    Sex              — alpha only (M / F / <)
+ *   [21-26] Date of expiry   — digit only (YYMMDD)
+ *   [27]    Check digit      — digit only
+ *   [28-42] Optional data    — alphanumeric (no correction)
+ *   [43]    Check digit      — digit only
+ */
+function applyPositionNorm(line: string): string {
+  const chars = line.split('');
+
+  const digitPositions = new Set([9, 13, 14, 15, 16, 17, 18, 19, 21, 22, 23, 24, 25, 26, 27, 43]);
+  const alphaPositions = new Set([10, 11, 12, 20]);
+
+  return chars
+    .map((ch, i) => {
+      if (digitPositions.has(i)) return toDigit(ch);
+      if (alphaPositions.has(i)) return toAlpha(ch);
+      return ch;
+    })
+    .join('');
+}
+
+/**
+ * Parse TD3 passport MRZ line 2 (44 chars) into our MRZInput fields.
+ * Position-aware normalization is applied before field extraction so that
+ * common OCR character confusions (S↔5, O↔0, etc.) are fixed in context.
+ */
+function parseMRZLine2(raw44: string): Partial<MRZInput> | null {
+  if (raw44.length < 44) return null;
+
+  const line = applyPositionNorm(raw44);
+
+  const docNum      = line.substring(0, 9).replace(/</g, '');
+  const nationality = line.substring(10, 13).replace(/</g, '');
+  const dob         = line.substring(13, 19);
+  const expiry      = line.substring(21, 27);
+
+  if (!/^\d{6}$/.test(dob) || !/^\d{6}$/.test(expiry)) return null;
+  if (!docNum) return null;
+  if (!/^[A-Z]{0,3}$/.test(nationality)) return null;
+
+  console.log('[SCAN-OCR] Parsed MRZ line 2:', { docNum, nationality, dob, expiry });
+  return { documentNumber: docNum, nationality, dateOfBirth: dob, dateOfExpiry: expiry };
+}
+
+/**
+ * Find and parse MRZ data from a list of raw OCR text lines.
+ * Tries candidates closest to 44 characters first.
+ */
+function parseMRZFromOCRText(rawLines: string[]): Partial<MRZInput> | null {
+  const candidates = rawLines
+    .map(normalizeMRZLine)
+    .filter((l) => l.length >= 30);
+
+  const sorted = [...candidates].sort((a, b) => Math.abs(44 - a.length) - Math.abs(44 - b.length));
+
+  for (const candidate of sorted) {
+    const normalized = candidate.padEnd(44, '<').substring(0, 44);
+    const result = parseMRZLine2(normalized);
+    if (result) return result;
+  }
+
+  console.warn('[SCAN-OCR] No valid MRZ line 2 found in OCR output');
+  return null;
 }
 
 // ---------------------------------------------------------------------------
@@ -65,6 +193,8 @@ function getErrorMessage(error: NFCError): string {
 export function PassportScanScreen(): React.JSX.Element {
   const navigation = useNavigation<RootStackNavigationProp<'PassportScan'>>();
   const { readPassport, isScanning, cancelScan } = useNFCReader();
+  const [cameraPermission, requestCameraPermission] = useCameraPermissions();
+  const cameraRef = useRef<CameraView>(null);
 
   // Screen step
   const [step, setStep] = useState<ScreenStep>('mrz-entry');
@@ -77,6 +207,7 @@ export function PassportScanScreen(): React.JSX.Element {
     dateOfExpiry: '',
     nationality: '',
   });
+  const [mrzScanState, setMrzScanState] = useState<MRZScanState>('idle');
 
   // NFC scan state
   const [scanState, setScanState] = useState<NFCScanState>('ready');
@@ -99,6 +230,57 @@ export function PassportScanScreen(): React.JSX.Element {
     [],
   );
 
+  // ---- MRZ OCR scan --------------------------------------------------------
+
+  const handleScanMRZ = useCallback(async () => {
+    if (!cameraRef.current) return;
+
+    setMrzScanState('capturing');
+    console.log('[SCAN-OCR] Capturing photo for MRZ recognition...');
+
+    try {
+      const photo = await cameraRef.current.takePictureAsync({
+        quality: 0.92,
+      });
+
+      setMrzScanState('processing');
+      console.log('[SCAN-OCR] Photo captured, running text recognition...');
+
+      const result = await TextRecognition.recognize(photo.uri);
+
+      // Collect all text lines from all blocks
+      const allLines: string[] = [];
+      for (const block of result.blocks) {
+        for (const line of block.lines) {
+          allLines.push(line.text);
+        }
+        // Also try the full block text in case line segmentation missed something
+        allLines.push(block.text);
+      }
+
+      console.log('[SCAN-OCR] Raw OCR lines:', allLines);
+
+      const parsed = parseMRZFromOCRText(allLines);
+
+      if (parsed) {
+        setMrzInput((prev) => ({ ...prev, ...parsed }));
+        setMrzScanState('success');
+        // Switch to Manual tab so user can review / correct the auto-filled fields
+        setTimeout(() => {
+          setActiveTab('manual');
+          setMrzScanState('idle');
+        }, 1200);
+      } else {
+        setMrzScanState('failed');
+      }
+    } catch (err) {
+      console.error('[SCAN-OCR] OCR error:', err instanceof Error ? err.message : err);
+      setMrzScanState('failed');
+    }
+  }, []);
+
+  // ---- NFC scan ------------------------------------------------------------
+
   const handleContinueToNFC = useCallback(() => {
     setStep('nfc-scan');
     setScanState('ready');
@@ -108,28 +290,35 @@ export function PassportScanScreen(): React.JSX.Element {
     setScanState('scanning');
     setErrorMessage(null);
 
-    const result: NFCReadResult = await readPassport({
-      documentNumber: mrzInput.documentNumber,
-      dateOfBirth: mrzInput.dateOfBirth,
-      dateOfExpiry: mrzInput.dateOfExpiry,
-    });
+    try {
+      const result: NFCReadResult = await readPassport({
+        documentNumber: mrzInput.documentNumber,
+        dateOfBirth: mrzInput.dateOfBirth,
+        dateOfExpiry: mrzInput.dateOfExpiry,
+      });
 
-    if (result.success) {
-      const successResult: NFCSuccessResult = {
-        data: result.data,
-        rawDG1Hex: result.rawDG1Hex,
-        bacUsed: result.bacUsed,
-      };
-      setNfcResult(successResult);
-      setScanState('success');
+      if (result.success) {
+        const successResult: NFCSuccessResult = {
+          data: result.data,
+          rawDG1Hex: result.rawDG1Hex,
+          bacUsed: result.bacUsed,
+        };
+        setNfcResult(successResult);
+        setScanState('success');
 
-      console.log('[SCAN] === Passport Scan Debug ===');
-      console.log('[SCAN] MRZ Input:', mrzInput);
-      console.log('[SCAN] NFC Result:', successResult.data);
-      console.log('[SCAN] BAC Used:', successResult.bacUsed);
-      console.log('[SCAN] Raw DG1 (hex):', successResult.rawDG1Hex);
-    } else {
-      setErrorMessage(getErrorMessage(result.error));
+        console.log('[SCAN] === Passport Scan Debug ===');
+        console.log('[SCAN] MRZ Input:', mrzInput);
+        console.log('[SCAN] NFC Result:', successResult.data);
+        console.log('[SCAN] BAC Used:', successResult.bacUsed);
+        console.log('[SCAN] Raw DG1 (hex):', successResult.rawDG1Hex);
+      } else {
+        setErrorMessage(getErrorMessage(result.error));
+        setScanState('error');
+      }
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'NFC scan failed unexpectedly';
+      console.error('[SCAN] Unhandled scan error:', msg);
+      setErrorMessage(msg);
       setScanState('error');
     }
   }, [readPassport, mrzInput]);
@@ -195,29 +384,135 @@ export function PassportScanScreen(): React.JSX.Element {
               <Text
                 className={`text-sm font-semibold ${activeTab === 'camera' ? 'text-white' : 'text-zinc-500'}`}
               >
-                Camera Guide
+                Scan MRZ
               </Text>
             </Pressable>
           </View>
 
-          {/* Camera tab placeholder */}
+          {/* Camera tab */}
           {activeTab === 'camera' && (
-            <View className="bg-zinc-900 rounded-2xl p-6 mb-6 items-center">
-              <View className="w-full aspect-[4/3] bg-zinc-800 rounded-xl mb-4 justify-end items-center pb-8">
-                <View className="w-4/5 h-8 border-2 border-white/40 rounded mb-1" />
-                <View className="w-4/5 h-8 border-2 border-white/40 rounded" />
-                <Text className="text-white/60 text-xs mt-2">Align MRZ here</Text>
-              </View>
-              <Text className="text-zinc-400 text-xs text-center mb-2">
-                Install expo-camera to enable camera guide
-              </Text>
-              <Text className="text-zinc-500 text-xs text-center">
-                Position the bottom lines of your passport data page in the zone above
-              </Text>
+            <View className="mb-6">
+              {/* Permission not yet determined — request it */}
+              {!cameraPermission && (
+                <View className="bg-zinc-900 rounded-2xl p-6 items-center gap-y-3">
+                  <Text className="text-zinc-300 text-sm text-center">
+                    Camera access is needed to scan your passport MRZ.
+                  </Text>
+                  <Pressable
+                    onPress={requestCameraPermission}
+                    className="bg-indigo-600 active:bg-indigo-700 rounded-xl px-6 py-3"
+                  >
+                    <Text className="text-white text-sm font-semibold">Allow Camera</Text>
+                  </Pressable>
+                </View>
+              )}
+
+              {/* Permission granted — live camera with scan button */}
+              {cameraPermission?.granted && (
+                <View>
+                  <View className="rounded-2xl overflow-hidden" style={{ aspectRatio: 4 / 3 }}>
+                    <CameraView
+                      ref={cameraRef}
+                      facing="back"
+                      style={{ flex: 1 }}
+                    >
+                      {/* MRZ guide overlay */}
+                      <View className="flex-1 justify-end pb-4 px-4">
+                        <View className="border-2 border-white/70 rounded-lg py-3 items-center">
+                          <Text className="text-white/80 text-xs font-medium tracking-widest">
+                            ALIGN MRZ LINES HERE
+                          </Text>
+                        </View>
+                        <Text className="text-white/50 text-xs text-center mt-1">
+                          The bottom two lines of your passport data page
+                        </Text>
+                      </View>
+                    </CameraView>
+                  </View>
+
+                  {/* Scan button + state feedback */}
+                  <View className="mt-3">
+                    {mrzScanState === 'idle' && (
+                      <Pressable
+                        onPress={handleScanMRZ}
+                        className="w-full rounded-2xl py-4 items-center bg-indigo-600 active:bg-indigo-700"
+                      >
+                        <Text className="text-white text-base font-semibold">Scan MRZ</Text>
+                      </Pressable>
+                    )}
+
+                    {(mrzScanState === 'capturing' || mrzScanState === 'processing') && (
+                      <View className="w-full rounded-2xl py-4 items-center bg-zinc-800 flex-row justify-center gap-x-3">
+                        <ActivityIndicator size="small" color="#818CF8" />
+                        <Text className="text-zinc-300 text-base font-semibold">
+                          {mrzScanState === 'capturing' ? 'Capturing...' : 'Reading MRZ...'}
+                        </Text>
+                      </View>
+                    )}
+
+                    {mrzScanState === 'success' && (
+                      <View className="w-full rounded-2xl py-4 items-center bg-green-900/40">
+                        <Text className="text-green-400 text-base font-semibold">
+                          MRZ Scanned — Review fields below
+                        </Text>
+                      </View>
+                    )}
+
+                    {mrzScanState === 'failed' && (
+                      <View className="gap-y-2">
+                        <View className="w-full rounded-2xl py-3 items-center bg-red-900/30">
+                          <Text className="text-red-400 text-sm font-semibold">
+                            Couldn't read MRZ — try better lighting
+                          </Text>
+                        </View>
+                        <Pressable
+                          onPress={() => setMrzScanState('idle')}
+                          className="w-full rounded-2xl py-4 items-center bg-indigo-600 active:bg-indigo-700"
+                        >
+                          <Text className="text-white text-base font-semibold">Try Again</Text>
+                        </Pressable>
+                      </View>
+                    )}
+                  </View>
+                </View>
+              )}
+
+              {/* Permission explicitly denied */}
+              {cameraPermission && !cameraPermission.granted && !cameraPermission.canAskAgain && (
+                <View className="bg-zinc-900 rounded-2xl p-6 items-center gap-y-3">
+                  <Text className="text-zinc-300 text-sm text-center">
+                    Camera permission was denied. Enable it in Settings to scan MRZ.
+                  </Text>
+                  <Pressable
+                    onPress={() => void Linking.openSettings()}
+                    className="bg-zinc-700 active:bg-zinc-600 rounded-xl px-6 py-3"
+                  >
+                    <Text className="text-white text-sm font-semibold">Open Settings</Text>
+                  </Pressable>
+                  <Text className="text-zinc-500 text-xs text-center">
+                    Or use Manual Entry tab to continue
+                  </Text>
+                </View>
+              )}
+
+              {/* Permission denied but can ask again */}
+              {cameraPermission && !cameraPermission.granted && cameraPermission.canAskAgain && (
+                <View className="bg-zinc-900 rounded-2xl p-6 items-center gap-y-3">
+                  <Text className="text-zinc-300 text-sm text-center">
+                    Camera access was denied. Grant access to scan MRZ.
+                  </Text>
+                  <Pressable
+                    onPress={requestCameraPermission}
+                    className="bg-indigo-600 active:bg-indigo-700 rounded-xl px-6 py-3"
+                  >
+                    <Text className="text-white text-sm font-semibold">Grant Camera Access</Text>
+                  </Pressable>
+                </View>
+              )}
             </View>
           )}
 
-          {/* MRZ input fields */}
+          {/* MRZ input fields — always visible so user can review/edit after scan */}
           <View className="gap-y-4 mb-8">
             <View>
               <Text className="text-zinc-400 text-xs font-medium mb-1.5 uppercase tracking-wider">

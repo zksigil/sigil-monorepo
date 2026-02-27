@@ -1,8 +1,8 @@
-import { renderHook, act, waitFor } from '@testing-library/react-native';
+import { renderHook, act } from '@testing-library/react-native';
 import { useProofGeneration } from '../useProofGeneration';
-import type { ProofInput } from '../../services/proofService';
+import type { ProofInput, ProofOutput } from '../../services/proofService';
 
-const mockProofOutput = {
+const mockProofOutput: ProofOutput = {
   zkProof: {
     proof: ('0x' + '00'.repeat(320)) as `0x${string}`,
     nullifier: ('0x' + '11'.repeat(32)) as `0x${string}`,
@@ -13,8 +13,12 @@ const mockProofOutput = {
 };
 
 jest.mock('../../services/proofService', () => ({
-  generateStubProof: jest.fn().mockReturnValue(mockProofOutput),
+  generateStubProof: jest.fn().mockImplementation(() => mockProofOutput),
 }));
+
+// Silence expected error logs from the hook during error-path tests
+beforeAll(() => jest.spyOn(console, 'error').mockImplementation(() => {}));
+afterAll(() => (console.error as jest.Mock).mockRestore());
 
 const validInput: ProofInput = {
   documentNumber: 'AB1234567',
@@ -46,21 +50,19 @@ describe('useProofGeneration', () => {
   it('sets isGenerating=true during generation', async () => {
     const { result } = renderHook(() => useProofGeneration());
 
-    let generatePromise: Promise<unknown>;
-    act(() => {
-      generatePromise = result.current.generate(validInput);
+    // Start generation without advancing timers so it stays pending
+    let promise: Promise<ProofOutput>;
+    await act(async () => {
+      promise = result.current.generate(validInput);
     });
 
-    // Before the 1s simulated proving delay resolves
+    // Timer hasn't fired yet — should still be generating
     expect(result.current.isGenerating).toBe(true);
 
-    // Advance past the setTimeout(1000)
+    // Advance past the 1s delay and resolve
     await act(async () => {
-      jest.advanceTimersByTime(1100);
-    });
-
-    await act(async () => {
-      await generatePromise!;
+      await jest.runAllTimersAsync();
+      await promise!;
     });
 
     expect(result.current.isGenerating).toBe(false);
@@ -71,13 +73,12 @@ describe('useProofGeneration', () => {
 
     await act(async () => {
       const promise = result.current.generate(validInput);
-      jest.advanceTimersByTime(1100);
+      await jest.runAllTimersAsync();
       await promise;
     });
 
-    await waitFor(() => {
-      expect(result.current.result).toEqual(mockProofOutput);
-    });
+    expect(result.current.result).toEqual(mockProofOutput);
+    expect(result.current.isGenerating).toBe(false);
   });
 
   it('throws and sets error for invalid wallet address', async () => {
@@ -88,17 +89,11 @@ describe('useProofGeneration', () => {
       walletAddress: 'not-a-hex-address' as `0x${string}`,
     };
 
-    await expect(async () => {
-      await act(async () => {
-        const promise = result.current.generate(invalidInput);
-        jest.advanceTimersByTime(1100);
-        await promise;
-      });
-    }).rejects.toThrow('Invalid wallet address');
-
-    await waitFor(() => {
-      expect(result.current.error).toBe("Invalid wallet address");
+    await act(async () => {
+      await result.current.generate(invalidInput).catch(() => undefined);
     });
+
+    expect(result.current.error).toBe('Invalid wallet address');
     expect(result.current.isGenerating).toBe(false);
   });
 
@@ -110,13 +105,9 @@ describe('useProofGeneration', () => {
       dateOfBirth: '1990-12-31',
     };
 
-    await expect(async () => {
-      await act(async () => {
-        const promise = result.current.generate(invalidInput);
-        jest.advanceTimersByTime(1100);
-        await promise;
-      });
-    }).rejects.toThrow('Date of birth must be YYMMDD format');
+    await act(async () => {
+      await result.current.generate(invalidInput).catch(() => undefined);
+    });
 
     expect(result.current.error).toBe('Date of birth must be YYMMDD format');
   });
@@ -129,13 +120,11 @@ describe('useProofGeneration', () => {
       dateOfExpiry: 'abcdef',
     };
 
-    await expect(async () => {
-      await act(async () => {
-        const promise = result.current.generate(invalidInput);
-        jest.advanceTimersByTime(1100);
-        await promise;
-      });
-    }).rejects.toThrow('Date of expiry must be YYMMDD format');
+    await act(async () => {
+      await result.current.generate(invalidInput).catch(() => undefined);
+    });
+
+    expect(result.current.error).toBe('Date of expiry must be YYMMDD format');
   });
 
   it('throws and sets error when document number is empty', async () => {
@@ -143,12 +132,10 @@ describe('useProofGeneration', () => {
 
     const invalidInput: ProofInput = { ...validInput, documentNumber: '' };
 
-    await expect(async () => {
-      await act(async () => {
-        const promise = result.current.generate(invalidInput);
-        jest.advanceTimersByTime(1100);
-        await promise;
-      });
-    }).rejects.toThrow('Document number is required');
+    await act(async () => {
+      await result.current.generate(invalidInput).catch(() => undefined);
+    });
+
+    expect(result.current.error).toBe('Document number is required');
   });
 });

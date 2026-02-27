@@ -45,6 +45,7 @@ export type NFCError =
   | { code: 'disabled'; message: string }
   | { code: 'cancelled'; message: string }
   | { code: 'timeout'; message: string }
+  | { code: 'auth_failed'; message: string }
   | { code: 'read_failed'; message: string };
 
 // ---------------------------------------------------------------------------
@@ -1079,9 +1080,18 @@ export async function readPassportNFC(mrzInput: MRZBACInput): Promise<NFCReadRes
         return readDG1SecureMessaging(session);
       }
 
-      // Fallback: plain read without BAC
-      console.warn('[NFC-BAC] BAC failed — falling back to plain DG1 read');
-      return readDG1Plain();
+      // BAC failed — almost certainly wrong MRZ data (doc number, DOB, or expiry).
+      // Do not fall back to a plain read: all modern passports require BAC/PACE,
+      // and a silent fallback would produce a confusing generic error instead of
+      // telling the user to correct their passport details.
+      console.warn('[NFC-BAC] BAC authentication failed — MRZ data likely incorrect');
+      return {
+        success: false,
+        error: {
+          code: 'auth_failed',
+          message: 'Passport authentication failed. Check that your document number, date of birth, and expiry date are correct.',
+        },
+      };
     })();
 
     return await Promise.race([readPromise, timeoutPromise]);

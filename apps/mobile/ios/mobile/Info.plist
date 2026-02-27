@@ -44,7 +44,7 @@
 		<true/>
 	</dict>
 	<key>NSCameraUsageDescription</key>
-	<string>Camera is used to scan QR codes for wallet connection and to help you read your passport MRZ.</string>
+	<string>Camera is used to scan QR codes for wallet connection and to help you read your passport MRZ for NFC access.</string>
 	<key>RCTNewArchEnabled</key>
 	<true/>
 	<key>UILaunchStoryboardName</key>
