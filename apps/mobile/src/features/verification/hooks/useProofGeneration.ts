@@ -16,8 +16,8 @@ export interface UseProofGenerationResult {
  * Hook wrapping stub ZK proof generation.
  *
  * Simulates async proof generation with a 1s delay to mirror the real
- * circuit proving time. In production, this will call a WASM prover
- * that takes 10-30 seconds.
+ * circuit proving time. In production, this will call Mopro SDK
+ * that takes 5-15 seconds on device.
  */
 export function useProofGeneration(): UseProofGenerationResult {
   const [isGenerating, setIsGenerating] = useState(false);
@@ -34,17 +34,14 @@ export function useProofGeneration(): UseProofGenerationResult {
       if (!input.walletAddress || !input.walletAddress.startsWith('0x')) {
         throw new Error('Invalid wallet address');
       }
-      if (!input.documentNumber) {
-        throw new Error('Document number is required');
+      if (!input.rawDG1Hex) {
+        throw new Error('Raw DG1 data is required');
       }
-      if (!/^\d{6}$/.test(input.dateOfBirth)) {
-        throw new Error('Date of birth must be YYMMDD format');
-      }
-      if (!/^\d{6}$/.test(input.dateOfExpiry)) {
-        throw new Error('Date of expiry must be YYMMDD format');
+      if (!input.rawSODHex) {
+        throw new Error('Raw SOD data is required');
       }
 
-      // Simulate proving time (real circuits take 10-30s)
+      // Simulate proving time (real Mopro circuits take 5-15s)
       await new Promise<void>((resolve) => setTimeout(resolve, 1000));
 
       const proofOutput = generateStubProof(input);

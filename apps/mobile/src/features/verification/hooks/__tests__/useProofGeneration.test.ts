@@ -5,11 +5,10 @@ import type { ProofInput, ProofOutput } from '../../services/proofService';
 const mockProofOutput: ProofOutput = {
   zkProof: {
     proof: ('0x' + '00'.repeat(320)) as `0x${string}`,
-    nullifier: ('0x' + '11'.repeat(32)) as `0x${string}`,
-    semaphoreIdentityCommitment: 12345n,
+    passportNullifier: ('0x' + '11'.repeat(32)) as `0x${string}`,
+    publicSignals: [12345n, 67890n] as const,
   },
-  nullifierHex: ('0x' + '11'.repeat(32)) as `0x${string}`,
-  commitmentDecimal: '12345',
+  passportNullifierHex: ('0x' + '11'.repeat(32)) as `0x${string}`,
 };
 
 jest.mock('../../services/proofService', () => ({
@@ -21,10 +20,8 @@ beforeAll(() => jest.spyOn(console, 'error').mockImplementation(() => {}));
 afterAll(() => (console.error as jest.Mock).mockRestore());
 
 const validInput: ProofInput = {
-  documentNumber: 'AB1234567',
-  dateOfBirth: '901231',
-  dateOfExpiry: '301231',
-  nationality: 'USA',
+  rawDG1Hex: 'aabbccdd00112233',
+  rawSODHex: 'ff00ee11dd22cc33',
   walletAddress: '0x1234567890abcdef1234567890abcdef12345678',
 };
 
@@ -97,45 +94,27 @@ describe('useProofGeneration', () => {
     expect(result.current.isGenerating).toBe(false);
   });
 
-  it('throws and sets error for invalid date of birth format', async () => {
+  it('throws and sets error when rawDG1Hex is empty', async () => {
     const { result } = renderHook(() => useProofGeneration());
 
-    const invalidInput: ProofInput = {
-      ...validInput,
-      dateOfBirth: '1990-12-31',
-    };
+    const invalidInput: ProofInput = { ...validInput, rawDG1Hex: '' };
 
     await act(async () => {
       await result.current.generate(invalidInput).catch(() => undefined);
     });
 
-    expect(result.current.error).toBe('Date of birth must be YYMMDD format');
+    expect(result.current.error).toBe('Raw DG1 data is required');
   });
 
-  it('throws and sets error for invalid date of expiry format', async () => {
+  it('throws and sets error when rawSODHex is empty', async () => {
     const { result } = renderHook(() => useProofGeneration());
 
-    const invalidInput: ProofInput = {
-      ...validInput,
-      dateOfExpiry: 'abcdef',
-    };
+    const invalidInput: ProofInput = { ...validInput, rawSODHex: '' };
 
     await act(async () => {
       await result.current.generate(invalidInput).catch(() => undefined);
     });
 
-    expect(result.current.error).toBe('Date of expiry must be YYMMDD format');
-  });
-
-  it('throws and sets error when document number is empty', async () => {
-    const { result } = renderHook(() => useProofGeneration());
-
-    const invalidInput: ProofInput = { ...validInput, documentNumber: '' };
-
-    await act(async () => {
-      await result.current.generate(invalidInput).catch(() => undefined);
-    });
-
-    expect(result.current.error).toBe('Document number is required');
+    expect(result.current.error).toBe('Raw SOD data is required');
   });
 });

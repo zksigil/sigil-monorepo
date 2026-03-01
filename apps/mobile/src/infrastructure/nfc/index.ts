@@ -37,7 +37,7 @@ export interface MRZBACInput {
 }
 
 export type NFCReadResult =
-  | { success: true; data: PassportMRZData; rawDG1Hex: string; bacUsed: boolean }
+  | { success: true; data: PassportMRZData; rawDG1Hex: string; rawSODHex: string; bacUsed: boolean }
   | { success: false; error: NFCError };
 
 export type NFCError =
@@ -891,7 +891,40 @@ async function readDG1Plain(): Promise<NFCReadResult> {
     };
   }
 
-  return finalizeDG1Read(allData, false);
+  // Read EF.SOD (0x011D) — required for Phase 3 proof generation
+  const selectSODResp = await transceive(buildSelectFile([0x01, 0x1d]));
+  console.log('[NFC] SELECT EF.SOD response:', toHex(selectSODResp));
+
+  if (!isSuccess(selectSODResp)) {
+    return {
+      success: false,
+      error: { code: 'read_failed', message: 'Failed to select EF.SOD on passport chip' },
+    };
+  }
+
+  const sodHeaderResp = await transceive(buildReadBinary(0, 4));
+  if (!isSuccess(sodHeaderResp) || sodHeaderResp.length < 6) {
+    return {
+      success: false,
+      error: { code: 'read_failed', message: 'Failed to read EF.SOD header' },
+    };
+  }
+
+  const sodTotalLength = parseBERTLVLength(sodHeaderResp);
+  console.log('[NFC] EF.SOD total length:', sodTotalLength);
+
+  const sodData = await readBinaryChunked(0, sodTotalLength, null);
+  if (!sodData) {
+    return {
+      success: false,
+      error: { code: 'read_failed', message: 'Failed to read EF.SOD data' },
+    };
+  }
+
+  const rawSODHex = toHex(sodData);
+  console.log('[NFC] SOD read, length:', sodData.length);
+
+  return finalizeDG1Read(allData, rawSODHex, false);
 }
 
 async function readDG1SecureMessaging(session: SessionKeys): Promise<NFCReadResult> {
@@ -951,7 +984,70 @@ async function readDG1SecureMessaging(session: SessionKeys): Promise<NFCReadResu
   }
 
   console.log('[NFC-SM] DG1 read complete, total bytes:', allData.length);
-  return finalizeDG1Read(allData, true);
+
+  // Read EF.SOD (0x011D) — required for Phase 3 proof generation
+  const { command: selectSODCmd, newSSC: sodSSC1 } = wrapSelectFileAPDU([0x01, 0x1d], {
+    ...session,
+    ssc: currentSSC,
+  });
+  const selectSODResp = await transceive(selectSODCmd);
+  console.log('[NFC-SM] SELECT EF.SOD response:', toHex(selectSODResp));
+
+  const selectSODResult = unwrapSMResponse(selectSODResp, { ...session, ssc: sodSSC1 });
+  if (!selectSODResult) {
+    return {
+      success: false,
+      error: { code: 'read_failed', message: 'Failed to select EF.SOD via secure messaging' },
+    };
+  }
+  let sodSSC = selectSODResult.newSSC;
+
+  // READ BINARY header (4 bytes) for SOD
+  const { command: sodHeaderCmd, newSSC: sodSSC2 } = wrapReadBinaryAPDU(0, 4, {
+    ...session,
+    ssc: sodSSC,
+  });
+  const sodHeaderResp = await transceive(sodHeaderCmd);
+  const sodHeaderResult = unwrapSMResponse(sodHeaderResp, { ...session, ssc: sodSSC2 });
+  if (!sodHeaderResult || sodHeaderResult.data.length < 4) {
+    return {
+      success: false,
+      error: { code: 'read_failed', message: 'Failed to read EF.SOD header via secure messaging' },
+    };
+  }
+  sodSSC = sodHeaderResult.newSSC;
+
+  const sodTotalLength = parseBERTLVLength([...sodHeaderResult.data, 0x90, 0x00]);
+  console.log('[NFC-SM] EF.SOD total length:', sodTotalLength);
+
+  // Read entire SOD in chunks with SM
+  const sodData: number[] = [];
+  let sodOffset = 0;
+
+  while (sodOffset < sodTotalLength) {
+    const readLen = Math.min(chunkSize, sodTotalLength - sodOffset);
+    const { command: readCmd, newSSC: readSSC } = wrapReadBinaryAPDU(sodOffset, readLen, {
+      ...session,
+      ssc: sodSSC,
+    });
+    const chunkResp = await transceive(readCmd);
+    const chunkResult = unwrapSMResponse(chunkResp, { ...session, ssc: readSSC });
+    if (!chunkResult) {
+      return {
+        success: false,
+        error: { code: 'read_failed', message: `EF.SOD SM read failed at offset ${sodOffset}` },
+      };
+    }
+    sodData.push(...chunkResult.data);
+    sodSSC = chunkResult.newSSC;
+    sodOffset += readLen;
+  }
+
+  const rawSODHex = toHex(sodData);
+  console.log('[NFC-SM] SOD read complete, total bytes:', sodData.length);
+  console.log('[NFC] SOD read, length:', sodData.length);
+
+  return finalizeDG1Read(allData, rawSODHex, true);
 }
 
 function parseBERTLVLength(headerResp: number[]): number {
@@ -984,7 +1080,7 @@ async function readBinaryChunked(
   return allData;
 }
 
-function finalizeDG1Read(allData: number[], bacUsed: boolean): NFCReadResult {
+function finalizeDG1Read(allData: number[], rawSODHex: string, bacUsed: boolean): NFCReadResult {
   const rawDG1Hex = toHex(allData);
   console.log('[NFC] DG1 raw bytes (hex):', rawDG1Hex);
 
@@ -1000,9 +1096,10 @@ function finalizeDG1Read(allData: number[], bacUsed: boolean): NFCReadResult {
     nationality: mrzData.nationality,
     docNumberLength: mrzData.documentNumber.length,
     bacUsed,
+    sodLength: rawSODHex.length / 2,
   });
 
-  return { success: true, data: mrzData, rawDG1Hex, bacUsed };
+  return { success: true, data: mrzData, rawDG1Hex, rawSODHex, bacUsed };
 }
 
 // ---------------------------------------------------------------------------

@@ -9,14 +9,11 @@ import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol
 
 /// @title VerificationRegistry
 /// @notice On-chain registry linking Ethereum wallets to passport-verified identities.
-/// @dev Phase 1 skeleton — ZK proof verification is a stub (always passes).
-///      Phase 2 will integrate the actual zkPassport groth16 verifier contract.
-///
-///      Security model:
-///      - One nullifier can link to N wallets (a single passport may control multiple wallets)
-///      - One wallet links to exactly one nullifier at a time
-///      - Wallets supply their own Semaphore identity commitment (no server involvement)
-///      - The contract owner can pause registration in emergencies
+/// @dev One verified address per passport at any time. Privacy model:
+///      - No address↔nullifier mapping stored (not even in private storage)
+///      - No nullifier in any event
+///      - Unregistration uses a registration commitment to prove ownership
+///      - Mandatory cooldown between unregister and re-register
 contract VerificationRegistry is
     IVerificationRegistry,
     Ownable,
@@ -29,20 +26,18 @@ contract VerificationRegistry is
 
     error VerificationRegistry__NotRegistered();
     error VerificationRegistry__AlreadyRegistered();
+    error VerificationRegistry__PassportAlreadyActive();
+    error VerificationRegistry__PassportInCooldown();
+    error VerificationRegistry__InvalidRegistrationCommitment();
     error VerificationRegistry__InvalidProof(string reason);
     error VerificationRegistry__ZeroAddress();
-    error VerificationRegistry__ZeroIdentityCommitment();
     error VerificationRegistry__VerifierCallFailed();
 
     // =========================================================================
-    // Type Declarations
+    // Constants
     // =========================================================================
 
-    /// @dev Internal record linking a wallet to its nullifier.
-    struct WalletRecord {
-        bytes32 nullifier;
-        bool active;
-    }
+    uint256 public constant REREGISTRATION_COOLDOWN = 7 days;
 
     // =========================================================================
     // State Variables
@@ -51,17 +46,20 @@ contract VerificationRegistry is
     /// @dev Total number of currently-verified wallets.
     uint256 private s_groupSize;
 
-    /// @dev wallet address => WalletInfo (public query data)
-    mapping(address wallet => WalletInfo) private s_walletInfo;
+    /// @dev passportNullifier → currently registered?
+    mapping(bytes32 => bool) private s_passportNullifierActive;
 
-    /// @dev wallet address => WalletRecord (internal bookkeeping)
-    mapping(address wallet => WalletRecord) private s_walletRecords;
+    /// @dev wallet address → verified?
+    mapping(address => bool) private s_verifiedAddresses;
 
-    /// @dev nullifier => NullifierInfo
-    mapping(bytes32 nullifier => NullifierInfo) private s_nullifierInfo;
+    /// @dev keccak256(abi.encode(passportNullifier, address)) → exists?
+    mapping(bytes32 => bool) private s_registrationCommitments;
 
-    /// @dev Address of the deployed zkPassport groth16 verifier.
-    ///      When address(0), proof verification is skipped (Phase 1 behavior).
+    /// @dev passportNullifier → cooldown expiry timestamp
+    mapping(bytes32 => uint256) private s_passportCooldownUntil;
+
+    /// @dev Address of the deployed ZK proof verifier contract.
+    ///      When address(0), proof verification is skipped (dev/Phase 1 behavior).
     address private s_zkVerifierContract;
 
     // =========================================================================
@@ -84,70 +82,54 @@ contract VerificationRegistry is
     /// @inheritdoc IVerificationRegistry
     function register(
         bytes calldata zkProof,
-        bytes32 nullifier,
-        uint256 semaphoreIdentityCommitment
+        bytes32 passportNullifier
     ) external override whenNotPaused nonReentrant {
         // --- Checks ---
-        if (s_walletInfo[msg.sender].verified) {
+        if (s_verifiedAddresses[msg.sender]) {
             revert VerificationRegistry__AlreadyRegistered();
         }
-        if (semaphoreIdentityCommitment == 0) {
-            revert VerificationRegistry__ZeroIdentityCommitment();
+        if (s_passportNullifierActive[passportNullifier]) {
+            revert VerificationRegistry__PassportAlreadyActive();
+        }
+        if (block.timestamp < s_passportCooldownUntil[passportNullifier]) {
+            revert VerificationRegistry__PassportInCooldown();
         }
 
-        // ZK proof verification (Phase 1 stub — always succeeds)
-        _verifyZKProof(zkProof, nullifier, semaphoreIdentityCommitment);
+        _verifyZKProof(zkProof, passportNullifier);
 
         // --- Effects ---
-        uint256 newGroupSize = s_groupSize + 1;
-        s_groupSize = newGroupSize;
+        s_groupSize++;
 
-        s_walletInfo[msg.sender] = WalletInfo({
-            verified: true,
-            previouslyUnregistered: s_walletInfo[msg.sender].previouslyUnregistered,
-            groupSizeAtVerification: newGroupSize,
-            verifiedAt: block.timestamp,
-            identityCommitment: semaphoreIdentityCommitment
-        });
+        s_verifiedAddresses[msg.sender] = true;
+        s_passportNullifierActive[passportNullifier] = true;
 
-        s_walletRecords[msg.sender] = WalletRecord({
-            nullifier: nullifier,
-            active: true
-        });
+        bytes32 commitment = keccak256(abi.encode(passportNullifier, msg.sender));
+        s_registrationCommitments[commitment] = true;
 
-        NullifierInfo storage nullifierInfo = s_nullifierInfo[nullifier];
-        nullifierInfo.currentCount += 1;
-        nullifierInfo.currentCountSince = block.timestamp;
-        if (nullifierInfo.currentCount > nullifierInfo.peakCount) {
-            nullifierInfo.peakCount = nullifierInfo.currentCount;
-            nullifierInfo.peakCountAchieved = block.timestamp;
-            if (nullifierInfo.peakCountSince == 0) {
-                nullifierInfo.peakCountSince = block.timestamp;
-            }
-        }
-
-        emit WalletRegistered(msg.sender, nullifier, newGroupSize, block.timestamp);
+        emit WalletVerified(msg.sender, block.timestamp);
     }
 
     /// @inheritdoc IVerificationRegistry
-    function unregister() external override whenNotPaused nonReentrant {
+    function unregister(bytes32 passportNullifier) external override whenNotPaused nonReentrant {
         // --- Checks ---
-        if (!s_walletInfo[msg.sender].verified) {
+        if (!s_verifiedAddresses[msg.sender]) {
             revert VerificationRegistry__NotRegistered();
         }
 
+        bytes32 commitment = keccak256(abi.encode(passportNullifier, msg.sender));
+        if (!s_registrationCommitments[commitment]) {
+            revert VerificationRegistry__InvalidRegistrationCommitment();
+        }
+
         // --- Effects ---
-        bytes32 nullifier = s_walletRecords[msg.sender].nullifier;
-        uint256 newGroupSize = s_groupSize - 1;
-        s_groupSize = newGroupSize;
+        s_groupSize--;
 
-        s_walletInfo[msg.sender].verified = false;
-        s_walletInfo[msg.sender].previouslyUnregistered = true;
-        s_walletRecords[msg.sender].active = false;
+        s_verifiedAddresses[msg.sender] = false;
+        s_passportNullifierActive[passportNullifier] = false;
+        s_registrationCommitments[commitment] = false;
+        s_passportCooldownUntil[passportNullifier] = block.timestamp + REREGISTRATION_COOLDOWN;
 
-        s_nullifierInfo[nullifier].currentCount -= 1;
-
-        emit WalletUnregistered(msg.sender, nullifier, newGroupSize, block.timestamp);
+        // NO event emitted — critical privacy requirement
     }
 
     // =========================================================================
@@ -156,35 +138,15 @@ contract VerificationRegistry is
 
     /// @inheritdoc IVerificationRegistry
     function isVerified(address wallet) external view override returns (bool) {
-        return s_walletInfo[wallet].verified;
+        return s_verifiedAddresses[wallet];
     }
 
     /// @inheritdoc IVerificationRegistry
-    function getWalletInfo(address wallet)
-        external
-        view
-        override
-        returns (WalletInfo memory)
-    {
-        return s_walletInfo[wallet];
-    }
-
-    /// @inheritdoc IVerificationRegistry
-    function getNullifierInfo(bytes32 nullifier)
-        external
-        view
-        override
-        returns (NullifierInfo memory)
-    {
-        return s_nullifierInfo[nullifier];
-    }
-
-    /// @notice Returns the total number of currently-verified wallets.
-    function getGroupSize() external view returns (uint256) {
+    function getGroupSize() external view override returns (uint256) {
         return s_groupSize;
     }
 
-    /// @notice Returns the ZK verifier contract address (address(0) in Phase 1).
+    /// @notice Returns the ZK verifier contract address (address(0) if not set).
     function getZkVerifier() external view returns (address) {
         return s_zkVerifierContract;
     }
@@ -201,8 +163,8 @@ contract VerificationRegistry is
         _unpause();
     }
 
-    /// @notice Set the ZK verifier contract address.
-    /// @dev When a verifier is set, all register() calls must pass Groth16 verification.
+    /// @notice Set the ZK proof verifier contract address.
+    /// @dev When a verifier is set, all register() calls must pass ZK proof verification.
     ///      Setting address(0) is disallowed after a verifier has been configured.
     function setZkVerifier(address verifierContract) external onlyOwner {
         if (verifierContract == address(0)) {
@@ -217,28 +179,24 @@ contract VerificationRegistry is
     // Private Functions
     // =========================================================================
 
-    /// @dev Verify the ZK proof via the external Groth16 verifier when configured.
+    /// @dev Verify the ZK proof via the external verifier when configured.
     ///      When s_zkVerifierContract is address(0), verification is skipped (Phase 1 compat).
     function _verifyZKProof(
         bytes calldata zkProof,
-        bytes32 nullifier,
-        uint256 commitment
+        bytes32 passportNullifier
     ) private view {
         if (s_zkVerifierContract == address(0)) {
-            // No verifier set — Phase 1 pass-through
             return;
         }
 
-        // Build public signals array: [nullifier, commitment, walletAddress]
-        uint256[] memory publicSignals = new uint256[](3);
-        publicSignals[0] = uint256(nullifier);
-        publicSignals[1] = commitment;
-        publicSignals[2] = uint256(uint160(msg.sender));
+        // Public signals: [passportNullifier, walletAddress]
+        uint256[] memory publicSignals = new uint256[](2);
+        publicSignals[0] = uint256(passportNullifier);
+        publicSignals[1] = uint256(uint160(msg.sender));
 
-        // Call the external verifier — wrap in try/catch to give a clear error
         try IGroth16Verifier(s_zkVerifierContract).verifyProof(zkProof, publicSignals) returns (bool valid) {
             if (!valid) {
-                revert VerificationRegistry__InvalidProof("groth16 verification failed");
+                revert VerificationRegistry__InvalidProof("zk verification failed");
             }
         } catch {
             revert VerificationRegistry__VerifierCallFailed();

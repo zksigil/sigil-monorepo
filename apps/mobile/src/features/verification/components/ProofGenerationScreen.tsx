@@ -10,6 +10,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRoute, useNavigation } from '@react-navigation/native';
 import { useAccount } from 'wagmi';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import type { RootStackRouteProp, RootStackNavigationProp } from '../../../app/navigation/types';
 import { useProofGeneration } from '../hooks/useProofGeneration';
 import type { ProofOutput } from '../services/proofService';
@@ -54,12 +55,17 @@ export function ProofGenerationScreen(): React.JSX.Element {
     const walletAddress = address ?? '0x0000000000000000000000000000000000000000';
 
     void generate({
-      documentNumber: passportData.documentNumber,
-      dateOfBirth: passportData.dateOfBirth,
-      dateOfExpiry: passportData.dateOfExpiry,
-      nationality: passportData.nationality,
+      rawDG1Hex: passportData.rawDG1Hex,
+      rawSODHex: passportData.rawSODHex,
       walletAddress,
-    }).then((output) => {
+    }).then(async (output) => {
+      // Cache passportNullifier for future unregistration (avoids NFC rescan)
+      try {
+        await AsyncStorage.setItem('passportNullifier', output.passportNullifierHex);
+        console.log('[PROOF] passportNullifier cached:', output.passportNullifierHex);
+      } catch (e) {
+        console.warn('[PROOF] Failed to cache passportNullifier:', e);
+      }
       setProofResult(output);
       setStep('proof_ready');
     }).catch(() => {
@@ -169,9 +175,21 @@ export function ProofGenerationScreen(): React.JSX.Element {
           </Text>
 
           <DebugRow label="Wallet Address" value={address ?? '(not connected)'} mono />
-          <DebugRow label="Doc Number (input)" value={passportData.documentNumber} mono />
-          <DebugRow label="Date of Birth (input)" value={passportData.dateOfBirth} mono />
-          <DebugRow label="Nationality (input)" value={passportData.nationality} mono />
+          <DebugRow label="Doc Number" value={passportData.documentNumber} mono />
+          <DebugRow
+            label="DG1 Hex"
+            value={passportData.rawDG1Hex.length > 32
+              ? `${passportData.rawDG1Hex.slice(0, 32)}...`
+              : passportData.rawDG1Hex}
+            mono
+          />
+          <DebugRow
+            label="SOD Hex"
+            value={passportData.rawSODHex.length > 32
+              ? `${passportData.rawSODHex.slice(0, 32)}...`
+              : passportData.rawSODHex}
+            mono
+          />
 
           {proofResult && (
             <>
@@ -180,13 +198,8 @@ export function ProofGenerationScreen(): React.JSX.Element {
                 Proof Values
               </Text>
               <DebugRow
-                label="Nullifier"
-                value={proofResult.nullifierHex}
-                mono
-              />
-              <DebugRow
-                label="Commitment (dec)"
-                value={proofResult.commitmentDecimal}
+                label="Passport Nullifier"
+                value={proofResult.passportNullifierHex}
                 mono
               />
               <DebugRow

@@ -42,6 +42,7 @@ interface NFCSuccessData {
 interface NFCSuccessResult {
   data: NFCSuccessData;
   rawDG1Hex?: string;
+  rawSODHex?: string;
   bacUsed?: boolean;
 }
 
@@ -301,6 +302,7 @@ export function PassportScanScreen(): React.JSX.Element {
         const successResult: NFCSuccessResult = {
           data: result.data,
           rawDG1Hex: result.rawDG1Hex,
+          rawSODHex: result.rawSODHex,
           bacUsed: result.bacUsed,
         };
         setNfcResult(successResult);
@@ -311,6 +313,7 @@ export function PassportScanScreen(): React.JSX.Element {
         console.log('[SCAN] NFC Result:', successResult.data);
         console.log('[SCAN] BAC Used:', successResult.bacUsed);
         console.log('[SCAN] Raw DG1 (hex):', successResult.rawDG1Hex);
+        console.log('[SCAN] Raw SOD (hex, length):', successResult.rawSODHex?.length ?? 0);
       } else {
         setErrorMessage(getErrorMessage(result.error));
         setScanState('error');
@@ -341,6 +344,8 @@ export function PassportScanScreen(): React.JSX.Element {
         dateOfBirth: nfcResult.data.dateOfBirth,
         dateOfExpiry: nfcResult.data.dateOfExpiry,
         nationality: nfcResult.data.nationality,
+        rawDG1Hex: nfcResult.rawDG1Hex ?? '',
+        rawSODHex: nfcResult.rawSODHex ?? '',
       },
     });
   }, [navigation, nfcResult]);
@@ -727,6 +732,22 @@ export function PassportScanScreen(): React.JSX.Element {
                               : nfcResult.rawDG1Hex
                           }
                         />
+                        {nfcResult.rawSODHex && (
+                          <DebugRow
+                            label="SOD Hex"
+                            value={
+                              nfcResult.rawSODHex.length > 64
+                                ? `${nfcResult.rawSODHex.slice(0, 64)}...`
+                                : nfcResult.rawSODHex
+                            }
+                          />
+                        )}
+                        {nfcResult.rawSODHex && (
+                          <DebugRow
+                            label="SOD Size"
+                            value={`${nfcResult.rawSODHex.length / 2} bytes`}
+                          />
+                        )}
                       </View>
                     )}
                   </View>

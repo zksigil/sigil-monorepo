@@ -1,8 +1,8 @@
-// Phase 2 types — stubs so infrastructure layer can reference them now
+// Phase 3 types — one-address-per-passport architecture
 export interface ZKProof {
   proof: `0x${string}`;
-  nullifier: `0x${string}`;
-  semaphoreIdentityCommitment: bigint;
+  passportNullifier: `0x${string}`;  // Poseidon(passportSecret) — 32 bytes
+  publicSignals: readonly [bigint, bigint];  // [passportNullifier, walletAddress]
 }
 
 export type VerificationStatus =

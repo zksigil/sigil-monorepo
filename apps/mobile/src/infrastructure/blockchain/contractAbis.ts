@@ -11,8 +11,7 @@ export const VERIFICATION_REGISTRY_ABI = [
     name: 'register',
     inputs: [
       { name: 'zkProof', type: 'bytes', internalType: 'bytes' },
-      { name: 'nullifier', type: 'bytes32', internalType: 'bytes32' },
-      { name: 'semaphoreIdentityCommitment', type: 'uint256', internalType: 'uint256' },
+      { name: 'passportNullifier', type: 'bytes32', internalType: 'bytes32' },
     ],
     outputs: [],
     stateMutability: 'nonpayable',
