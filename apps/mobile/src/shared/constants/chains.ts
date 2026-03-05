@@ -5,5 +5,5 @@ export const CHAIN_DISPLAY_NAMES: Record<number, string> = {
   31337: 'Anvil (local)',
 } as const;
 
-export const SUPPORTED_CHAIN_IDS = [84532, 8453] as const;
+export const SUPPORTED_CHAIN_IDS = [84532, 8453, 31337] as const;
 export type SupportedChainId = (typeof SUPPORTED_CHAIN_IDS)[number];
