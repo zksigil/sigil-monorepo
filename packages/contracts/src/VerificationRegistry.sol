@@ -1,205 +1,389 @@
 // SPDX-License-Identifier: MIT
-pragma solidity ^0.8.20;
+pragma solidity 0.8.24;
 
 import {IVerificationRegistry} from "./interfaces/IVerificationRegistry.sol";
-import {IGroth16Verifier} from "./interfaces/IGroth16Verifier.sol";
-import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
-import {Pausable} from "@openzeppelin/contracts/utils/Pausable.sol";
+import {IProtocolConfig} from "./interfaces/IProtocolConfig.sol";
+import {IProofVerifier} from "./interfaces/IProofVerifier.sol";
 import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
+import {Pausable} from "@openzeppelin/contracts/utils/Pausable.sol";
 
 /// @title VerificationRegistry
-/// @notice On-chain registry linking Ethereum wallets to passport-verified identities.
-/// @dev One verified address per passport at any time. Privacy model:
-///      - No address↔nullifier mapping stored (not even in private storage)
-///      - No nullifier in any event
-///      - Unregistration uses a registration commitment to prove ownership
-///      - Mandatory cooldown between unregister and re-register
-contract VerificationRegistry is
-    IVerificationRegistry,
-    Ownable,
-    Pausable,
-    ReentrancyGuard
-{
+/// @notice Two-tier ZK passport identity registry for Sigil.
+///
+/// @dev Architecture:
+///      - Core logic is immutable. All tunables live in ProtocolConfig (swappable).
+///      - ZK verifier is swappable (stub → real Noir verifier after circuit is ready).
+///      - Governor starts as a multisig; transfer to DAO via transferGovernance().
+///      - If core logic must change, set a successor and isVerified() delegates to it.
+///
+///      Privacy invariants enforced here (not in circuit):
+///        - hashedAddress == keccak256(msg.sender) checked on every write
+///        - No nullifier emitted in any event
+///        - No address ↔ nullifier mapping queryable externally
+///        - s_nextCommitmentToNullifier allows changePrimary without revealing old nullifier
+///          in calldata (old nullifier is derived server-side from the reverse mapping)
+contract VerificationRegistry is IVerificationRegistry, ReentrancyGuard, Pausable {
     // =========================================================================
     // Errors
     // =========================================================================
 
-    error VerificationRegistry__NotRegistered();
-    error VerificationRegistry__AlreadyRegistered();
-    error VerificationRegistry__PassportAlreadyActive();
-    error VerificationRegistry__PassportInCooldown();
-    error VerificationRegistry__InvalidRegistrationCommitment();
-    error VerificationRegistry__InvalidProof(string reason);
+    error VerificationRegistry__NotGovernor();
     error VerificationRegistry__ZeroAddress();
-    error VerificationRegistry__VerifierCallFailed();
+    error VerificationRegistry__AlreadyRegistered();
+    error VerificationRegistry__NotRegistered();
+    error VerificationRegistry__PassportExpired();
+    error VerificationRegistry__RateLimitExceeded();
+    error VerificationRegistry__InvalidProof();
+    error VerificationRegistry__NullifierAlreadyUsed();
+    error VerificationRegistry__InvalidNextNullifier();
+    error VerificationRegistry__PrimaryInCooldown();
+    error VerificationRegistry__NotAuthorized();
 
     // =========================================================================
-    // Constants
+    // Structs
     // =========================================================================
 
-    uint256 public constant REREGISTRATION_COOLDOWN = 7 days;
+    /// @dev Tracks expiry for a single registered address (base or primary tier).
+    struct Registration {
+        uint48 expiresAt;      // block.timestamp + TTL, capped at passportExpiry
+        uint48 passportExpiry; // from ZK proof public input
+    }
+
+    /// @dev Stores the active primary slot for a given nullifier.
+    ///      The nullifier itself is the mapping key — not stored inside the struct.
+    struct PrimarySlot {
+        bytes32 hashedAddress;  // keccak256(abi.encodePacked(registeredWallet))
+        bytes32 nextCommitment; // hash(hash(s, nonce+1)) — used to verify changePrimary
+    }
 
     // =========================================================================
-    // State Variables
+    // Governance
     // =========================================================================
 
-    /// @dev Total number of currently-verified wallets.
-    uint256 private s_groupSize;
-
-    /// @dev passportNullifier → currently registered?
-    mapping(bytes32 => bool) private s_passportNullifierActive;
-
-    /// @dev wallet address → verified?
-    mapping(address => bool) private s_verifiedAddresses;
-
-    /// @dev keccak256(abi.encode(passportNullifier, address)) → exists?
-    mapping(bytes32 => bool) private s_registrationCommitments;
-
-    /// @dev passportNullifier → cooldown expiry timestamp
-    mapping(bytes32 => uint256) private s_passportCooldownUntil;
-
-    /// @dev Address of the deployed ZK proof verifier contract.
-    ///      When address(0), proof verification is skipped (dev/Phase 1 behavior).
-    address private s_zkVerifierContract;
+    address public s_governor;
+    IProtocolConfig public s_config;
+    IProofVerifier public s_verifier;
+    address public s_oracleUpdater;
+    address public s_successor;
 
     // =========================================================================
-    // Events (contract-level, not in interface)
+    // DSC Oracle
     // =========================================================================
 
-    /// @notice Emitted when the ZK verifier contract address is updated.
-    event ZkVerifierUpdated(address indexed oldVerifier, address indexed newVerifier);
+    /// @notice Merkle root of valid Document Signing Certificates.
+    ///         Updated by s_oracleUpdater. Used by future circuit versions to
+    ///         prove the passport was signed by a non-revoked DSC.
+    bytes32 public s_dscMerkleRoot;
+
+    // =========================================================================
+    // Base Tier State
+    // =========================================================================
+
+    /// @dev keccak256(abi.encodePacked(wallet)) => active registration.
+    mapping(bytes32 => Registration) private s_baseRegistrations;
+
+    /// @dev epochNullifier => number of base registrations today from this passport.
+    ///      epochNullifier = hash(s, "epoch", floor(block.timestamp / 1 days))
+    mapping(bytes32 => uint8) private s_epochCounts;
+
+    // =========================================================================
+    // Primary Tier State
+    // =========================================================================
+
+    /// @dev nullifier => active primary slot. Public so the app can scan for recovery.
+    mapping(bytes32 => PrimarySlot) public s_primarySlots;
+
+    /// @dev nextCommitment => nullifier that stored it.
+    ///      Enables changePrimary to locate the old slot without the old nullifier
+    ///      appearing in calldata (preserving unlinkability between old and new nullifiers).
+    mapping(bytes32 => bytes32) private s_nextCommitmentToNullifier;
+
+    /// @dev keccak256(abi.encodePacked(wallet)) => active primary registration.
+    mapping(bytes32 => Registration) private s_primaryRegistrations;
+
+    /// @dev nullifier => timestamp after which re-registration with this nullifier is allowed.
+    mapping(bytes32 => uint256) private s_primaryUnregisteredAt;
 
     // =========================================================================
     // Constructor
     // =========================================================================
 
-    constructor(address initialOwner) Ownable(initialOwner) {}
+    constructor(address governor_, IProtocolConfig config_, IProofVerifier verifier_) {
+        if (governor_ == address(0)) revert VerificationRegistry__ZeroAddress();
+        if (address(config_) == address(0)) revert VerificationRegistry__ZeroAddress();
+        if (address(verifier_) == address(0)) revert VerificationRegistry__ZeroAddress();
+
+        s_governor = governor_;
+        s_config = config_;
+        s_verifier = verifier_;
+    }
 
     // =========================================================================
-    // External Functions
+    // Modifiers
+    // =========================================================================
+
+    modifier onlyGovernor() {
+        if (msg.sender != s_governor) revert VerificationRegistry__NotGovernor();
+        _;
+    }
+
+    // =========================================================================
+    // Base Tier — Registration
     // =========================================================================
 
     /// @inheritdoc IVerificationRegistry
-    function register(
-        bytes calldata zkProof,
-        bytes32 passportNullifier
+    function registerBase(
+        bytes32 epochNullifier,
+        uint48 passportExpiry,
+        bytes calldata proof
     ) external override whenNotPaused nonReentrant {
-        // --- Checks ---
-        if (s_verifiedAddresses[msg.sender]) {
-            revert VerificationRegistry__AlreadyRegistered();
+        bytes32 hashedAddress = keccak256(abi.encodePacked(msg.sender));
+
+        // Checks
+        if (block.timestamp >= passportExpiry) revert VerificationRegistry__PassportExpired();
+
+        Registration memory existing = s_baseRegistrations[hashedAddress];
+        bool active = existing.expiresAt > block.timestamp && existing.passportExpiry > block.timestamp;
+        if (active) revert VerificationRegistry__AlreadyRegistered();
+
+        uint8 count = s_epochCounts[epochNullifier];
+        if (count >= s_config.maxDailyRegistrations()) revert VerificationRegistry__RateLimitExceeded();
+
+        if (!s_verifier.verifyBaseProof(hashedAddress, passportExpiry, epochNullifier, proof)) {
+            revert VerificationRegistry__InvalidProof();
         }
-        if (s_passportNullifierActive[passportNullifier]) {
-            revert VerificationRegistry__PassportAlreadyActive();
-        }
-        if (block.timestamp < s_passportCooldownUntil[passportNullifier]) {
-            revert VerificationRegistry__PassportInCooldown();
-        }
 
-        _verifyZKProof(zkProof, passportNullifier);
+        // Effects
+        uint48 expiresAt = _cappedExpiry(passportExpiry);
+        s_baseRegistrations[hashedAddress] = Registration({expiresAt: expiresAt, passportExpiry: passportExpiry});
+        s_epochCounts[epochNullifier] = count + 1;
 
-        // --- Effects ---
-        s_groupSize++;
-
-        s_verifiedAddresses[msg.sender] = true;
-        s_passportNullifierActive[passportNullifier] = true;
-
-        bytes32 commitment = keccak256(abi.encode(passportNullifier, msg.sender));
-        s_registrationCommitments[commitment] = true;
-
-        emit WalletVerified(msg.sender, block.timestamp);
+        emit WalletVerified(msg.sender);
     }
 
     /// @inheritdoc IVerificationRegistry
-    function unregister(bytes32 passportNullifier) external override whenNotPaused nonReentrant {
-        // --- Checks ---
-        if (!s_verifiedAddresses[msg.sender]) {
-            revert VerificationRegistry__NotRegistered();
+    function renewBase(
+        uint48 passportExpiry,
+        bytes calldata proof
+    ) external override whenNotPaused nonReentrant {
+        bytes32 hashedAddress = keccak256(abi.encodePacked(msg.sender));
+
+        // Checks — must have a registration (even if expired) to renew
+        if (s_baseRegistrations[hashedAddress].expiresAt == 0) revert VerificationRegistry__NotRegistered();
+        if (block.timestamp >= passportExpiry) revert VerificationRegistry__PassportExpired();
+
+        // epochNullifier is zero for renewals — rate limiting only applies to new registrations
+        if (!s_verifier.verifyBaseProof(hashedAddress, passportExpiry, bytes32(0), proof)) {
+            revert VerificationRegistry__InvalidProof();
         }
 
-        bytes32 commitment = keccak256(abi.encode(passportNullifier, msg.sender));
-        if (!s_registrationCommitments[commitment]) {
-            revert VerificationRegistry__InvalidRegistrationCommitment();
-        }
-
-        // --- Effects ---
-        s_groupSize--;
-
-        s_verifiedAddresses[msg.sender] = false;
-        s_passportNullifierActive[passportNullifier] = false;
-        s_registrationCommitments[commitment] = false;
-        s_passportCooldownUntil[passportNullifier] = block.timestamp + REREGISTRATION_COOLDOWN;
-
-        // NO event emitted — critical privacy requirement
+        // Effects
+        uint48 expiresAt = _cappedExpiry(passportExpiry);
+        s_baseRegistrations[hashedAddress] = Registration({expiresAt: expiresAt, passportExpiry: passportExpiry});
     }
 
     // =========================================================================
-    // View Functions
+    // Primary Tier — Registration
+    // =========================================================================
+
+    /// @inheritdoc IVerificationRegistry
+    function registerPrimary(
+        bytes32 nullifier,
+        bytes32 nextCommitment,
+        uint48 passportExpiry,
+        bytes calldata proof
+    ) external override whenNotPaused nonReentrant {
+        bytes32 hashedAddress = keccak256(abi.encodePacked(msg.sender));
+
+        // Checks
+        if (block.timestamp >= passportExpiry) revert VerificationRegistry__PassportExpired();
+        if (s_primarySlots[nullifier].hashedAddress != bytes32(0)) revert VerificationRegistry__NullifierAlreadyUsed();
+        if (block.timestamp < s_primaryUnregisteredAt[nullifier]) revert VerificationRegistry__PrimaryInCooldown();
+
+        Registration memory existing = s_primaryRegistrations[hashedAddress];
+        bool active = existing.expiresAt > block.timestamp && existing.passportExpiry > block.timestamp;
+        if (active) revert VerificationRegistry__AlreadyRegistered();
+
+        if (!s_verifier.verifyPrimaryProof(hashedAddress, passportExpiry, nullifier, nextCommitment, proof)) {
+            revert VerificationRegistry__InvalidProof();
+        }
+
+        // Effects
+        uint48 expiresAt = _cappedExpiry(passportExpiry);
+        s_primarySlots[nullifier] = PrimarySlot({hashedAddress: hashedAddress, nextCommitment: nextCommitment});
+        s_nextCommitmentToNullifier[nextCommitment] = nullifier;
+        s_primaryRegistrations[hashedAddress] = Registration({expiresAt: expiresAt, passportExpiry: passportExpiry});
+
+        emit WalletVerified(msg.sender);
+    }
+
+    /// @inheritdoc IVerificationRegistry
+    function renewPrimary(
+        bytes32 nullifier,
+        uint48 passportExpiry,
+        bytes calldata proof
+    ) external override whenNotPaused nonReentrant {
+        bytes32 hashedAddress = keccak256(abi.encodePacked(msg.sender));
+
+        // Checks
+        if (block.timestamp >= passportExpiry) revert VerificationRegistry__PassportExpired();
+
+        PrimarySlot memory slot = s_primarySlots[nullifier];
+        if (slot.hashedAddress == bytes32(0)) revert VerificationRegistry__NotRegistered();
+        if (slot.hashedAddress != hashedAddress) revert VerificationRegistry__NotAuthorized();
+
+        if (!s_verifier.verifyPrimaryProof(hashedAddress, passportExpiry, nullifier, slot.nextCommitment, proof)) {
+            revert VerificationRegistry__InvalidProof();
+        }
+
+        // Effects — extend TTL, update passport expiry (e.g. after passport renewal)
+        uint48 expiresAt = _cappedExpiry(passportExpiry);
+        s_primaryRegistrations[hashedAddress] = Registration({expiresAt: expiresAt, passportExpiry: passportExpiry});
+    }
+
+    /// @inheritdoc IVerificationRegistry
+    function changePrimary(
+        bytes32 revealedNextNullifier,
+        bytes32 newNextCommitment,
+        uint48 passportExpiry,
+        bytes calldata proof
+    ) external override whenNotPaused nonReentrant {
+        bytes32 newHashedAddress = keccak256(abi.encodePacked(msg.sender));
+
+        // Checks
+        if (block.timestamp >= passportExpiry) revert VerificationRegistry__PassportExpired();
+
+        // Locate old slot: nextCommitment stored by old slot == hash(revealedNextNullifier)
+        bytes32 expectedCommitment = keccak256(abi.encodePacked(revealedNextNullifier));
+        bytes32 oldNullifier = s_nextCommitmentToNullifier[expectedCommitment];
+        if (oldNullifier == bytes32(0)) revert VerificationRegistry__InvalidNextNullifier();
+
+        PrimarySlot memory oldSlot = s_primarySlots[oldNullifier];
+        if (oldSlot.hashedAddress == bytes32(0)) revert VerificationRegistry__InvalidNextNullifier();
+
+        // Verify proof: proves caller knows s, hash(s,n+1) == revealedNextNullifier, new address
+        if (
+            !s_verifier.verifyPrimaryProof(
+                newHashedAddress, passportExpiry, revealedNextNullifier, newNextCommitment, proof
+            )
+        ) {
+            revert VerificationRegistry__InvalidProof();
+        }
+
+        // Effects — delete old slot and its commitment pointer
+        delete s_primarySlots[oldNullifier];
+        delete s_nextCommitmentToNullifier[expectedCommitment];
+        delete s_primaryRegistrations[oldSlot.hashedAddress];
+
+        // Create new slot with revealedNextNullifier as the live nullifier
+        uint48 expiresAt = _cappedExpiry(passportExpiry);
+        s_primarySlots[revealedNextNullifier] =
+            PrimarySlot({hashedAddress: newHashedAddress, nextCommitment: newNextCommitment});
+        s_nextCommitmentToNullifier[newNextCommitment] = revealedNextNullifier;
+        s_primaryRegistrations[newHashedAddress] =
+            Registration({expiresAt: expiresAt, passportExpiry: passportExpiry});
+
+        emit WalletVerified(msg.sender);
+    }
+
+    /// @inheritdoc IVerificationRegistry
+    function unregisterPrimary(bytes32 nullifier) external override whenNotPaused nonReentrant {
+        bytes32 hashedAddress = keccak256(abi.encodePacked(msg.sender));
+
+        // Checks — only the registered address can unregister
+        PrimarySlot memory slot = s_primarySlots[nullifier];
+        if (slot.hashedAddress == bytes32(0)) revert VerificationRegistry__NotRegistered();
+        if (slot.hashedAddress != hashedAddress) revert VerificationRegistry__NotAuthorized();
+
+        // Effects
+        delete s_primarySlots[nullifier];
+        delete s_nextCommitmentToNullifier[slot.nextCommitment];
+        delete s_primaryRegistrations[hashedAddress];
+        s_primaryUnregisteredAt[nullifier] = block.timestamp + s_config.cooldownPeriod();
+
+        // No event — privacy requirement
+    }
+
+    // =========================================================================
+    // Protocol Integration
     // =========================================================================
 
     /// @inheritdoc IVerificationRegistry
     function isVerified(address wallet) external view override returns (bool) {
-        return s_verifiedAddresses[wallet];
+        if (s_successor != address(0)) {
+            return IVerificationRegistry(s_successor).isVerified(wallet);
+        }
+        Registration memory reg = s_baseRegistrations[keccak256(abi.encodePacked(wallet))];
+        return reg.expiresAt > block.timestamp && reg.passportExpiry > block.timestamp;
     }
 
     /// @inheritdoc IVerificationRegistry
-    function getGroupSize() external view override returns (uint256) {
-        return s_groupSize;
-    }
-
-    /// @notice Returns the ZK verifier contract address (address(0) if not set).
-    function getZkVerifier() external view returns (address) {
-        return s_zkVerifierContract;
+    function isPrimaryVerified(address wallet) external view override returns (bool) {
+        if (s_successor != address(0)) {
+            return IVerificationRegistry(s_successor).isPrimaryVerified(wallet);
+        }
+        Registration memory reg = s_primaryRegistrations[keccak256(abi.encodePacked(wallet))];
+        return reg.expiresAt > block.timestamp && reg.passportExpiry > block.timestamp;
     }
 
     // =========================================================================
-    // Owner-Only Functions
+    // Governance
     // =========================================================================
 
-    function pause() external onlyOwner {
+    function transferGovernance(address newGovernor) external onlyGovernor {
+        if (newGovernor == address(0)) revert VerificationRegistry__ZeroAddress();
+        emit GovernanceTransferred(s_governor, newGovernor);
+        s_governor = newGovernor;
+    }
+
+    function setConfig(IProtocolConfig newConfig) external onlyGovernor {
+        if (address(newConfig) == address(0)) revert VerificationRegistry__ZeroAddress();
+        emit ConfigUpdated(address(s_config), address(newConfig));
+        s_config = newConfig;
+    }
+
+    function setVerifier(IProofVerifier newVerifier) external onlyGovernor {
+        if (address(newVerifier) == address(0)) revert VerificationRegistry__ZeroAddress();
+        emit VerifierUpdated(address(s_verifier), address(newVerifier));
+        s_verifier = newVerifier;
+    }
+
+    function setOracleUpdater(address newUpdater) external onlyGovernor {
+        emit OracleUpdaterSet(s_oracleUpdater, newUpdater);
+        s_oracleUpdater = newUpdater;
+    }
+
+    function setSuccessor(address newSuccessor) external onlyGovernor {
+        if (newSuccessor == address(0)) revert VerificationRegistry__ZeroAddress();
+        emit SuccessorSet(newSuccessor);
+        s_successor = newSuccessor;
+    }
+
+    function pause() external onlyGovernor {
         _pause();
     }
 
-    function unpause() external onlyOwner {
+    function unpause() external onlyGovernor {
         _unpause();
     }
 
-    /// @notice Set the ZK proof verifier contract address.
-    /// @dev When a verifier is set, all register() calls must pass ZK proof verification.
-    ///      Setting address(0) is disallowed after a verifier has been configured.
-    function setZkVerifier(address verifierContract) external onlyOwner {
-        if (verifierContract == address(0)) {
-            revert VerificationRegistry__ZeroAddress();
-        }
-        address oldVerifier = s_zkVerifierContract;
-        s_zkVerifierContract = verifierContract;
-        emit ZkVerifierUpdated(oldVerifier, verifierContract);
+    // =========================================================================
+    // Oracle
+    // =========================================================================
+
+    function updateDSCRoot(bytes32 newRoot) external {
+        if (msg.sender != s_oracleUpdater) revert VerificationRegistry__NotAuthorized();
+        emit DSCRootUpdated(newRoot);
+        s_dscMerkleRoot = newRoot;
     }
 
     // =========================================================================
-    // Private Functions
+    // Internal Helpers
     // =========================================================================
 
-    /// @dev Verify the ZK proof via the external verifier when configured.
-    ///      When s_zkVerifierContract is address(0), verification is skipped (Phase 1 compat).
-    function _verifyZKProof(
-        bytes calldata zkProof,
-        bytes32 passportNullifier
-    ) private view {
-        if (s_zkVerifierContract == address(0)) {
-            return;
-        }
-
-        // Public signals: [passportNullifier, walletAddress]
-        uint256[] memory publicSignals = new uint256[](2);
-        publicSignals[0] = uint256(passportNullifier);
-        publicSignals[1] = uint256(uint160(msg.sender));
-
-        try IGroth16Verifier(s_zkVerifierContract).verifyProof(zkProof, publicSignals) returns (bool valid) {
-            if (!valid) {
-                revert VerificationRegistry__InvalidProof("zk verification failed");
-            }
-        } catch {
-            revert VerificationRegistry__VerifierCallFailed();
-        }
+    /// @dev Returns block.timestamp + registrationTTL, capped at passportExpiry.
+    function _cappedExpiry(uint48 passportExpiry) private view returns (uint48) {
+        uint48 ttlExpiry = uint48(block.timestamp) + uint48(s_config.registrationTTL());
+        return ttlExpiry < passportExpiry ? ttlExpiry : passportExpiry;
     }
 }

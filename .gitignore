@@ -34,3 +34,9 @@ packages/contracts/out/
 
 # TypeScript
 *.tsbuildinfo
+
+# VS Code
+.vscode
+
+# claude
+CLAUDE.md
