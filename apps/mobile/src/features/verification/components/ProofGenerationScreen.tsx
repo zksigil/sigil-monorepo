@@ -10,10 +10,9 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRoute, useNavigation } from '@react-navigation/native';
 import { useAccount } from 'wagmi';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import type { RootStackRouteProp, RootStackNavigationProp } from '../../../app/navigation/types';
 import { useProofGeneration } from '../hooks/useProofGeneration';
-import type { ProofOutput } from '../services/proofService';
+import type { BaseProofOutput } from '../services/proofService';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -34,7 +33,7 @@ export function ProofGenerationScreen(): React.JSX.Element {
   const { generate, isGenerating, error: proofError } = useProofGeneration();
 
   const [step, setStep] = useState<FlowStep>('generating');
-  const [proofResult, setProofResult] = useState<ProofOutput | null>(null);
+  const [proofResult, setProofResult] = useState<BaseProofOutput | null>(null);
   const hasStarted = useRef(false);
 
   // Prevent back navigation during generation
@@ -58,14 +57,8 @@ export function ProofGenerationScreen(): React.JSX.Element {
       rawDG1Hex: passportData.rawDG1Hex,
       rawSODHex: passportData.rawSODHex,
       walletAddress,
-    }).then(async (output) => {
-      // Cache passportNullifier for future unregistration (avoids NFC rescan)
-      try {
-        await AsyncStorage.setItem('passportNullifier', output.passportNullifierHex);
-        console.log('[PROOF] passportNullifier cached:', output.passportNullifierHex);
-      } catch (e) {
-        console.warn('[PROOF] Failed to cache passportNullifier:', e);
-      }
+    }).then((output) => {
+      console.log('[PROOF] epochNullifier:', output.epochNullifier);
       setProofResult(output);
       setStep('proof_ready');
     }).catch(() => {
@@ -198,8 +191,8 @@ export function ProofGenerationScreen(): React.JSX.Element {
                 Proof Values
               </Text>
               <DebugRow
-                label="Passport Nullifier"
-                value={proofResult.passportNullifierHex}
+                label="Epoch Nullifier"
+                value={proofResult.epochNullifier}
                 mono
               />
               <DebugRow

@@ -336,6 +336,19 @@ export function PassportScanScreen(): React.JSX.Element {
     setErrorMessage(null);
   }, []);
 
+  const handleDevSkip = useCallback(() => {
+    navigation.navigate('ProofGeneration', {
+      passportData: {
+        documentNumber: mrzInput.documentNumber || 'AB1234567',
+        dateOfBirth: mrzInput.dateOfBirth || '900101',
+        dateOfExpiry: mrzInput.dateOfExpiry || '300101',
+        nationality: mrzInput.nationality || 'USA',
+        rawDG1Hex: '615b5f1f58' + '00'.repeat(88),
+        rawSODHex: 'deadbeef' + '00'.repeat(252),
+      },
+    });
+  }, [navigation, mrzInput]);
+
   const handleContinueToProof = useCallback(() => {
     if (!nfcResult) return;
     navigation.navigate('ProofGeneration', {
@@ -783,6 +796,17 @@ export function PassportScanScreen(): React.JSX.Element {
               >
                 <Text className="text-white text-base font-semibold">Try Again</Text>
               </Pressable>
+
+              {__DEV__ && (
+                <Pressable
+                  onPress={handleDevSkip}
+                  className="w-full rounded-2xl py-3 items-center border border-amber-700/50 active:bg-amber-900/20"
+                >
+                  <Text className="text-amber-500 text-sm font-medium">
+                    [DEV] Skip NFC — use dummy data
+                  </Text>
+                </Pressable>
+              )}
             </>
           )}
         </View>

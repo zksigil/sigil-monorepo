@@ -21,7 +21,7 @@ export function HomeScreen(): React.JSX.Element {
     disconnect,
   } = useWalletConnection();
 
-  const { isWrongChain, switchToBaseSepolia } = useChainGuard();
+  const { isWrongChain, switchToSepolia } = useChainGuard();
   const { isVerified } = useVerificationStatus(address);
 
   const chainName = chainId !== null
@@ -50,14 +50,14 @@ export function HomeScreen(): React.JSX.Element {
             <View className="gap-y-4">
               {isWrongChain && (
                 <Pressable
-                  onPress={switchToBaseSepolia}
+                  onPress={switchToSepolia}
                   className="bg-yellow-900/30 border border-yellow-700 rounded-2xl p-4 items-center active:bg-yellow-900/50"
                 >
                   <Text className="text-yellow-400 text-sm font-medium">
                     Wrong Network
                   </Text>
                   <Text className="text-yellow-500/80 text-xs mt-1">
-                    Tap to switch to Base Sepolia
+                    Tap to switch to Sepolia
                   </Text>
                 </Pressable>
               )}

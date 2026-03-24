@@ -1,7 +1,7 @@
 import { createAppKit } from '@reown/appkit-react-native';
 import { WagmiAdapter } from '@reown/appkit-wagmi-react-native';
 import { http } from 'wagmi';
-import { baseSepolia, base, anvil } from 'wagmi/chains';
+import { sepolia, mainnet, anvil } from 'wagmi/chains';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import type { Storage } from '@reown/appkit-react-native';
 
@@ -56,12 +56,14 @@ export const appKitStorage: Storage = {
 // ---------------------------------------------------------------------------
 export const wagmiAdapter = new WagmiAdapter({
   projectId,
-  networks: [baseSepolia, base, anvil] as const,
+  networks: [sepolia, mainnet, anvil] as const,
   transports: {
-    [baseSepolia.id]: http(
-      process.env['EXPO_PUBLIC_BASE_SEPOLIA_RPC_URL'] ?? 'https://sepolia.base.org',
+    [sepolia.id]: http(
+      process.env['EXPO_PUBLIC_SEPOLIA_RPC_URL'] ?? 'https://rpc.sepolia.org',
     ),
-    [base.id]: http('https://mainnet.base.org'),
+    [mainnet.id]: http(
+      process.env['EXPO_PUBLIC_MAINNET_RPC_URL'] ?? 'https://ethereum.publicnode.com',
+    ),
     [anvil.id]: http(
       process.env['EXPO_PUBLIC_ANVIL_RPC_URL'] ?? 'http://127.0.0.1:8545',
     ),
@@ -74,8 +76,8 @@ export const wagmiAdapter = new WagmiAdapter({
 export const appKit = createAppKit({
   projectId,
   // wagmi Chain objects are structurally compatible with AppKit's Network type
-  networks: [baseSepolia, base, anvil] as unknown as Parameters<typeof createAppKit>[0]['networks'],
-  defaultNetwork: baseSepolia,
+  networks: [sepolia, mainnet, anvil] as unknown as Parameters<typeof createAppKit>[0]['networks'],
+  defaultNetwork: sepolia,
   adapters: [wagmiAdapter],
   storage: appKitStorage,
   enableAnalytics: false,

@@ -1,0 +1,11 @@
+build_mode = "release"
+target_adapters = ["noir"]
+target_platforms = ["ios"]
+ios = [
+    "aarch64-apple-ios-sim",
+    "aarch64-apple-ios",
+]
+auto_update = true
+
+[update]
+react_native_dest = "../apps/mobile/modules/mopro"
