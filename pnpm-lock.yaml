@@ -85,6 +85,9 @@ importers:
       expo-status-bar:
         specifier: ~3.0.9
         version: 3.0.9(react-native@0.81.5(patch_hash=4f3facc51198740da4de8089f993b1c7ddda3fc98baca0da2877c810f8330095)(@babel/core@7.29.0)(@types/react@19.1.17)(bufferutil@4.1.0)(react@19.1.0)(utf-8-validate@5.0.10))(react@19.1.0)
+      mopro-ffi:
+        specifier: file:./modules/mopro
+        version: file:apps/mobile/modules/mopro(react-native@0.81.5(patch_hash=4f3facc51198740da4de8089f993b1c7ddda3fc98baca0da2877c810f8330095)(@babel/core@7.29.0)(@types/react@19.1.17)(bufferutil@4.1.0)(react@19.1.0)(utf-8-validate@5.0.10))(react@19.1.0)
       nativewind:
         specifier: ^4.1.23
         version: 4.2.2(558430196451b173c4ec22e7f7970e27)
@@ -4310,6 +4313,12 @@ packages:
     engines: {node: '>=10'}
     hasBin: true
 
+  mopro-ffi@file:apps/mobile/modules/mopro:
+    resolution: {directory: apps/mobile/modules/mopro, type: directory}
+    peerDependencies:
+      react: '*'
+      react-native: '*'
+
   ms@2.0.0:
     resolution: {integrity: sha512-Tpp60P6IUJDTuOq/5Z8cdskzJujfwqfOTkrwIwj7IRISpnkJnT6SyJ4PCPnGMoFjC9ddhal5KVIYtAt97ix05A==}
 
@@ -5488,6 +5497,10 @@ packages:
   unicode-property-aliases-ecmascript@2.2.0:
     resolution: {integrity: sha512-hpbDzxUY9BFwX+UeBnxv3Sh1q7HFxj48DTmXchNgRa46lO8uj3/1iEn3MiNUYTg1g9ctIqXCCERn8gYZhHC5lQ==}
     engines: {node: '>=4'}
+
+  uniffi-bindgen-react-native@0.29.3-1:
+    resolution: {integrity: sha512-o6gXZsAh55yuvhwF2WSFdIHV4phyfWcCmg4DuyfJWJ7CvUz1UcIz2S4u9SmXAz1jsuqvu6Xc9hexrRBB0a5osg==}
+    hasBin: true
 
   unique-string@2.0.0:
     resolution: {integrity: sha512-uNaeirEPvpZWSgzwsPGtU2zVSTrn/8L5q/IexZmH0eH6SA73CmAA5U4GwORTxQAZs95TAXLNqeLoPPNO5gZfWg==}
@@ -12217,6 +12230,12 @@ snapshots:
 
   mkdirp@1.0.4: {}
 
+  mopro-ffi@file:apps/mobile/modules/mopro(react-native@0.81.5(patch_hash=4f3facc51198740da4de8089f993b1c7ddda3fc98baca0da2877c810f8330095)(@babel/core@7.29.0)(@types/react@19.1.17)(bufferutil@4.1.0)(react@19.1.0)(utf-8-validate@5.0.10))(react@19.1.0):
+    dependencies:
+      react: 19.1.0
+      react-native: 0.81.5(patch_hash=4f3facc51198740da4de8089f993b1c7ddda3fc98baca0da2877c810f8330095)(@babel/core@7.29.0)(@types/react@19.1.17)(bufferutil@4.1.0)(react@19.1.0)(utf-8-validate@5.0.10)
+      uniffi-bindgen-react-native: 0.29.3-1
+
   ms@2.0.0: {}
 
   ms@2.1.2: {}
@@ -13470,6 +13489,8 @@ snapshots:
   unicode-match-property-value-ecmascript@2.2.1: {}
 
   unicode-property-aliases-ecmascript@2.2.0: {}
+
+  uniffi-bindgen-react-native@0.29.3-1: {}
 
   unique-string@2.0.0:
     dependencies:

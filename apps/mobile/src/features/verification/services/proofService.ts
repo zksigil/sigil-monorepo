@@ -348,25 +348,25 @@ interface MoproInterface {
 
   getNoirVerificationKey(
     circuitPath: string,
-    srsPath: string | null,
+    srsPath: string | undefined,
     onChain: boolean,
     lowMemoryMode: boolean,
-  ): Promise<Uint8Array> | Uint8Array;
+  ): Promise<ArrayBuffer> | ArrayBuffer;
 
   generateNoirProof(
     circuitPath: string,
-    srsPath: string | null,
+    srsPath: string | undefined,
     inputs: string[],
     onChain: boolean,
-    vk: number[],
+    vk: ArrayBuffer,
     lowMemoryMode: boolean,
-  ): Promise<Uint8Array> | Uint8Array;
+  ): Promise<ArrayBuffer> | ArrayBuffer;
 
   verifyNoirProof(
     circuitPath: string,
-    proof: Uint8Array,
+    proof: ArrayBuffer,
     onChain: boolean,
-    vk: number[],
+    vk: ArrayBuffer,
     lowMemoryMode: boolean,
   ): Promise<boolean> | boolean;
 }
