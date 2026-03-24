@@ -6,17 +6,17 @@ import {ProtocolConfig} from "../src/ProtocolConfig.sol";
 import {ProofVerifier} from "../src/ProofVerifier.sol";
 import {VerificationRegistry} from "../src/VerificationRegistry.sol";
 
-/// @notice Full deployment script for Sigil contracts on Base Sepolia / Base Mainnet.
+/// @notice Full deployment script for Sigil contracts on Sepolia / Ethereum Mainnet.
 ///
 /// Prerequisites:
 ///   export PRIVATE_KEY=<deployer_private_key>
 ///   export DEPLOYER_ADDRESS=<deployer_address>
-///   export BASE_SEPOLIA_RPC_URL=<rpc_url>
-///   export BASESCAN_API_KEY=<api_key>
+///   export SEPOLIA_RPC_URL=<rpc_url>
+///   export ETHERSCAN_API_KEY=<api_key>
 ///
 /// Usage:
 ///   forge script script/Deploy.s.sol:Deploy \
-///     --rpc-url base_sepolia --broadcast --verify -vvvv
+///     --rpc-url sepolia --broadcast --verify -vvvv
 ///
 /// After deployment:
 ///   Update EXPO_PUBLIC_VERIFICATION_REGISTRY_ADDRESS in apps/mobile/.env

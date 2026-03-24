@@ -6,6 +6,8 @@ import {IProtocolConfig} from "./interfaces/IProtocolConfig.sol";
 import {IProofVerifier} from "./interfaces/IProofVerifier.sol";
 import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 import {Pausable} from "@openzeppelin/contracts/utils/Pausable.sol";
+import {Poseidon2Lib} from "poseidon2-evm/Poseidon2Lib.sol";
+import {Field} from "poseidon2-evm/Field.sol";
 
 /// @title VerificationRegistry
 /// @notice Two-tier ZK passport identity registry for Sigil.
@@ -253,8 +255,10 @@ contract VerificationRegistry is IVerificationRegistry, ReentrancyGuard, Pausabl
         // Checks
         if (block.timestamp >= passportExpiry) revert VerificationRegistry__PassportExpired();
 
-        // Locate old slot: nextCommitment stored by old slot == hash(revealedNextNullifier)
-        bytes32 expectedCommitment = keccak256(abi.encodePacked(revealedNextNullifier));
+        // Locate old slot: nextCommitment stored by old slot == Poseidon2(revealedNextNullifier)
+        // Must match the circuit: next_commitment = Poseidon2::hash([next_nullifier], 1)
+        bytes32 expectedCommitment =
+            bytes32(Field.Type.unwrap(Poseidon2Lib.hash_1(Field.Type.wrap(uint256(revealedNextNullifier)))));
         bytes32 oldNullifier = s_nextCommitmentToNullifier[expectedCommitment];
         if (oldNullifier == bytes32(0)) revert VerificationRegistry__InvalidNextNullifier();
 

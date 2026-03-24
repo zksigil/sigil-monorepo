@@ -8,6 +8,8 @@ import {IVerificationRegistry} from "../src/interfaces/IVerificationRegistry.sol
 import {IProtocolConfig} from "../src/interfaces/IProtocolConfig.sol";
 import {IProofVerifier} from "../src/interfaces/IProofVerifier.sol";
 import {MockProofVerifier} from "./mocks/MockProofVerifier.sol";
+import {Poseidon2Lib} from "poseidon2-evm/Poseidon2Lib.sol";
+import {Field} from "poseidon2-evm/Field.sol";
 
 contract VerificationRegistryTest is Test {
     VerificationRegistry public registry;
@@ -33,12 +35,16 @@ contract VerificationRegistryTest is Test {
     bytes32 public constant NULL_1A = keccak256("alice_nullifier_1");
     bytes32 public constant NULL_2A = keccak256("alice_nullifier_2");
     bytes32 public constant NULL_3A = keccak256("alice_nullifier_3");
-    bytes32 public immutable COMMIT_1A = keccak256(abi.encodePacked(NULL_2A)); // hash(nullifier_2a)
-    bytes32 public immutable COMMIT_2A = keccak256(abi.encodePacked(NULL_3A)); // hash(nullifier_3a)
+    // Poseidon2([nullifier]) — must match the circuit's next_commitment computation
+    bytes32 public immutable COMMIT_1A =
+        bytes32(Field.Type.unwrap(Poseidon2Lib.hash_1(Field.Type.wrap(uint256(NULL_2A)))));
+    bytes32 public immutable COMMIT_2A =
+        bytes32(Field.Type.unwrap(Poseidon2Lib.hash_1(Field.Type.wrap(uint256(NULL_3A)))));
 
     bytes32 public constant NULL_1B = keccak256("bob_nullifier_1");
     bytes32 public constant NULL_2B = keccak256("bob_nullifier_2");
-    bytes32 public immutable COMMIT_1B = keccak256(abi.encodePacked(NULL_2B));
+    bytes32 public immutable COMMIT_1B =
+        bytes32(Field.Type.unwrap(Poseidon2Lib.hash_1(Field.Type.wrap(uint256(NULL_2B)))));
 
     function setUp() public {
         config = new ProtocolConfig(governor);
