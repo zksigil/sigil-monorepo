@@ -1,0 +1,7 @@
+rust:
+  directory: /Users/ytanaka/Projects/zkproof-verifier/packages/mopro-circuits
+  manifestPath: Cargo.toml
+
+android:
+    apiLevel: 28
+    useSharedLibrary: true

@@ -100,27 +100,27 @@ export async function generateBaseProof(input: ProofInput): Promise<BaseProofOut
   );
 
   console.log('[PROOF] Getting base VK...');
-  const vkBytes: Uint8Array = await Mopro.getNoirVerificationKey(
+  const vkBuf = await Mopro.getNoirVerificationKey(
     BASE_CIRCUIT_PATH,
-    null,
+    undefined,
     true,
     false,
   );
 
   console.log('[PROOF] Generating base proof (5-15s)...');
-  const proofBytes: Uint8Array = await Mopro.generateNoirProof(
+  const proofBuf = await Mopro.generateNoirProof(
     BASE_CIRCUIT_PATH,
-    null,
+    undefined,
     baseInputs.inputs,
     true,
-    Array.from(vkBytes),
+    vkBuf,
     false,
   );
 
-  const proofHex = bytesToHex(proofBytes);
-  const vkHex = bytesToHex(vkBytes);
+  const proofHex = arrayBufferToHex(proofBuf);
+  const vkHex = arrayBufferToHex(vkBuf);
 
-  console.log('[PROOF] Base proof generated, size:', proofBytes.length, 'bytes');
+  console.log('[PROOF] Base proof generated, size:', proofBuf.byteLength, 'bytes');
 
   return {
     type: 'base',
@@ -163,27 +163,27 @@ export async function generatePrimaryProof(input: ProofInput): Promise<PrimaryPr
   );
 
   console.log('[PROOF] Getting primary VK...');
-  const vkBytes: Uint8Array = await Mopro.getNoirVerificationKey(
+  const vkBuf = await Mopro.getNoirVerificationKey(
     PRIMARY_CIRCUIT_PATH,
-    null,
+    undefined,
     true,
     false,
   );
 
   console.log('[PROOF] Generating primary proof (5-15s)...');
-  const proofBytes: Uint8Array = await Mopro.generateNoirProof(
+  const proofBuf = await Mopro.generateNoirProof(
     PRIMARY_CIRCUIT_PATH,
-    null,
+    undefined,
     primaryInputs.inputs,
     true,
-    Array.from(vkBytes),
+    vkBuf,
     false,
   );
 
-  const proofHex = bytesToHex(proofBytes);
-  const vkHex = bytesToHex(vkBytes);
+  const proofHex = arrayBufferToHex(proofBuf);
+  const vkHex = arrayBufferToHex(vkBuf);
 
-  console.log('[PROOF] Primary proof generated, size:', proofBytes.length, 'bytes');
+  console.log('[PROOF] Primary proof generated, size:', proofBuf.byteLength, 'bytes');
 
   return {
     type: 'primary',
@@ -255,10 +255,12 @@ function loadMoproModule(): MoproInterface {
   try {
     // eslint-disable-next-line @typescript-eslint/no-var-requires
     const mod = require('mopro-ffi');
-    return mod.default ?? mod;
+    // The generated index.tsx does `export * from './generated/...'` so named
+    // exports (computeBaseInputs, generateNoirProof, etc.) are at mod top-level.
+    return mod;
   } catch {
     throw new Error(
-      'Mopro native module not available. Run `mopro build --platforms ios` from packages/mopro-circuits first.',
+      'Mopro native module not available. Run `mopro build --platforms react-native` from packages/mopro-circuits first.',
     );
   }
 }
@@ -306,6 +308,10 @@ function hexStringToUint8Array(hex: string): Uint8Array {
 
 function bytesToHex(bytes: Uint8Array): `0x${string}` {
   return ('0x' + Array.from(bytes).map((b) => b.toString(16).padStart(2, '0')).join('')) as `0x${string}`;
+}
+
+function arrayBufferToHex(buf: ArrayBuffer): `0x${string}` {
+  return bytesToHex(new Uint8Array(buf));
 }
 
 // ---------------------------------------------------------------------------

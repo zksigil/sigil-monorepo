@@ -19,7 +19,7 @@ use crate::MoproError;
 // ---------------------------------------------------------------------------
 
 /// Computed inputs for the base-tier circuit, ready to pass to generate_noir_proof.
-#[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
+#[derive(uniffi::Record)]
 pub struct BaseInputs {
     /// Flat ordered string array for generate_noir_proof: private first, then public.
     pub inputs: Vec<String>,
@@ -29,7 +29,7 @@ pub struct BaseInputs {
 }
 
 /// Computed inputs for the primary-tier circuit.
-#[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
+#[derive(uniffi::Record)]
 pub struct PrimaryInputs {
     /// Flat ordered string array for generate_noir_proof.
     pub inputs: Vec<String>,
@@ -48,7 +48,7 @@ pub struct PrimaryInputs {
 /// `circuit_path` — absolute path to the nargo-compiled .json artifact.
 /// `srs_path`     — optional path to the SRS file. Pass None to use the
 ///                  default SRS (downloaded automatically on first call).
-#[cfg_attr(feature = "uniffi", uniffi::export)]
+#[uniffi::export]
 pub fn get_noir_verification_key(
     circuit_path: String,
     srs_path: Option<String>,
@@ -72,7 +72,7 @@ pub fn get_noir_verification_key(
 /// `inputs` — flat ordered string array matching the circuit's private + public
 ///            input declaration order (private inputs first, then public).
 ///            Each value is a decimal field element string.
-#[cfg_attr(feature = "uniffi", uniffi::export)]
+#[uniffi::export]
 pub fn generate_noir_proof(
     circuit_path: String,
     srs_path: Option<String>,
@@ -96,7 +96,7 @@ pub fn generate_noir_proof(
 }
 
 /// Verify an UltraHonk-Keccak proof locally (optional — the contract verifies on-chain).
-#[cfg_attr(feature = "uniffi", uniffi::export)]
+#[uniffi::export]
 pub fn verify_noir_proof(
     circuit_path: String,
     proof: Vec<u8>,
@@ -127,7 +127,7 @@ pub fn verify_noir_proof(
 /// Input order in circuit ABI:
 ///   private: dg1_hash, sod_hash, epoch_day
 ///   public:  epoch_nullifier, hashed_address, passport_expiry
-#[cfg_attr(feature = "uniffi", uniffi::export)]
+#[uniffi::export]
 pub fn compute_base_inputs(
     dg1_hash: String,
     sod_hash: String,
@@ -162,7 +162,7 @@ pub fn compute_base_inputs(
 /// Input order in circuit ABI:
 ///   private: dg1_hash, sod_hash, nonce
 ///   public:  nullifier, next_commitment, hashed_address, passport_expiry
-#[cfg_attr(feature = "uniffi", uniffi::export)]
+#[uniffi::export]
 pub fn compute_primary_inputs(
     dg1_hash: String,
     sod_hash: String,
