@@ -1,15 +1,23 @@
-import React, { useCallback } from 'react';
+import React, { useCallback, useEffect } from 'react';
 import { View, Text, Pressable, Linking } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRoute, useNavigation, CommonActions } from '@react-navigation/native';
 import type { RootStackRouteProp, RootStackNavigationProp } from '../../../app/navigation/types';
+import { useAccountStore } from '../../../features/wallet/store/accountStore';
 
 const BASESCAN_SEPOLIA_TX_URL = 'https://sepolia.basescan.org/tx/';
 
 export function VerificationSuccessScreen(): React.JSX.Element {
   const route = useRoute<RootStackRouteProp<'VerificationSuccess'>>();
   const navigation = useNavigation<RootStackNavigationProp<'VerificationSuccess'>>();
-  const { txHash, groupSize } = route.params;
+  const { txHash, groupSize, verifiedAddress, tier } = route.params;
+  const { addEntry } = useAccountStore();
+
+  // Ensure the verified address is in the tracked list on first render
+  useEffect(() => {
+    addEntry(verifiedAddress, tier);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const shortTxHash = `${txHash.slice(0, 10)}...${txHash.slice(-8)}`;
 

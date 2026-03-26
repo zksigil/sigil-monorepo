@@ -319,6 +319,29 @@ PODS:
     - GTMSessionFetcher/Core (< 4.0, >= 3.3.2)
     - MLImage (= 1.0.0-beta7)
     - MLKitCommon (~> 13.0)
+  - MoproFfi (0.1.0):
+    - hermes-engine
+    - RCTRequired
+    - RCTTypeSafety
+    - React-Core
+    - React-Core-prebuilt
+    - React-debug
+    - React-Fabric
+    - React-featureflags
+    - React-graphics
+    - React-ImageManager
+    - React-jsi
+    - React-NativeModulesApple
+    - React-RCTFabric
+    - React-renderercss
+    - React-rendererdebug
+    - React-utils
+    - ReactCodegen
+    - ReactCommon/turbomodule/bridging
+    - ReactCommon/turbomodule/core
+    - ReactNativeDependencies
+    - uniffi-bindgen-react-native (= 0.29.3-1)
+    - Yoga
   - nanopb (3.30910.0):
     - nanopb/decode (= 3.30910.0)
     - nanopb/encode (= 3.30910.0)
@@ -2338,6 +2361,8 @@ PODS:
     - ReactCommon/turbomodule/core
     - ReactNativeDependencies
     - Yoga
+  - uniffi-bindgen-react-native (0.29.3-1):
+    - React-Core
   - Yoga (0.0.0)
   - YttriumWrapper (0.10.40)
   - ZXingObjC/Core (3.6.9)
@@ -2367,6 +2392,7 @@ DEPENDENCIES:
   - EXUpdatesInterface (from `../../../node_modules/expo-updates-interface/ios`)
   - FBLazyVector (from `../../../node_modules/react-native/Libraries/FBLazyVector`)
   - hermes-engine (from `../../../node_modules/react-native/sdks/hermes-engine/hermes-engine.podspec`)
+  - MoproFfi (from `../modules/mopro`)
   - RCTDeprecation (from `../../../node_modules/react-native/ReactApple/Libraries/RCTFoundation/RCTDeprecation`)
   - RCTRequired (from `../../../node_modules/react-native/Libraries/Required`)
   - RCTTypeSafety (from `../../../node_modules/react-native/Libraries/TypeSafety`)
@@ -2443,6 +2469,7 @@ DEPENDENCIES:
   - RNScreens (from `../../../node_modules/react-native-screens`)
   - RNSVG (from `../../../node_modules/react-native-svg`)
   - RNWorklets (from `../../../node_modules/react-native-worklets`)
+  - uniffi-bindgen-react-native (from `../../../node_modules/uniffi-bindgen-react-native`)
   - Yoga (from `../../../node_modules/react-native/ReactCommon/yoga`)
 
 SPEC REPOS:
@@ -2508,6 +2535,8 @@ EXTERNAL SOURCES:
   hermes-engine:
     :podspec: "../../../node_modules/react-native/sdks/hermes-engine/hermes-engine.podspec"
     :tag: hermes-2025-07-07-RNv0.81.0-e0fc67142ec0763c6b6153ca2bf96df815539782
+  MoproFfi:
+    :path: "../modules/mopro"
   RCTDeprecation:
     :path: "../../../node_modules/react-native/ReactApple/Libraries/RCTFoundation/RCTDeprecation"
   RCTRequired:
@@ -2658,6 +2687,8 @@ EXTERNAL SOURCES:
     :path: "../../../node_modules/react-native-svg"
   RNWorklets:
     :path: "../../../node_modules/react-native-worklets"
+  uniffi-bindgen-react-native:
+    :path: "../../../node_modules/uniffi-bindgen-react-native"
   Yoga:
     :path: "../../../node_modules/react-native/ReactCommon/yoga"
 
@@ -2696,6 +2727,7 @@ SPEC CHECKSUMS:
   MLKitTextRecognitionJapanese: 776fddee29ac10dc304fccea1588accc32f4640c
   MLKitTextRecognitionKorean: dc1273aa2ef41f363b585d3dde1cf2de68c7c6d8
   MLKitVision: fa8dea9012ac59497c79ddbe9ebf32051047ac4c
+  MoproFfi: af6674bd1ab399843d474b281ff337b5939a248a
   nanopb: fad817b59e0457d11a5dfbde799381cd727c1275
   PromisesObjC: f5707f49cb48b9636751c5b2e7d227e43fba9f47
   RCTDeprecation: 943572d4be82d480a48f4884f670135ae30bf990
@@ -2773,10 +2805,11 @@ SPEC CHECKSUMS:
   RNScreens: b3d6c487978d6162f08788aca293da8780b0fd2d
   RNSVG: 7612f5bc575eab5da3364d44abe9f0d5db2cde03
   RNWorklets: 2660cf18a0ec38812e7e3bc2904e3a4464533b47
+  uniffi-bindgen-react-native: 076bf125ee96728ccca853fadd7f93bb31b7cf26
   Yoga: 5934998fbeaef7845dbf698f698518695ab4cd1a
   YttriumWrapper: e99db26ea3ca6b4580933320e11e046f9607525a
   ZXingObjC: 8898711ab495761b2dbbdec76d90164a6d7e14c5
 
-PODFILE CHECKSUM: 9b652e43eef19bea54239e8f2fd3e7e30cc9f2b7
+PODFILE CHECKSUM: baa2d9f8f76578117da51b9cf37b6d2801281230
 
 COCOAPODS: 1.16.2

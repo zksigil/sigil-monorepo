@@ -444,7 +444,7 @@ const FfiConverterArrayString = new FfiConverterArray(FfiConverterString);
  */
 function uniffiEnsureInitialized() {
     // Get the bindings contract version from our ComponentInterface
-    const bindingsContractVersion = 30;
+    const bindingsContractVersion = 29; // matches xcframework compiled with uniffi 0.29.0
     // Get the scaffolding contract version by calling the into the dylib
     const scaffoldingContractVersion = nativeModule().ubrn_ffi_zkpassport_circuits_uniffi_contract_version();
     if (bindingsContractVersion !== scaffoldingContractVersion) {

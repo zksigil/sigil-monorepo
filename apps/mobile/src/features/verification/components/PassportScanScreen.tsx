@@ -339,15 +339,15 @@ export function PassportScanScreen(): React.JSX.Element {
   const handleDevSkip = useCallback(() => {
     navigation.navigate('ProofGeneration', {
       passportData: {
-        documentNumber: mrzInput.documentNumber || 'AB1234567',
-        dateOfBirth: mrzInput.dateOfBirth || '900101',
-        dateOfExpiry: mrzInput.dateOfExpiry || '300101',
-        nationality: mrzInput.nationality || 'USA',
+        documentNumber: 'AB1234567',
+        dateOfBirth: '900101',
+        dateOfExpiry: '300101', // 2030-01-01 — always use a fixed future date for dev
+        nationality: 'USA',
         rawDG1Hex: '615b5f1f58' + '00'.repeat(88),
         rawSODHex: 'deadbeef' + '00'.repeat(252),
       },
     });
-  }, [navigation, mrzInput]);
+  }, [navigation]);
 
   const handleContinueToProof = useCallback(() => {
     if (!nfcResult) return;
@@ -797,7 +797,7 @@ export function PassportScanScreen(): React.JSX.Element {
                 <Text className="text-white text-base font-semibold">Try Again</Text>
               </Pressable>
 
-              {__DEV__ && (
+              {process.env.EXPO_PUBLIC_DEV_BYPASS === 'true' && (
                 <Pressable
                   onPress={handleDevSkip}
                   className="w-full rounded-2xl py-3 items-center border border-amber-700/50 active:bg-amber-900/20"

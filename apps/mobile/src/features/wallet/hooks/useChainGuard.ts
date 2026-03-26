@@ -1,12 +1,13 @@
 import { useCallback } from 'react';
 import { useChainId, useSwitchChain } from 'wagmi';
 import { useAccount } from 'wagmi';
-import { sepolia } from 'viem/chains';
+import { sepolia, anvil } from 'viem/chains';
 import { SUPPORTED_CHAIN_IDS } from '../../../shared/constants/chains';
 
 interface UseChainGuardResult {
   isWrongChain: boolean;
   switchToSepolia: () => void;
+  switchToAnvil: () => void;
 }
 
 export function useChainGuard(): UseChainGuardResult {
@@ -21,5 +22,9 @@ export function useChainGuard(): UseChainGuardResult {
     switchChain({ chainId: sepolia.id });
   }, [switchChain]);
 
-  return { isWrongChain, switchToSepolia };
+  const switchToAnvil = useCallback(() => {
+    switchChain({ chainId: anvil.id });
+  }, [switchChain]);
+
+  return { isWrongChain, switchToSepolia, switchToAnvil };
 }

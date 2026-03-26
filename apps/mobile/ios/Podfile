@@ -71,6 +71,8 @@ target 'mobile' do
         unless build_config.build_settings['GCC_PREPROCESSOR_DEFINITIONS'].include?('FOLLY_CFG_NO_COROUTINES=1')
           build_config.build_settings['GCC_PREPROCESSOR_DEFINITIONS'] << 'FOLLY_CFG_NO_COROUTINES=1'
         end
+        # MoproFfi xcframework only has arm64 simulator slice — exclude x86_64 (Rosetta)
+        build_config.build_settings['EXCLUDED_ARCHS[sdk=iphonesimulator*]'] = 'x86_64'
       end
     end
   end

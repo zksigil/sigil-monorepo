@@ -40,12 +40,6 @@ interface IVerificationRegistry {
     /// @notice Emitted when the ProofVerifier contract is updated.
     event VerifierUpdated(address indexed oldVerifier, address indexed newVerifier);
 
-    /// @notice Emitted when the oracle updater role is reassigned.
-    event OracleUpdaterSet(address indexed oldUpdater, address indexed newUpdater);
-
-    /// @notice Emitted when the DSC Merkle root is updated by the oracle.
-    event DSCRootUpdated(bytes32 indexed newRoot);
-
     /// @notice Emitted when a successor registry is designated.
     event SuccessorSet(address indexed successor);
 
@@ -62,6 +56,11 @@ interface IVerificationRegistry {
     /// @notice Renew an existing base-tier registration, extending its TTL.
     /// @dev Re-tapping the passport resets expiresAt to now + registrationTTL.
     function renewBase(uint48 passportExpiry, bytes calldata proof) external;
+
+    /// @notice Remove the caller's base-tier registration.
+    /// @dev No event emitted — privacy requirement. The epochNullifier count for the day
+    ///      is not decremented, so unregistering does not free up a daily registration slot.
+    function unregisterBase() external;
 
     // =========================================================================
     // Primary Tier
@@ -113,4 +112,10 @@ interface IVerificationRegistry {
 
     /// @notice Returns true if wallet has an active, non-expired primary-tier registration.
     function isPrimaryVerified(address wallet) external view returns (bool);
+
+    /// @notice Returns the base-tier registration expiry for wallet (0 if never registered).
+    function getBaseExpiry(address wallet) external view returns (uint48);
+
+    /// @notice Returns the primary-tier registration expiry for wallet (0 if never registered).
+    function getPrimaryExpiry(address wallet) external view returns (uint48);
 }

@@ -179,14 +179,20 @@ contract VerificationRegistryTest is Test {
     }
 
     function test_RegisterBase_ExpiresAtPassportExpiry_WhenEarlierThanTTL() public {
-        uint48 nearExpiry = uint48(block.timestamp + 30 days); // less than 180 day TTL
+        // 30 days < 180-day TTL. Rounds UP to the next quarter boundary (90 days from epoch).
+        uint48 rawExpiry = uint48(block.timestamp + 30 days);
+        uint48 roundedExpiry = ((rawExpiry + 90 days - 1) / 90 days) * 90 days;
 
         vm.prank(alice);
-        registry.registerBase(EPOCH_NULL_A, nearExpiry, PROOF);
+        registry.registerBase(EPOCH_NULL_A, rawExpiry, PROOF);
         assertTrue(registry.isVerified(alice));
 
-        // Warp to just after passport expiry
-        vm.warp(uint256(nearExpiry) + 1);
+        // Still verified just before rounded expiry
+        vm.warp(uint256(roundedExpiry) - 1);
+        assertTrue(registry.isVerified(alice));
+
+        // Lapses just after rounded expiry
+        vm.warp(uint256(roundedExpiry) + 1);
         assertFalse(registry.isVerified(alice));
     }
 
@@ -257,6 +263,48 @@ contract VerificationRegistryTest is Test {
     }
 
     // =========================================================================
+    // Base Tier — Unregister
+    // =========================================================================
+
+    function test_UnregisterBase_Success() public {
+        _registerBase(alice, EPOCH_NULL_A);
+        assertTrue(registry.isVerified(alice));
+
+        vm.prank(alice);
+        registry.unregisterBase();
+
+        assertFalse(registry.isVerified(alice));
+    }
+
+    function test_UnregisterBase_NoEventEmitted() public {
+        _registerBase(alice, EPOCH_NULL_A);
+        vm.recordLogs();
+
+        vm.prank(alice);
+        registry.unregisterBase();
+
+        assertEq(vm.getRecordedLogs().length, 0);
+    }
+
+    function test_UnregisterBase_AllowsReregister() public {
+        _registerBase(alice, EPOCH_NULL_A);
+
+        vm.prank(alice);
+        registry.unregisterBase();
+
+        // Can re-register immediately with a new epoch nullifier
+        bytes32 newEpochNull = keccak256("epoch_A_day2");
+        _registerBase(alice, newEpochNull);
+        assertTrue(registry.isVerified(alice));
+    }
+
+    function test_UnregisterBase_Reverts_NotRegistered() public {
+        vm.prank(alice);
+        vm.expectRevert(VerificationRegistry.VerificationRegistry__NotRegistered.selector);
+        registry.unregisterBase();
+    }
+
+    // =========================================================================
     // Primary Tier — Registration
     // =========================================================================
 
@@ -318,11 +366,19 @@ contract VerificationRegistryTest is Test {
     }
 
     function test_RegisterPrimary_ExpiresAtPassportExpiry_WhenEarlier() public {
-        uint48 nearExpiry = uint48(block.timestamp + 30 days);
-        vm.prank(alice);
-        registry.registerPrimary(NULL_1A, COMMIT_1A, nearExpiry, PROOF);
+        // 30 days < 180-day TTL. Rounds UP to the next quarter boundary.
+        uint48 rawExpiry = uint48(block.timestamp + 30 days);
+        uint48 roundedExpiry = ((rawExpiry + 90 days - 1) / 90 days) * 90 days;
 
-        vm.warp(uint256(nearExpiry) + 1);
+        vm.prank(alice);
+        registry.registerPrimary(NULL_1A, COMMIT_1A, rawExpiry, PROOF);
+
+        // Still verified just before rounded expiry
+        vm.warp(uint256(roundedExpiry) - 1);
+        assertTrue(registry.isPrimaryVerified(alice));
+
+        // Lapses just after rounded expiry
+        vm.warp(uint256(roundedExpiry) + 1);
         assertFalse(registry.isPrimaryVerified(alice));
     }
 
@@ -613,30 +669,6 @@ contract VerificationRegistryTest is Test {
         assertEq(address(registry.s_verifier()), address(newVerifier));
     }
 
-    function test_SetOracleUpdater_Success() public {
-        address oracle = makeAddr("oracle");
-        vm.prank(governor);
-        registry.setOracleUpdater(oracle);
-        assertEq(registry.s_oracleUpdater(), oracle);
-    }
-
-    function test_UpdateDSCRoot_Success() public {
-        address oracle = makeAddr("oracle");
-        vm.prank(governor);
-        registry.setOracleUpdater(oracle);
-
-        bytes32 newRoot = keccak256("new_dsc_root");
-        vm.prank(oracle);
-        registry.updateDSCRoot(newRoot);
-        assertEq(registry.s_dscMerkleRoot(), newRoot);
-    }
-
-    function test_UpdateDSCRoot_Reverts_NonOracle() public {
-        vm.prank(alice);
-        vm.expectRevert(VerificationRegistry.VerificationRegistry__NotAuthorized.selector);
-        registry.updateDSCRoot(keccak256("root"));
-    }
-
     function test_Pause_OnlyGovernor() public {
         vm.prank(alice);
         vm.expectRevert(VerificationRegistry.VerificationRegistry__NotGovernor.selector);
@@ -675,10 +707,15 @@ contract VerificationRegistryTest is Test {
         // Keep passportExpiry in a reasonable future range
         passportExpiry = uint48(bound(passportExpiry, block.timestamp + 1, block.timestamp + 10 * 365 days));
 
+        // Round UP to quarter boundary — the effective ceiling stored on-chain
+        uint48 roundedExpiry = passportExpiry <= type(uint48).max - (90 days - 1)
+            ? ((passportExpiry + 90 days - 1) / 90 days) * 90 days
+            : passportExpiry;
+
         vm.prank(alice);
         registry.registerBase(EPOCH_NULL_A, passportExpiry, PROOF);
 
-        vm.warp(uint256(passportExpiry) + 1);
+        vm.warp(uint256(roundedExpiry) + 1);
         assertFalse(registry.isVerified(alice));
     }
 }

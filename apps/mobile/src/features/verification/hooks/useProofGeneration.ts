@@ -45,10 +45,15 @@ export function useProofGeneration(): UseProofGenerationResult {
       try {
         proofOutput = await generateBaseProof(input);
       } catch (moproErr) {
-        const msg = moproErr instanceof Error ? moproErr.message : '';
+        const innerMsg = (moproErr != null && typeof moproErr === 'object' && 'inner' in moproErr && Array.isArray((moproErr as { inner: unknown[] }).inner))
+          ? String((moproErr as { inner: unknown[] }).inner[0])
+          : null;
+        const msg = innerMsg ?? (moproErr instanceof Error ? moproErr.message : '');
         if (
           msg.includes('Mopro native module not available') ||
-          msg.includes('circuit path not set')
+          msg.includes('circuit path not set') ||
+          msg.includes('Incompatible versions of uniffi') ||
+          msg.includes('ContractVersionMismatch')
         ) {
           // Development fallback: stub proof (not verifiable on-chain)
           console.warn('[PROOF] Mopro unavailable — using stub proof for development');
@@ -72,7 +77,11 @@ export function useProofGeneration(): UseProofGenerationResult {
       setResult(proofOutput);
       return proofOutput;
     } catch (err) {
-      const message = err instanceof Error ? err.message : 'Proof generation failed';
+      // uniffi MoproError.NoirError stores the real message in .inner[0]; .message is just "MoproError.NoirError"
+      const innerMsg = (err != null && typeof err === 'object' && 'inner' in err && Array.isArray((err as { inner: unknown[] }).inner))
+        ? String((err as { inner: unknown[] }).inner[0])
+        : null;
+      const message = innerMsg ?? (err instanceof Error ? err.message : 'Proof generation failed');
       console.error('[PROOF] Generation error:', message);
       setError(message);
       throw err;

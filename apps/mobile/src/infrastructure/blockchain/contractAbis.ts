@@ -1,30 +1,87 @@
 /**
  * VerificationRegistry ABI
  *
- * Matches the IVerificationRegistry interface exactly.
+ * Matches the IVerificationRegistry Phase 3 two-tier interface.
  * IMPORTANT: Update this ABI whenever the contract interface changes.
  */
 export const VERIFICATION_REGISTRY_ABI = [
-  // --- Write functions ---
+  // --- Base Tier ---
   {
     type: 'function',
-    name: 'register',
+    name: 'registerBase',
     inputs: [
-      { name: 'zkProof', type: 'bytes', internalType: 'bytes' },
-      { name: 'passportNullifier', type: 'bytes32', internalType: 'bytes32' },
+      { name: 'epochNullifier', type: 'bytes32', internalType: 'bytes32' },
+      { name: 'passportExpiry', type: 'uint48', internalType: 'uint48' },
+      { name: 'proof', type: 'bytes', internalType: 'bytes' },
     ],
     outputs: [],
     stateMutability: 'nonpayable',
   },
   {
     type: 'function',
-    name: 'unregister',
+    name: 'renewBase',
+    inputs: [
+      { name: 'passportExpiry', type: 'uint48', internalType: 'uint48' },
+      { name: 'proof', type: 'bytes', internalType: 'bytes' },
+    ],
+    outputs: [],
+    stateMutability: 'nonpayable',
+  },
+
+  // --- Primary Tier ---
+  {
+    type: 'function',
+    name: 'registerPrimary',
+    inputs: [
+      { name: 'nullifier', type: 'bytes32', internalType: 'bytes32' },
+      { name: 'nextCommitment', type: 'bytes32', internalType: 'bytes32' },
+      { name: 'passportExpiry', type: 'uint48', internalType: 'uint48' },
+      { name: 'proof', type: 'bytes', internalType: 'bytes' },
+    ],
+    outputs: [],
+    stateMutability: 'nonpayable',
+  },
+  {
+    type: 'function',
+    name: 'renewPrimary',
+    inputs: [
+      { name: 'nullifier', type: 'bytes32', internalType: 'bytes32' },
+      { name: 'passportExpiry', type: 'uint48', internalType: 'uint48' },
+      { name: 'proof', type: 'bytes', internalType: 'bytes' },
+    ],
+    outputs: [],
+    stateMutability: 'nonpayable',
+  },
+  {
+    type: 'function',
+    name: 'changePrimary',
+    inputs: [
+      { name: 'revealedNextNullifier', type: 'bytes32', internalType: 'bytes32' },
+      { name: 'newNextCommitment', type: 'bytes32', internalType: 'bytes32' },
+      { name: 'passportExpiry', type: 'uint48', internalType: 'uint48' },
+      { name: 'proof', type: 'bytes', internalType: 'bytes' },
+    ],
+    outputs: [],
+    stateMutability: 'nonpayable',
+  },
+  {
+    type: 'function',
+    name: 'unregisterPrimary',
+    inputs: [
+      { name: 'nullifier', type: 'bytes32', internalType: 'bytes32' },
+    ],
+    outputs: [],
+    stateMutability: 'nonpayable',
+  },
+  {
+    type: 'function',
+    name: 'unregisterBase',
     inputs: [],
     outputs: [],
     stateMutability: 'nonpayable',
   },
 
-  // --- Read functions ---
+  // --- Protocol Integration (read) ---
   {
     type: 'function',
     name: 'isVerified',
@@ -34,72 +91,32 @@ export const VERIFICATION_REGISTRY_ABI = [
   },
   {
     type: 'function',
-    name: 'getWalletInfo',
+    name: 'isPrimaryVerified',
     inputs: [{ name: 'wallet', type: 'address', internalType: 'address' }],
-    outputs: [
-      {
-        name: '',
-        type: 'tuple',
-        internalType: 'struct IVerificationRegistry.WalletInfo',
-        components: [
-          { name: 'verified', type: 'bool', internalType: 'bool' },
-          { name: 'previouslyUnregistered', type: 'bool', internalType: 'bool' },
-          { name: 'groupSizeAtVerification', type: 'uint256', internalType: 'uint256' },
-          { name: 'verifiedAt', type: 'uint256', internalType: 'uint256' },
-          { name: 'identityCommitment', type: 'uint256', internalType: 'uint256' },
-        ],
-      },
-    ],
+    outputs: [{ name: '', type: 'bool', internalType: 'bool' }],
     stateMutability: 'view',
   },
   {
     type: 'function',
-    name: 'getNullifierInfo',
-    inputs: [{ name: 'nullifier', type: 'bytes32', internalType: 'bytes32' }],
-    outputs: [
-      {
-        name: '',
-        type: 'tuple',
-        internalType: 'struct IVerificationRegistry.NullifierInfo',
-        components: [
-          { name: 'currentCount', type: 'uint256', internalType: 'uint256' },
-          { name: 'currentCountSince', type: 'uint256', internalType: 'uint256' },
-          { name: 'peakCount', type: 'uint256', internalType: 'uint256' },
-          { name: 'peakCountAchieved', type: 'uint256', internalType: 'uint256' },
-          { name: 'peakCountSince', type: 'uint256', internalType: 'uint256' },
-        ],
-      },
-    ],
+    name: 'getBaseExpiry',
+    inputs: [{ name: 'wallet', type: 'address', internalType: 'address' }],
+    outputs: [{ name: '', type: 'uint48', internalType: 'uint48' }],
     stateMutability: 'view',
   },
   {
     type: 'function',
-    name: 'getGroupSize',
-    inputs: [],
-    outputs: [{ name: '', type: 'uint256', internalType: 'uint256' }],
+    name: 'getPrimaryExpiry',
+    inputs: [{ name: 'wallet', type: 'address', internalType: 'address' }],
+    outputs: [{ name: '', type: 'uint48', internalType: 'uint48' }],
     stateMutability: 'view',
   },
 
   // --- Events ---
   {
     type: 'event',
-    name: 'WalletRegistered',
+    name: 'WalletVerified',
     inputs: [
       { name: 'wallet', type: 'address', indexed: true, internalType: 'address' },
-      { name: 'nullifier', type: 'bytes32', indexed: true, internalType: 'bytes32' },
-      { name: 'groupSize', type: 'uint256', indexed: false, internalType: 'uint256' },
-      { name: 'timestamp', type: 'uint256', indexed: false, internalType: 'uint256' },
-    ],
-    anonymous: false,
-  },
-  {
-    type: 'event',
-    name: 'WalletUnregistered',
-    inputs: [
-      { name: 'wallet', type: 'address', indexed: true, internalType: 'address' },
-      { name: 'nullifier', type: 'bytes32', indexed: true, internalType: 'bytes32' },
-      { name: 'newGroupSize', type: 'uint256', indexed: false, internalType: 'uint256' },
-      { name: 'timestamp', type: 'uint256', indexed: false, internalType: 'uint256' },
     ],
     anonymous: false,
   },

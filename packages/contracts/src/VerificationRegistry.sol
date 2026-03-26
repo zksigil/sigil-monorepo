@@ -46,9 +46,10 @@ contract VerificationRegistry is IVerificationRegistry, ReentrancyGuard, Pausabl
     // =========================================================================
 
     /// @dev Tracks expiry for a single registered address (base or primary tier).
+    ///      Only expiresAt is stored — it is already capped at passportExpiry via _cappedExpiry(),
+    ///      so storing passportExpiry separately would leak a linkable value per address.
     struct Registration {
-        uint48 expiresAt;      // block.timestamp + TTL, capped at passportExpiry
-        uint48 passportExpiry; // from ZK proof public input
+        uint48 expiresAt; // min(block.timestamp + TTL, passportExpiry)
     }
 
     /// @dev Stores the active primary slot for a given nullifier.
@@ -65,17 +66,7 @@ contract VerificationRegistry is IVerificationRegistry, ReentrancyGuard, Pausabl
     address public s_governor;
     IProtocolConfig public s_config;
     IProofVerifier public s_verifier;
-    address public s_oracleUpdater;
     address public s_successor;
-
-    // =========================================================================
-    // DSC Oracle
-    // =========================================================================
-
-    /// @notice Merkle root of valid Document Signing Certificates.
-    ///         Updated by s_oracleUpdater. Used by future circuit versions to
-    ///         prove the passport was signed by a non-revoked DSC.
-    bytes32 public s_dscMerkleRoot;
 
     // =========================================================================
     // Base Tier State
@@ -144,9 +135,7 @@ contract VerificationRegistry is IVerificationRegistry, ReentrancyGuard, Pausabl
         // Checks
         if (block.timestamp >= passportExpiry) revert VerificationRegistry__PassportExpired();
 
-        Registration memory existing = s_baseRegistrations[hashedAddress];
-        bool active = existing.expiresAt > block.timestamp && existing.passportExpiry > block.timestamp;
-        if (active) revert VerificationRegistry__AlreadyRegistered();
+        if (s_baseRegistrations[hashedAddress].expiresAt > block.timestamp) revert VerificationRegistry__AlreadyRegistered();
 
         uint8 count = s_epochCounts[epochNullifier];
         if (count >= s_config.maxDailyRegistrations()) revert VerificationRegistry__RateLimitExceeded();
@@ -157,10 +146,19 @@ contract VerificationRegistry is IVerificationRegistry, ReentrancyGuard, Pausabl
 
         // Effects
         uint48 expiresAt = _cappedExpiry(passportExpiry);
-        s_baseRegistrations[hashedAddress] = Registration({expiresAt: expiresAt, passportExpiry: passportExpiry});
+        s_baseRegistrations[hashedAddress] = Registration({expiresAt: expiresAt});
         s_epochCounts[epochNullifier] = count + 1;
 
         emit WalletVerified(msg.sender);
+    }
+
+    /// @inheritdoc IVerificationRegistry
+    function unregisterBase() external override whenNotPaused nonReentrant {
+        bytes32 hashedAddress = keccak256(abi.encodePacked(msg.sender));
+        if (s_baseRegistrations[hashedAddress].expiresAt == 0) revert VerificationRegistry__NotRegistered();
+
+        delete s_baseRegistrations[hashedAddress];
+        // No event — privacy requirement
     }
 
     /// @inheritdoc IVerificationRegistry
@@ -181,7 +179,7 @@ contract VerificationRegistry is IVerificationRegistry, ReentrancyGuard, Pausabl
 
         // Effects
         uint48 expiresAt = _cappedExpiry(passportExpiry);
-        s_baseRegistrations[hashedAddress] = Registration({expiresAt: expiresAt, passportExpiry: passportExpiry});
+        s_baseRegistrations[hashedAddress] = Registration({expiresAt: expiresAt});
     }
 
     // =========================================================================
@@ -202,9 +200,7 @@ contract VerificationRegistry is IVerificationRegistry, ReentrancyGuard, Pausabl
         if (s_primarySlots[nullifier].hashedAddress != bytes32(0)) revert VerificationRegistry__NullifierAlreadyUsed();
         if (block.timestamp < s_primaryUnregisteredAt[nullifier]) revert VerificationRegistry__PrimaryInCooldown();
 
-        Registration memory existing = s_primaryRegistrations[hashedAddress];
-        bool active = existing.expiresAt > block.timestamp && existing.passportExpiry > block.timestamp;
-        if (active) revert VerificationRegistry__AlreadyRegistered();
+        if (s_primaryRegistrations[hashedAddress].expiresAt > block.timestamp) revert VerificationRegistry__AlreadyRegistered();
 
         if (!s_verifier.verifyPrimaryProof(hashedAddress, passportExpiry, nullifier, nextCommitment, proof)) {
             revert VerificationRegistry__InvalidProof();
@@ -214,7 +210,7 @@ contract VerificationRegistry is IVerificationRegistry, ReentrancyGuard, Pausabl
         uint48 expiresAt = _cappedExpiry(passportExpiry);
         s_primarySlots[nullifier] = PrimarySlot({hashedAddress: hashedAddress, nextCommitment: nextCommitment});
         s_nextCommitmentToNullifier[nextCommitment] = nullifier;
-        s_primaryRegistrations[hashedAddress] = Registration({expiresAt: expiresAt, passportExpiry: passportExpiry});
+        s_primaryRegistrations[hashedAddress] = Registration({expiresAt: expiresAt});
 
         emit WalletVerified(msg.sender);
     }
@@ -238,9 +234,9 @@ contract VerificationRegistry is IVerificationRegistry, ReentrancyGuard, Pausabl
             revert VerificationRegistry__InvalidProof();
         }
 
-        // Effects — extend TTL, update passport expiry (e.g. after passport renewal)
+        // Effects — extend TTL (capped at new passportExpiry)
         uint48 expiresAt = _cappedExpiry(passportExpiry);
-        s_primaryRegistrations[hashedAddress] = Registration({expiresAt: expiresAt, passportExpiry: passportExpiry});
+        s_primaryRegistrations[hashedAddress] = Registration({expiresAt: expiresAt});
     }
 
     /// @inheritdoc IVerificationRegistry
@@ -284,8 +280,7 @@ contract VerificationRegistry is IVerificationRegistry, ReentrancyGuard, Pausabl
         s_primarySlots[revealedNextNullifier] =
             PrimarySlot({hashedAddress: newHashedAddress, nextCommitment: newNextCommitment});
         s_nextCommitmentToNullifier[newNextCommitment] = revealedNextNullifier;
-        s_primaryRegistrations[newHashedAddress] =
-            Registration({expiresAt: expiresAt, passportExpiry: passportExpiry});
+        s_primaryRegistrations[newHashedAddress] = Registration({expiresAt: expiresAt});
 
         emit WalletVerified(msg.sender);
     }
@@ -317,8 +312,7 @@ contract VerificationRegistry is IVerificationRegistry, ReentrancyGuard, Pausabl
         if (s_successor != address(0)) {
             return IVerificationRegistry(s_successor).isVerified(wallet);
         }
-        Registration memory reg = s_baseRegistrations[keccak256(abi.encodePacked(wallet))];
-        return reg.expiresAt > block.timestamp && reg.passportExpiry > block.timestamp;
+        return s_baseRegistrations[keccak256(abi.encodePacked(wallet))].expiresAt > block.timestamp;
     }
 
     /// @inheritdoc IVerificationRegistry
@@ -326,8 +320,17 @@ contract VerificationRegistry is IVerificationRegistry, ReentrancyGuard, Pausabl
         if (s_successor != address(0)) {
             return IVerificationRegistry(s_successor).isPrimaryVerified(wallet);
         }
-        Registration memory reg = s_primaryRegistrations[keccak256(abi.encodePacked(wallet))];
-        return reg.expiresAt > block.timestamp && reg.passportExpiry > block.timestamp;
+        return s_primaryRegistrations[keccak256(abi.encodePacked(wallet))].expiresAt > block.timestamp;
+    }
+
+    /// @inheritdoc IVerificationRegistry
+    function getBaseExpiry(address wallet) external view override returns (uint48) {
+        return s_baseRegistrations[keccak256(abi.encodePacked(wallet))].expiresAt;
+    }
+
+    /// @inheritdoc IVerificationRegistry
+    function getPrimaryExpiry(address wallet) external view override returns (uint48) {
+        return s_primaryRegistrations[keccak256(abi.encodePacked(wallet))].expiresAt;
     }
 
     // =========================================================================
@@ -352,11 +355,6 @@ contract VerificationRegistry is IVerificationRegistry, ReentrancyGuard, Pausabl
         s_verifier = newVerifier;
     }
 
-    function setOracleUpdater(address newUpdater) external onlyGovernor {
-        emit OracleUpdaterSet(s_oracleUpdater, newUpdater);
-        s_oracleUpdater = newUpdater;
-    }
-
     function setSuccessor(address newSuccessor) external onlyGovernor {
         if (newSuccessor == address(0)) revert VerificationRegistry__ZeroAddress();
         emit SuccessorSet(newSuccessor);
@@ -372,22 +370,23 @@ contract VerificationRegistry is IVerificationRegistry, ReentrancyGuard, Pausabl
     }
 
     // =========================================================================
-    // Oracle
-    // =========================================================================
-
-    function updateDSCRoot(bytes32 newRoot) external {
-        if (msg.sender != s_oracleUpdater) revert VerificationRegistry__NotAuthorized();
-        emit DSCRootUpdated(newRoot);
-        s_dscMerkleRoot = newRoot;
-    }
-
-    // =========================================================================
     // Internal Helpers
     // =========================================================================
 
-    /// @dev Returns block.timestamp + registrationTTL, capped at passportExpiry.
+    /// @dev Returns block.timestamp + registrationTTL, capped at the quarter-rounded passport expiry.
+    ///      Rounding down to the nearest 90-day boundary reduces calldata/state precision from
+    ///      ~365 distinguishable values/year to 4, making passport expiry dates far less linkable
+    ///      across different registered addresses from the same passport.
+    uint48 private constant QUARTER = 90 days;
+
     function _cappedExpiry(uint48 passportExpiry) private view returns (uint48) {
+        // Round up to next quarter boundary. Guard against overflow when passportExpiry
+        // is near type(uint48).max by saturating: if adding QUARTER-1 would overflow, the
+        // expiry is so far in the future that we can use passportExpiry as-is.
+        uint48 roundedExpiry = passportExpiry <= type(uint48).max - (QUARTER - 1)
+            ? ((passportExpiry + QUARTER - 1) / QUARTER) * QUARTER
+            : passportExpiry;
         uint48 ttlExpiry = uint48(block.timestamp) + uint48(s_config.registrationTTL());
-        return ttlExpiry < passportExpiry ? ttlExpiry : passportExpiry;
+        return ttlExpiry < roundedExpiry ? ttlExpiry : roundedExpiry;
     }
 }

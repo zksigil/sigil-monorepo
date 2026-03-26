@@ -16,7 +16,7 @@ export function WalletCard({
   chainName,
   onDisconnect,
 }: WalletCardProps): React.JSX.Element {
-  const { isVerified, isLoading, walletInfo } = useVerificationStatus(address);
+  const { isVerified, isLoading } = useVerificationStatus(address);
 
   const handleCopyAddress = async (): Promise<void> => {
     await Clipboard.setStringAsync(address);
@@ -60,14 +60,7 @@ export function WalletCard({
         {isLoading ? (
           <ActivityIndicator size="small" color="#A1A1AA" className="self-start mt-1" />
         ) : isVerified ? (
-          <>
-            <Text className="text-green-400 text-sm font-medium">Verified</Text>
-            {walletInfo !== null && walletInfo.groupSizeAtVerification > 0n && (
-              <Text className="text-zinc-500 text-xs mt-1">
-                Group member #{walletInfo.groupSizeAtVerification.toString()}
-              </Text>
-            )}
-          </>
+          <Text className="text-green-400 text-sm font-medium">Verified</Text>
         ) : (
           <>
             <Text className="text-yellow-400 text-sm font-medium">Not Verified</Text>

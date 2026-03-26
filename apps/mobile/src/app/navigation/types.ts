@@ -12,9 +12,15 @@ export interface PassportMRZData {
 
 export type RootStackParamList = {
   Home: undefined;
+  AddAccounts: { tier: 'base' | 'primary' };
   PassportScan: undefined;
   ProofGeneration: { passportData: PassportMRZData };
-  VerificationSuccess: { txHash: `0x${string}`; groupSize: number };
+  VerificationSuccess: {
+    txHash: `0x${string}`;
+    groupSize: number;
+    verifiedAddress: `0x${string}`;
+    tier: 'base' | 'primary';
+  };
 };
 
 export type RootStackNavigationProp<Screen extends keyof RootStackParamList> =

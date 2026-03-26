@@ -78,11 +78,11 @@ export function setCircuitPaths(basePath: string, primaryPath: string): void {
  * Throws `MoproNotAvailable` if the native module cannot be loaded.
  */
 export async function generateBaseProof(input: ProofInput): Promise<BaseProofOutput> {
-  const Mopro = loadMoproModule();
-
   if (!BASE_CIRCUIT_PATH) {
     throw new Error('Base circuit path not set. Call setCircuitPaths() first.');
   }
+
+  const Mopro = loadMoproModule();
 
   const dg1Hash = sha256ToField(stripHexPrefix(input.rawDG1Hex));
   const sodHash = sha256ToField(stripHexPrefix(input.rawSODHex));
@@ -141,11 +141,11 @@ export async function generateBaseProof(input: ProofInput): Promise<BaseProofOut
  * Requires mopro build to have been run so that the native module is available.
  */
 export async function generatePrimaryProof(input: ProofInput): Promise<PrimaryProofOutput> {
-  const Mopro = loadMoproModule();
-
   if (!PRIMARY_CIRCUIT_PATH) {
     throw new Error('Primary circuit path not set. Call setCircuitPaths() first.');
   }
+
+  const Mopro = loadMoproModule();
 
   const dg1Hash = sha256ToField(stripHexPrefix(input.rawDG1Hex));
   const sodHash = sha256ToField(stripHexPrefix(input.rawSODHex));
@@ -257,11 +257,13 @@ function loadMoproModule(): MoproInterface {
     const mod = require('mopro-ffi');
     // The generated index.tsx does `export * from './generated/...'` so named
     // exports (computeBaseInputs, generateNoirProof, etc.) are at mod top-level.
-    return mod;
-  } catch {
-    throw new Error(
-      'Mopro native module not available. Run `mopro build --platforms react-native` from packages/mopro-circuits first.',
-    );
+    if (!mod?.computeBaseInputs) {
+      throw new Error('Mopro native module not available.');
+    }
+    return mod as MoproInterface;
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    throw new Error(`Mopro native module not available: ${msg}`);
   }
 }
 
