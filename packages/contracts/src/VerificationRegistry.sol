@@ -45,11 +45,14 @@ contract VerificationRegistry is IVerificationRegistry, ReentrancyGuard, Pausabl
     // Structs
     // =========================================================================
 
-    /// @dev Tracks expiry for a single registered address (base or primary tier).
-    ///      Only expiresAt is stored — it is already capped at passportExpiry via _cappedExpiry(),
-    ///      so storing passportExpiry separately would leak a linkable value per address.
+    /// @dev Tracks expiry and registration time for a single registered address (base or primary tier).
+    ///      expiresAt is capped at passportExpiry via _cappedExpiry() so passportExpiry need not be stored.
+    ///      registeredAt is set on registerPrimary / changePrimary and NOT updated on renewPrimary —
+    ///      it reflects how long this passport has been committed to this address, which is the value
+    ///      protocols care about when enforcing a minimum registration age.
     struct Registration {
-        uint48 expiresAt; // min(block.timestamp + TTL, passportExpiry)
+        uint48 expiresAt;    // min(block.timestamp + TTL, passportExpiry)
+        uint48 registeredAt; // block.timestamp at registration or changePrimary (not updated on renew)
     }
 
     /// @dev Stores the active primary slot for a given nullifier.
@@ -146,7 +149,7 @@ contract VerificationRegistry is IVerificationRegistry, ReentrancyGuard, Pausabl
 
         // Effects
         uint48 expiresAt = _cappedExpiry(passportExpiry);
-        s_baseRegistrations[hashedAddress] = Registration({expiresAt: expiresAt});
+        s_baseRegistrations[hashedAddress] = Registration({expiresAt: expiresAt, registeredAt: uint48(block.timestamp)});
         s_epochCounts[epochNullifier] = count + 1;
 
         emit WalletVerified(msg.sender);
@@ -177,9 +180,9 @@ contract VerificationRegistry is IVerificationRegistry, ReentrancyGuard, Pausabl
             revert VerificationRegistry__InvalidProof();
         }
 
-        // Effects
+        // Effects — preserve original registeredAt on renewal
         uint48 expiresAt = _cappedExpiry(passportExpiry);
-        s_baseRegistrations[hashedAddress] = Registration({expiresAt: expiresAt});
+        s_baseRegistrations[hashedAddress].expiresAt = expiresAt;
     }
 
     // =========================================================================
@@ -210,7 +213,7 @@ contract VerificationRegistry is IVerificationRegistry, ReentrancyGuard, Pausabl
         uint48 expiresAt = _cappedExpiry(passportExpiry);
         s_primarySlots[nullifier] = PrimarySlot({hashedAddress: hashedAddress, nextCommitment: nextCommitment});
         s_nextCommitmentToNullifier[nextCommitment] = nullifier;
-        s_primaryRegistrations[hashedAddress] = Registration({expiresAt: expiresAt});
+        s_primaryRegistrations[hashedAddress] = Registration({expiresAt: expiresAt, registeredAt: uint48(block.timestamp)});
 
         emit WalletVerified(msg.sender);
     }
@@ -234,9 +237,9 @@ contract VerificationRegistry is IVerificationRegistry, ReentrancyGuard, Pausabl
             revert VerificationRegistry__InvalidProof();
         }
 
-        // Effects — extend TTL (capped at new passportExpiry)
+        // Effects — extend TTL only; registeredAt is preserved to reflect true registration age
         uint48 expiresAt = _cappedExpiry(passportExpiry);
-        s_primaryRegistrations[hashedAddress] = Registration({expiresAt: expiresAt});
+        s_primaryRegistrations[hashedAddress].expiresAt = expiresAt;
     }
 
     /// @inheritdoc IVerificationRegistry
@@ -280,7 +283,7 @@ contract VerificationRegistry is IVerificationRegistry, ReentrancyGuard, Pausabl
         s_primarySlots[revealedNextNullifier] =
             PrimarySlot({hashedAddress: newHashedAddress, nextCommitment: newNextCommitment});
         s_nextCommitmentToNullifier[newNextCommitment] = revealedNextNullifier;
-        s_primaryRegistrations[newHashedAddress] = Registration({expiresAt: expiresAt});
+        s_primaryRegistrations[newHashedAddress] = Registration({expiresAt: expiresAt, registeredAt: uint48(block.timestamp)});
 
         emit WalletVerified(msg.sender);
     }
@@ -321,6 +324,11 @@ contract VerificationRegistry is IVerificationRegistry, ReentrancyGuard, Pausabl
             return IVerificationRegistry(s_successor).isPrimaryVerified(wallet);
         }
         return s_primaryRegistrations[keccak256(abi.encodePacked(wallet))].expiresAt > block.timestamp;
+    }
+
+    /// @inheritdoc IVerificationRegistry
+    function getPrimaryRegisteredAt(address wallet) external view override returns (uint48) {
+        return s_primaryRegistrations[keccak256(abi.encodePacked(wallet))].registeredAt;
     }
 
     /// @inheritdoc IVerificationRegistry

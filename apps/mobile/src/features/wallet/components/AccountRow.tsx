@@ -1,19 +1,20 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { View, Text, Pressable, Alert, ActivityIndicator } from 'react-native';
-import { useNavigation } from '@react-navigation/native';
 import { useAccount, useWriteContract, useWaitForTransactionReceipt, useChainId } from 'wagmi';
-import { useAppKit } from '@reown/appkit-react-native';
+import { useOpenWallet } from '../hooks/useOpenWallet';
 import { VERIFICATION_REGISTRY_ABI } from '../../../infrastructure/blockchain/contractAbis';
 import { CONTRACT_ADDRESSES } from '../../../infrastructure/blockchain/contracts';
 import { SUPPORTED_CHAIN_IDS } from '../../../shared/constants/chains';
 import type { SupportedChainId } from '../../../shared/constants/chains';
-import type { RootStackNavigationProp } from '../../../app/navigation/types';
 import { useAccountStore } from '../store/accountStore';
 import { formatQuarter } from '../hooks/useTrackedAccounts';
 import type { TrackedAccount } from '../hooks/useTrackedAccounts';
 
 interface AccountRowProps {
   account: TrackedAccount;
+  /** Whether any tracked address already has unique verification. */
+  hasExistingUnique: boolean;
+  onVerify: (address: `0x${string}`) => void;
   onUnregistered: () => void;
 }
 
@@ -21,15 +22,13 @@ function isSupportedChain(chainId: number): chainId is SupportedChainId {
   return (SUPPORTED_CHAIN_IDS as readonly number[]).includes(chainId);
 }
 
-export function AccountRow({ account, onUnregistered }: AccountRowProps): React.JSX.Element {
-  const navigation = useNavigation<RootStackNavigationProp<'Home'>>();
+export function AccountRow({ account, hasExistingUnique, onVerify, onUnregistered }: AccountRowProps): React.JSX.Element {
   const { address: activeAddress } = useAccount();
   const chainId = useChainId();
-  const { removeEntry, primaryNullifiers } = useAccountStore();
+  const { primaryNullifiers } = useAccountStore();
   const { writeContractAsync } = useWriteContract();
-  const { open: openAppKit } = useAppKit();
+  const openWallet = useOpenWallet();
   const [txHash, setTxHash] = useState<`0x${string}` | undefined>();
-  const [pendingVerify, setPendingVerify] = useState(false);
 
   const { isSuccess: isConfirmed, isLoading: isConfirming } = useWaitForTransactionReceipt({
     hash: txHash,
@@ -38,39 +37,19 @@ export function AccountRow({ account, onUnregistered }: AccountRowProps): React.
 
   useEffect(() => {
     if (isConfirmed && txHash) {
-      removeEntry(account.address, account.tier);
       onUnregistered();
     }
-  }, [isConfirmed, txHash, account.address, account.tier, removeEntry, onUnregistered]);
+  }, [isConfirmed, txHash, onUnregistered]);
 
   const contractAddress = isSupportedChain(chainId)
     ? CONTRACT_ADDRESSES[chainId].verificationRegistry
     : null;
 
-  // When pendingVerify is set and the wallet switches to the target account, auto-proceed
-  useEffect(() => {
-    if (pendingVerify && activeAddress?.toLowerCase() === account.address.toLowerCase()) {
-      setPendingVerify(false);
-      navigation.navigate('PassportScan');
-    }
-  }, [activeAddress, pendingVerify, account.address, navigation]);
-
-  // --- Verify ---
-  const handleVerify = useCallback(() => {
-    if (activeAddress?.toLowerCase() === account.address.toLowerCase()) {
-      navigation.navigate('PassportScan');
-      return;
-    }
-    // Wrong account active — open wallet immediately so user can switch, then auto-proceed
-    setPendingVerify(true);
-    void openAppKit();
-  }, [account.address, activeAddress, navigation, openAppKit]);
-
   // --- Unregister ---
-  const submitUnregister = useCallback(() => {
+  const submitUnregister = useCallback((tier: 'base' | 'primary') => {
     if (!contractAddress) return;
 
-    if (account.tier === 'base') {
+    if (tier === 'base') {
       writeContractAsync({
         address: contractAddress,
         abi: VERIFICATION_REGISTRY_ABI,
@@ -81,7 +60,7 @@ export function AccountRow({ account, onUnregistered }: AccountRowProps): React.
     } else {
       const nullifier = primaryNullifiers[account.address];
       if (!nullifier) {
-        Alert.alert('Error', 'Nullifier not found. Cannot unregister primary account.');
+        Alert.alert('Error', 'Nullifier not found. Cannot unregister.');
         return;
       }
       writeContractAsync({
@@ -93,58 +72,104 @@ export function AccountRow({ account, onUnregistered }: AccountRowProps): React.
         Alert.alert('Error', 'Transaction failed. Please try again.');
       });
     }
-  }, [account.address, account.tier, contractAddress, primaryNullifiers, writeContractAsync]);
+  }, [account.address, contractAddress, primaryNullifiers, writeContractAsync]);
 
-  const handleUnregister = useCallback(() => {
+  const handleUnregister = useCallback((tier: 'base' | 'primary') => {
     if (activeAddress?.toLowerCase() !== account.address.toLowerCase()) {
-      void openAppKit();
+      openWallet();
       return;
     }
+    const label = tier === 'primary' ? 'Unique' : 'Verified';
     Alert.alert(
       'Unregister',
-      `Remove ${account.shortAddress} from ${account.tier === 'primary' ? 'Primary' : 'Base'} verification?`,
+      `Remove ${account.shortAddress} from ${label} verification?`,
       [
         { text: 'Cancel', style: 'cancel' },
-        { text: 'Unregister', style: 'destructive', onPress: submitUnregister },
+        { text: 'Unregister', style: 'destructive', onPress: () => submitUnregister(tier) },
       ],
     );
-  }, [account.address, account.shortAddress, account.tier, activeAddress, openAppKit, submitUnregister]);
+  }, [account.address, account.shortAddress, activeAddress, openWallet, submitUnregister]);
 
-  const expiryLabel = account.expiresAt && account.expiresAt > 0n
-    ? formatQuarter(account.expiresAt)
-    : null;
+  // --- Verify ---
+  const handleVerify = useCallback(() => {
+    onVerify(account.address);
+  }, [account.address, onVerify]);
+
+  // Determine which tiers can still be verified
+  const canVerifyUnique = !account.isUniqueVerified && !hasExistingUnique;
+  const canVerifyBase = !account.isBaseVerified;
+  const canVerifyAny = canVerifyUnique || canVerifyBase;
+  const isActive = activeAddress?.toLowerCase() === account.address.toLowerCase();
 
   return (
-    <View className="bg-zinc-900 rounded-2xl px-4 py-3 flex-row items-center justify-between">
-      <View className="flex-1 gap-y-0.5">
-        <Text className="text-white text-sm font-mono">{account.shortAddress}</Text>
-        {account.isVerified && expiryLabel ? (
-          <Text className="text-zinc-400 text-xs">Expires {expiryLabel}</Text>
-        ) : (
-          <Text className="text-zinc-500 text-xs">Not verified</Text>
-        )}
+    <View className="bg-dracula-surface rounded-2xl px-4 py-3">
+      <View className="flex-row items-center justify-between">
+        <View className="flex-row items-center flex-1">
+          {isActive && (
+            <View className="w-2 h-2 rounded-full bg-dracula-green mr-2" />
+          )}
+          <Text className="text-dracula-fg text-sm font-mono">{account.shortAddress}</Text>
+        </View>
+
+        {/* Action button */}
+        {isConfirming ? (
+          <ActivityIndicator size="small" color="#6272a4" className="ml-4" />
+        ) : canVerifyAny ? (
+          <Pressable
+            onPress={handleVerify}
+            className="ml-4 px-3 py-1.5 rounded-lg bg-dracula-purple active:bg-dracula-purple/80"
+          >
+            <Text className="text-dracula-fg text-xs font-semibold">Verify</Text>
+          </Pressable>
+        ) : null}
       </View>
 
-      {account.isVerified ? (
-        <Pressable
-          onPress={handleUnregister}
-          disabled={isConfirming}
-          className="ml-4 px-3 py-1.5 rounded-lg border border-zinc-700 active:bg-zinc-800"
-        >
-          {isConfirming ? (
-            <ActivityIndicator size="small" color="#71717a" />
-          ) : (
-            <Text className="text-zinc-400 text-xs font-medium">Unregister</Text>
-          )}
-        </Pressable>
-      ) : (
-        <Pressable
-          onPress={handleVerify}
-          className="ml-4 px-3 py-1.5 rounded-lg bg-indigo-600 active:bg-indigo-700"
-        >
-          <Text className="text-white text-xs font-semibold">Verify</Text>
-        </Pressable>
-      )}
+      {/* Status chips */}
+      <View className="flex-row flex-wrap gap-2 mt-2">
+        {account.isUniqueVerified && (
+          <Chip
+            label={`Unique${account.uniqueExpiry ? ` · ${formatQuarter(account.uniqueExpiry)}` : ''}`}
+            variant="unique"
+            onLongPress={() => handleUnregister('primary')}
+          />
+        )}
+        {account.isBaseVerified && (
+          <Chip
+            label={`Verified${account.baseExpiry ? ` · ${formatQuarter(account.baseExpiry)}` : ''}`}
+            variant="verified"
+            onLongPress={() => handleUnregister('base')}
+          />
+        )}
+        {!account.hasAnyVerification && (
+          <Text className="text-dracula-comment/50 text-xs">Not verified</Text>
+        )}
+      </View>
     </View>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Chip component
+// ---------------------------------------------------------------------------
+
+function Chip({
+  label,
+  variant,
+  onLongPress,
+}: {
+  label: string;
+  variant: 'unique' | 'verified';
+  onLongPress?: () => void;
+}): React.JSX.Element {
+  const bg = variant === 'unique' ? 'bg-dracula-purple/20' : 'bg-dracula-green/20';
+  const text = variant === 'unique' ? 'text-dracula-purple' : 'text-dracula-green';
+
+  return (
+    <Pressable
+      onLongPress={onLongPress}
+      className={`px-2.5 py-1 rounded-full ${bg}`}
+    >
+      <Text className={`text-xs font-medium ${text}`}>{label}</Text>
+    </Pressable>
   );
 }

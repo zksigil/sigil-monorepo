@@ -118,4 +118,9 @@ interface IVerificationRegistry {
 
     /// @notice Returns the primary-tier registration expiry for wallet (0 if never registered).
     function getPrimaryExpiry(address wallet) external view returns (uint48);
+
+    /// @notice Returns the timestamp when wallet's current primary registration was created (0 if never registered).
+    /// @dev Renewing does not reset this value — it reflects when this address was first (or last) registered/changed.
+    ///      Protocols can use this to enforce a minimum registration age, e.g. require(age >= 30 days).
+    function getPrimaryRegisteredAt(address wallet) external view returns (uint48);
 }

@@ -69,7 +69,7 @@ describe('useProofGeneration', () => {
     const { result, unmount } = renderHook(() => useProofGeneration());
 
     act(() => {
-      void result.current.generate(validInput);
+      void result.current.generate(validInput, 'verified');
     });
 
     expect(result.current.isGenerating).toBe(true);
@@ -82,7 +82,7 @@ describe('useProofGeneration', () => {
     const { result } = renderHook(() => useProofGeneration());
 
     await act(async () => {
-      const promise = result.current.generate(validInput);
+      const promise = result.current.generate(validInput, 'verified');
       await jest.runAllTimersAsync();
       await promise;
     });
@@ -100,7 +100,7 @@ describe('useProofGeneration', () => {
     };
 
     await act(async () => {
-      await result.current.generate(invalidInput).catch(() => undefined);
+      await result.current.generate(invalidInput, 'verified').catch(() => undefined);
     });
 
     expect(result.current.error).toBe('Invalid wallet address');
@@ -113,7 +113,7 @@ describe('useProofGeneration', () => {
     const invalidInput: StubProofInput = { ...validInput, rawDG1Hex: '' };
 
     await act(async () => {
-      await result.current.generate(invalidInput).catch(() => undefined);
+      await result.current.generate(invalidInput, 'verified').catch(() => undefined);
     });
 
     expect(result.current.error).toBe('Raw DG1 data is required');
@@ -125,7 +125,7 @@ describe('useProofGeneration', () => {
     const invalidInput: StubProofInput = { ...validInput, rawSODHex: '' };
 
     await act(async () => {
-      await result.current.generate(invalidInput).catch(() => undefined);
+      await result.current.generate(invalidInput, 'verified').catch(() => undefined);
     });
 
     expect(result.current.error).toBe('Raw SOD data is required');

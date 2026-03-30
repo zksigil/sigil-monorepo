@@ -3,8 +3,10 @@ import type { SupportedChainId } from '../../shared/constants/chains';
 
 /**
  * Contract addresses per chain.
- * After deploying VerificationRegistry.sol to Sepolia, update
- * EXPO_PUBLIC_VERIFICATION_REGISTRY_ADDRESS in apps/mobile/.env AND this mapping.
+ *
+ * Sepolia:  set EXPO_PUBLIC_VERIFICATION_REGISTRY_ADDRESS after deploying to Sepolia.
+ * Anvil:    set EXPO_PUBLIC_ANVIL_REGISTRY_ADDRESS after running Deploy.s.sol locally.
+ *           Address is deterministic per deployer nonce — re-run `forge script` to get it.
  */
 export const CONTRACT_ADDRESSES: Record<SupportedChainId, { verificationRegistry: Address }> = {
   11155111: {
@@ -17,7 +19,7 @@ export const CONTRACT_ADDRESSES: Record<SupportedChainId, { verificationRegistry
   },
   31337: {
     verificationRegistry:
-      (process.env['EXPO_PUBLIC_VERIFICATION_REGISTRY_ADDRESS'] as Address | undefined) ??
+      (process.env['EXPO_PUBLIC_ANVIL_REGISTRY_ADDRESS'] as Address | undefined) ??
       '0x0000000000000000000000000000000000000000',
   },
 };

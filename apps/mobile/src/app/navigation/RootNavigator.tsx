@@ -6,8 +6,6 @@ import { HomeScreen } from '../../features/wallet/components/HomeScreen';
 import { PassportScanScreen } from '../../features/verification/components/PassportScanScreen';
 import { ProofGenerationScreen } from '../../features/verification/components/ProofGenerationScreen';
 import { VerificationSuccessScreen } from '../../features/verification/components/VerificationSuccessScreen';
-import { AddAccountsScreen } from '../../features/wallet/components/AddAccountsScreen';
-
 const Stack = createNativeStackNavigator<RootStackParamList>();
 
 // Deep-link config for WalletConnect callbacks
@@ -36,11 +34,6 @@ export function RootNavigator(): React.JSX.Element {
           name="Home"
           component={HomeScreen}
           options={{ title: 'ZK Identity Verifier' }}
-        />
-        <Stack.Screen
-          name="AddAccounts"
-          component={AddAccountsScreen}
-          options={{ title: 'Add Accounts' }}
         />
         <Stack.Screen
           name="PassportScan"

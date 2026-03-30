@@ -10,16 +10,18 @@ export interface PassportMRZData {
   readonly rawSODHex: string;      // hex-encoded SOD bytes from NFC (Phase 3)
 }
 
+/** User-facing tier names. Maps to contract functions: unique→registerPrimary, verified→registerBase. */
+export type VerificationTier = 'unique' | 'verified';
+
 export type RootStackParamList = {
   Home: undefined;
-  AddAccounts: { tier: 'base' | 'primary' };
-  PassportScan: undefined;
-  ProofGeneration: { passportData: PassportMRZData };
+  PassportScan: { tier: VerificationTier };
+  ProofGeneration: { passportData: PassportMRZData; tier: VerificationTier };
   VerificationSuccess: {
     txHash: `0x${string}`;
     groupSize: number;
     verifiedAddress: `0x${string}`;
-    tier: 'base' | 'primary';
+    tier: VerificationTier;
   };
 };
 

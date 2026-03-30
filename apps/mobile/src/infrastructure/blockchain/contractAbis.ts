@@ -110,6 +110,13 @@ export const VERIFICATION_REGISTRY_ABI = [
     outputs: [{ name: '', type: 'uint48', internalType: 'uint48' }],
     stateMutability: 'view',
   },
+  {
+    type: 'function',
+    name: 'getPrimaryRegisteredAt',
+    inputs: [{ name: 'wallet', type: 'address', internalType: 'address' }],
+    outputs: [{ name: '', type: 'uint48', internalType: 'uint48' }],
+    stateMutability: 'view',
+  },
 
   // --- Events ---
   {

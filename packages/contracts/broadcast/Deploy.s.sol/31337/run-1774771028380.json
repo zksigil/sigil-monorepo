@@ -70,7 +70,7 @@
       "type": "0x2",
       "transactionHash": "0xff295df0ff9fdcbdbb8f673e6a2ffc113bb2fcd72c47ea5e8fba62bffbdcdb85",
       "transactionIndex": "0x0",
-      "blockHash": "0x886e26dd923ca415bf331eb89f66156d0186637c02d79fb31996c223cdd28a29",
+      "blockHash": "0xaec343941e2431655ab5cc2fa3c83bee09a91a4471d24bd7f98620685039a32a",
       "blockNumber": "0x1",
       "gasUsed": "0x72a20",
       "effectiveGasPrice": "0x3b9aca01",
@@ -87,7 +87,7 @@
       "type": "0x2",
       "transactionHash": "0xf20bdd73639a67541f8eb03c1612e885df18b52324436052aff9b1827644e433",
       "transactionIndex": "0x0",
-      "blockHash": "0xa82bcb92b3a073d2ee79d86953c5cb1070906674670fdbfde57fa18a0002279d",
+      "blockHash": "0xf9d72f05b92067222389433cac10bf53c00ec0b0b730d201948456551eed0122",
       "blockNumber": "0x2",
       "gasUsed": "0x267fd",
       "effectiveGasPrice": "0x34632521",
@@ -104,7 +104,7 @@
       "type": "0x2",
       "transactionHash": "0xddda7b089de30ea94dca66fba2cb8fa4d54a1d4d193cafc98878e3f94a5acba2",
       "transactionIndex": "0x0",
-      "blockHash": "0xd39a5c735f9ce6cbd389b25db38e834c0398985d516ff817cfa7830c2d7d1b1e",
+      "blockHash": "0xa8e5c1cb1df35ec0bd6f9acc9feed2ecd3d46a47af89474351b9c533b002518b",
       "blockNumber": "0x3",
       "gasUsed": "0x3384c1",
       "effectiveGasPrice": "0x2de86028",
@@ -117,10 +117,6 @@
   "libraries": [],
   "pending": [],
   "returns": {
-    "verifier": {
-      "internal_type": "contract ProofVerifier",
-      "value": "0xe7f1725E7734CE288F8367e1Bb143E90bb3F0512"
-    },
     "config": {
       "internal_type": "contract ProtocolConfig",
       "value": "0x5FbDB2315678afecb367f032d93F642f64180aa3"
@@ -128,9 +124,13 @@
     "registry": {
       "internal_type": "contract VerificationRegistry",
       "value": "0x9fE46736679d2D9a65F0992F2272dE9f3c7fa6e0"
+    },
+    "verifier": {
+      "internal_type": "contract ProofVerifier",
+      "value": "0xe7f1725E7734CE288F8367e1Bb143E90bb3F0512"
     }
   },
-  "timestamp": 1774772453394,
+  "timestamp": 1774771028380,
   "chain": 31337,
   "commit": "c145872"
 }

@@ -1,33 +1,40 @@
 import { useCallback, useState } from 'react';
 import {
   generateBaseProof,
+  generatePrimaryProof,
   generateStubProof,
   type ProofInput,
   type BaseProofOutput,
+  type PrimaryProofOutput,
+  type ProofOutput,
 } from '../services/proofService';
+import type { VerificationTier } from '../../../app/navigation/types';
 
 export interface UseProofGenerationResult {
-  generate: (input: ProofInput) => Promise<BaseProofOutput>;
+  generate: (input: ProofInput, tier: VerificationTier) => Promise<ProofOutput>;
   isGenerating: boolean;
-  result: BaseProofOutput | null;
+  result: ProofOutput | null;
   error: string | null;
 }
 
 /**
- * Hook wrapping base-tier ZK proof generation.
+ * Hook wrapping ZK proof generation for both tiers.
  *
  * Tries the real Mopro native module (UltraHonk-Keccak, ~5–15s on device).
  * Falls back to a stub proof if the native module is unavailable (development).
  */
 export function useProofGeneration(): UseProofGenerationResult {
   const [isGenerating, setIsGenerating] = useState(false);
-  const [result, setResult] = useState<BaseProofOutput | null>(null);
+  const [result, setResult] = useState<ProofOutput | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  const generate = useCallback(async (input: ProofInput): Promise<BaseProofOutput> => {
+  const generate = useCallback(async (input: ProofInput, tier: VerificationTier): Promise<ProofOutput> => {
     setIsGenerating(true);
     setError(null);
     setResult(null);
+
+    // Map user-facing tier to contract-level tier
+    const isPrimary = tier === 'unique';
 
     try {
       if (!input.walletAddress || !input.walletAddress.startsWith('0x')) {
@@ -40,10 +47,12 @@ export function useProofGeneration(): UseProofGenerationResult {
         throw new Error('Raw SOD data is required');
       }
 
-      let proofOutput: BaseProofOutput;
+      let proofOutput: ProofOutput;
 
       try {
-        proofOutput = await generateBaseProof(input);
+        proofOutput = isPrimary
+          ? await generatePrimaryProof(input)
+          : await generateBaseProof(input);
       } catch (moproErr) {
         const innerMsg = (moproErr != null && typeof moproErr === 'object' && 'inner' in moproErr && Array.isArray((moproErr as { inner: unknown[] }).inner))
           ? String((moproErr as { inner: unknown[] }).inner[0])
@@ -58,17 +67,39 @@ export function useProofGeneration(): UseProofGenerationResult {
           // Development fallback: stub proof (not verifiable on-chain)
           console.warn('[PROOF] Mopro unavailable — using stub proof for development');
           const stub = generateStubProof(input);
-          proofOutput = {
-            type: 'base',
-            zkProof: {
-              proof: stub.zkProof.proof,
-              vk: ('0x' + '00'.repeat(32)) as `0x${string}`,
+
+          if (isPrimary) {
+            // Stub primary: derive deterministic nullifier + nextCommitment from the stub nullifier
+            const stubNullifier = stub.passportNullifierHex;
+            // nextCommitment is a second keccak of the nullifier (mirrors circuit chaining logic)
+            const { keccak256 } = await import('viem');
+            const nextCommitment = keccak256(stubNullifier);
+            proofOutput = {
+              type: 'primary',
+              zkProof: {
+                proof: stub.zkProof.proof,
+                vk: ('0x' + '00'.repeat(32)) as `0x${string}`,
+                nullifier: stubNullifier,
+                nextCommitment,
+                hashedAddress: stub.zkProof.publicSignals[1].toString(),
+                passportExpiry: (input.passportExpiryUnix ?? 0).toString(),
+              },
+              nullifier: stubNullifier,
+              nextCommitment,
+            } satisfies PrimaryProofOutput;
+          } else {
+            proofOutput = {
+              type: 'base',
+              zkProof: {
+                proof: stub.zkProof.proof,
+                vk: ('0x' + '00'.repeat(32)) as `0x${string}`,
+                epochNullifier: stub.passportNullifierHex,
+                hashedAddress: stub.zkProof.publicSignals[1].toString(),
+                passportExpiry: (input.passportExpiryUnix ?? 0).toString(),
+              },
               epochNullifier: stub.passportNullifierHex,
-              hashedAddress: stub.zkProof.publicSignals[1].toString(),
-              passportExpiry: (input.passportExpiryUnix ?? 0).toString(),
-            },
-            epochNullifier: stub.passportNullifierHex,
-          };
+            } satisfies BaseProofOutput;
+          }
         } else {
           throw moproErr;
         }
@@ -77,7 +108,6 @@ export function useProofGeneration(): UseProofGenerationResult {
       setResult(proofOutput);
       return proofOutput;
     } catch (err) {
-      // uniffi MoproError.NoirError stores the real message in .inner[0]; .message is just "MoproError.NoirError"
       const innerMsg = (err != null && typeof err === 'object' && 'inner' in err && Array.isArray((err as { inner: unknown[] }).inner))
         ? String((err as { inner: unknown[] }).inner[0])
         : null;

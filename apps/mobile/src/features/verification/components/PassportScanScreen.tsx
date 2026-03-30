@@ -9,10 +9,10 @@ import {
   Linking,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useNavigation } from '@react-navigation/native';
+import { useNavigation, useRoute } from '@react-navigation/native';
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import TextRecognition from '@react-native-ml-kit/text-recognition';
-import type { RootStackNavigationProp } from '../../../app/navigation/types';
+import type { RootStackNavigationProp, RootStackRouteProp } from '../../../app/navigation/types';
 import { useNFCReader } from '../hooks/useNFCReader';
 import type { NFCReadResult, NFCError } from '../../../infrastructure/nfc';
 
@@ -193,6 +193,8 @@ function getErrorMessage(error: NFCError): string {
 
 export function PassportScanScreen(): React.JSX.Element {
   const navigation = useNavigation<RootStackNavigationProp<'PassportScan'>>();
+  const route = useRoute<RootStackRouteProp<'PassportScan'>>();
+  const { tier } = route.params;
   const { readPassport, isScanning, cancelScan } = useNFCReader();
   const [cameraPermission, requestCameraPermission] = useCameraPermissions();
   const cameraRef = useRef<CameraView>(null);
@@ -338,6 +340,7 @@ export function PassportScanScreen(): React.JSX.Element {
 
   const handleDevSkip = useCallback(() => {
     navigation.navigate('ProofGeneration', {
+      tier,
       passportData: {
         documentNumber: 'AB1234567',
         dateOfBirth: '900101',
@@ -347,11 +350,12 @@ export function PassportScanScreen(): React.JSX.Element {
         rawSODHex: 'deadbeef' + '00'.repeat(252),
       },
     });
-  }, [navigation]);
+  }, [navigation, tier]);
 
   const handleContinueToProof = useCallback(() => {
     if (!nfcResult) return;
     navigation.navigate('ProofGeneration', {
+      tier,
       passportData: {
         documentNumber: nfcResult.data.documentNumber,
         dateOfBirth: nfcResult.data.dateOfBirth,
@@ -361,7 +365,7 @@ export function PassportScanScreen(): React.JSX.Element {
         rawSODHex: nfcResult.rawSODHex ?? '',
       },
     });
-  }, [navigation, nfcResult]);
+  }, [navigation, nfcResult, tier]);
 
   const handleBackToMRZ = useCallback(() => {
     setStep('mrz-entry');
@@ -376,31 +380,31 @@ export function PassportScanScreen(): React.JSX.Element {
 
   if (step === 'mrz-entry') {
     return (
-      <SafeAreaView className="flex-1 bg-black" edges={['bottom']}>
+      <SafeAreaView className="flex-1 bg-dracula-bg" edges={['bottom']}>
         <ScrollView className="flex-1 px-6 py-6" keyboardShouldPersistTaps="handled">
-          <Text className="text-white text-2xl font-bold mb-2">Scan Passport</Text>
-          <Text className="text-zinc-400 text-sm mb-6">
+          <Text className="text-dracula-fg text-2xl font-bold mb-2">Scan Passport</Text>
+          <Text className="text-dracula-comment text-sm mb-6">
             Enter your passport MRZ details to enable NFC reading
           </Text>
 
           {/* Tab buttons */}
-          <View className="flex-row mb-6 rounded-xl overflow-hidden bg-zinc-900">
+          <View className="flex-row mb-6 rounded-xl overflow-hidden bg-dracula-surface">
             <Pressable
               onPress={() => setActiveTab('manual')}
-              className={`flex-1 py-3 items-center ${activeTab === 'manual' ? 'bg-zinc-700' : ''}`}
+              className={`flex-1 py-3 items-center ${activeTab === 'manual' ? 'bg-dracula-comment/40' : ''}`}
             >
               <Text
-                className={`text-sm font-semibold ${activeTab === 'manual' ? 'text-white' : 'text-zinc-500'}`}
+                className={`text-sm font-semibold ${activeTab === 'manual' ? 'text-dracula-fg' : 'text-dracula-comment/70'}`}
               >
                 Manual Entry
               </Text>
             </Pressable>
             <Pressable
               onPress={() => setActiveTab('camera')}
-              className={`flex-1 py-3 items-center ${activeTab === 'camera' ? 'bg-zinc-700' : ''}`}
+              className={`flex-1 py-3 items-center ${activeTab === 'camera' ? 'bg-dracula-comment/40' : ''}`}
             >
               <Text
-                className={`text-sm font-semibold ${activeTab === 'camera' ? 'text-white' : 'text-zinc-500'}`}
+                className={`text-sm font-semibold ${activeTab === 'camera' ? 'text-dracula-fg' : 'text-dracula-comment/70'}`}
               >
                 Scan MRZ
               </Text>
@@ -412,15 +416,15 @@ export function PassportScanScreen(): React.JSX.Element {
             <View className="mb-6">
               {/* Permission not yet determined — request it */}
               {!cameraPermission && (
-                <View className="bg-zinc-900 rounded-2xl p-6 items-center gap-y-3">
-                  <Text className="text-zinc-300 text-sm text-center">
+                <View className="bg-dracula-surface rounded-2xl p-6 items-center gap-y-3">
+                  <Text className="text-dracula-fg/80 text-sm text-center">
                     Camera access is needed to scan your passport MRZ.
                   </Text>
                   <Pressable
                     onPress={requestCameraPermission}
-                    className="bg-indigo-600 active:bg-indigo-700 rounded-xl px-6 py-3"
+                    className="bg-dracula-purple active:bg-dracula-purple/80 rounded-xl px-6 py-3"
                   >
-                    <Text className="text-white text-sm font-semibold">Allow Camera</Text>
+                    <Text className="text-dracula-fg text-sm font-semibold">Allow Camera</Text>
                   </Pressable>
                 </View>
               )}
@@ -436,12 +440,12 @@ export function PassportScanScreen(): React.JSX.Element {
                     >
                       {/* MRZ guide overlay */}
                       <View className="flex-1 justify-end pb-4 px-4">
-                        <View className="border-2 border-white/70 rounded-lg py-3 items-center">
-                          <Text className="text-white/80 text-xs font-medium tracking-widest">
+                        <View className="border-2 border-dracula-fg/70 rounded-lg py-3 items-center">
+                          <Text className="text-dracula-fg/80 text-xs font-medium tracking-widest">
                             ALIGN MRZ LINES HERE
                           </Text>
                         </View>
-                        <Text className="text-white/50 text-xs text-center mt-1">
+                        <Text className="text-dracula-fg/50 text-xs text-center mt-1">
                           The bottom two lines of your passport data page
                         </Text>
                       </View>
@@ -453,24 +457,24 @@ export function PassportScanScreen(): React.JSX.Element {
                     {mrzScanState === 'idle' && (
                       <Pressable
                         onPress={handleScanMRZ}
-                        className="w-full rounded-2xl py-4 items-center bg-indigo-600 active:bg-indigo-700"
+                        className="w-full rounded-2xl py-4 items-center bg-dracula-purple active:bg-dracula-purple/80"
                       >
-                        <Text className="text-white text-base font-semibold">Scan MRZ</Text>
+                        <Text className="text-dracula-fg text-base font-semibold">Scan MRZ</Text>
                       </Pressable>
                     )}
 
                     {(mrzScanState === 'capturing' || mrzScanState === 'processing') && (
-                      <View className="w-full rounded-2xl py-4 items-center bg-zinc-800 flex-row justify-center gap-x-3">
+                      <View className="w-full rounded-2xl py-4 items-center bg-dracula-surface/70 flex-row justify-center gap-x-3">
                         <ActivityIndicator size="small" color="#818CF8" />
-                        <Text className="text-zinc-300 text-base font-semibold">
+                        <Text className="text-dracula-fg/80 text-base font-semibold">
                           {mrzScanState === 'capturing' ? 'Capturing...' : 'Reading MRZ...'}
                         </Text>
                       </View>
                     )}
 
                     {mrzScanState === 'success' && (
-                      <View className="w-full rounded-2xl py-4 items-center bg-green-900/40">
-                        <Text className="text-green-400 text-base font-semibold">
+                      <View className="w-full rounded-2xl py-4 items-center bg-dracula-green/20">
+                        <Text className="text-dracula-green text-base font-semibold">
                           MRZ Scanned — Review fields below
                         </Text>
                       </View>
@@ -478,16 +482,16 @@ export function PassportScanScreen(): React.JSX.Element {
 
                     {mrzScanState === 'failed' && (
                       <View className="gap-y-2">
-                        <View className="w-full rounded-2xl py-3 items-center bg-red-900/30">
-                          <Text className="text-red-400 text-sm font-semibold">
+                        <View className="w-full rounded-2xl py-3 items-center bg-dracula-red/20">
+                          <Text className="text-dracula-red text-sm font-semibold">
                             Couldn't read MRZ — try better lighting
                           </Text>
                         </View>
                         <Pressable
                           onPress={() => setMrzScanState('idle')}
-                          className="w-full rounded-2xl py-4 items-center bg-indigo-600 active:bg-indigo-700"
+                          className="w-full rounded-2xl py-4 items-center bg-dracula-purple active:bg-dracula-purple/80"
                         >
-                          <Text className="text-white text-base font-semibold">Try Again</Text>
+                          <Text className="text-dracula-fg text-base font-semibold">Try Again</Text>
                         </Pressable>
                       </View>
                     )}
@@ -497,17 +501,17 @@ export function PassportScanScreen(): React.JSX.Element {
 
               {/* Permission explicitly denied */}
               {cameraPermission && !cameraPermission.granted && !cameraPermission.canAskAgain && (
-                <View className="bg-zinc-900 rounded-2xl p-6 items-center gap-y-3">
-                  <Text className="text-zinc-300 text-sm text-center">
+                <View className="bg-dracula-surface rounded-2xl p-6 items-center gap-y-3">
+                  <Text className="text-dracula-fg/80 text-sm text-center">
                     Camera permission was denied. Enable it in Settings to scan MRZ.
                   </Text>
                   <Pressable
                     onPress={() => void Linking.openSettings()}
-                    className="bg-zinc-700 active:bg-zinc-600 rounded-xl px-6 py-3"
+                    className="bg-dracula-comment/40 active:bg-dracula-comment/60 rounded-xl px-6 py-3"
                   >
-                    <Text className="text-white text-sm font-semibold">Open Settings</Text>
+                    <Text className="text-dracula-fg text-sm font-semibold">Open Settings</Text>
                   </Pressable>
-                  <Text className="text-zinc-500 text-xs text-center">
+                  <Text className="text-dracula-comment/70 text-xs text-center">
                     Or use Manual Entry tab to continue
                   </Text>
                 </View>
@@ -515,15 +519,15 @@ export function PassportScanScreen(): React.JSX.Element {
 
               {/* Permission denied but can ask again */}
               {cameraPermission && !cameraPermission.granted && cameraPermission.canAskAgain && (
-                <View className="bg-zinc-900 rounded-2xl p-6 items-center gap-y-3">
-                  <Text className="text-zinc-300 text-sm text-center">
+                <View className="bg-dracula-surface rounded-2xl p-6 items-center gap-y-3">
+                  <Text className="text-dracula-fg/80 text-sm text-center">
                     Camera access was denied. Grant access to scan MRZ.
                   </Text>
                   <Pressable
                     onPress={requestCameraPermission}
-                    className="bg-indigo-600 active:bg-indigo-700 rounded-xl px-6 py-3"
+                    className="bg-dracula-purple active:bg-dracula-purple/80 rounded-xl px-6 py-3"
                   >
-                    <Text className="text-white text-sm font-semibold">Grant Camera Access</Text>
+                    <Text className="text-dracula-fg text-sm font-semibold">Grant Camera Access</Text>
                   </Pressable>
                 </View>
               )}
@@ -533,60 +537,60 @@ export function PassportScanScreen(): React.JSX.Element {
           {/* MRZ input fields — always visible so user can review/edit after scan */}
           <View className="gap-y-4 mb-8">
             <View>
-              <Text className="text-zinc-400 text-xs font-medium mb-1.5 uppercase tracking-wider">
+              <Text className="text-dracula-comment text-xs font-medium mb-1.5 uppercase tracking-wider">
                 Document Number
               </Text>
               <TextInput
-                className="bg-zinc-900 text-white rounded-xl px-4 py-3.5 text-base"
+                className="bg-dracula-surface text-dracula-fg rounded-xl px-4 py-3.5 text-base"
                 value={mrzInput.documentNumber}
                 onChangeText={updateField('documentNumber', 9, true)}
                 placeholder="e.g. AB1234567"
-                placeholderTextColor="#52525b"
+                placeholderTextColor="#6272a4"
                 autoCapitalize="characters"
                 maxLength={9}
               />
             </View>
 
             <View>
-              <Text className="text-zinc-400 text-xs font-medium mb-1.5 uppercase tracking-wider">
+              <Text className="text-dracula-comment text-xs font-medium mb-1.5 uppercase tracking-wider">
                 Date of Birth (YYMMDD)
               </Text>
               <TextInput
-                className="bg-zinc-900 text-white rounded-xl px-4 py-3.5 text-base"
+                className="bg-dracula-surface text-dracula-fg rounded-xl px-4 py-3.5 text-base"
                 value={mrzInput.dateOfBirth}
                 onChangeText={updateField('dateOfBirth', 6, false)}
                 placeholder="e.g. 901231"
-                placeholderTextColor="#52525b"
+                placeholderTextColor="#6272a4"
                 keyboardType="number-pad"
                 maxLength={6}
               />
             </View>
 
             <View>
-              <Text className="text-zinc-400 text-xs font-medium mb-1.5 uppercase tracking-wider">
+              <Text className="text-dracula-comment text-xs font-medium mb-1.5 uppercase tracking-wider">
                 Expiry Date (YYMMDD)
               </Text>
               <TextInput
-                className="bg-zinc-900 text-white rounded-xl px-4 py-3.5 text-base"
+                className="bg-dracula-surface text-dracula-fg rounded-xl px-4 py-3.5 text-base"
                 value={mrzInput.dateOfExpiry}
                 onChangeText={updateField('dateOfExpiry', 6, false)}
                 placeholder="e.g. 301231"
-                placeholderTextColor="#52525b"
+                placeholderTextColor="#6272a4"
                 keyboardType="number-pad"
                 maxLength={6}
               />
             </View>
 
             <View>
-              <Text className="text-zinc-400 text-xs font-medium mb-1.5 uppercase tracking-wider">
+              <Text className="text-dracula-comment text-xs font-medium mb-1.5 uppercase tracking-wider">
                 Nationality (3-letter code)
               </Text>
               <TextInput
-                className="bg-zinc-900 text-white rounded-xl px-4 py-3.5 text-base"
+                className="bg-dracula-surface text-dracula-fg rounded-xl px-4 py-3.5 text-base"
                 value={mrzInput.nationality}
                 onChangeText={updateField('nationality', 3, true)}
                 placeholder="e.g. USA"
-                placeholderTextColor="#52525b"
+                placeholderTextColor="#6272a4"
                 autoCapitalize="characters"
                 maxLength={3}
               />
@@ -599,17 +603,17 @@ export function PassportScanScreen(): React.JSX.Element {
             disabled={!mrzComplete}
             className={`w-full rounded-2xl py-4 items-center ${
               mrzComplete
-                ? 'bg-indigo-600 active:bg-indigo-700'
-                : 'bg-zinc-800 opacity-50'
+                ? 'bg-dracula-purple active:bg-dracula-purple/80'
+                : 'bg-dracula-surface/70 opacity-50'
             }`}
           >
-            <Text className="text-white text-base font-semibold">
+            <Text className="text-dracula-fg text-base font-semibold">
               Continue to NFC Scan
             </Text>
           </Pressable>
 
           <View className="mt-6 mb-4">
-            <Text className="text-zinc-600 text-xs text-center leading-5">
+            <Text className="text-dracula-comment/50 text-xs text-center leading-5">
               Your passport data is processed locally.{'\n'}
               Nothing is sent to any server.
             </Text>
@@ -624,17 +628,17 @@ export function PassportScanScreen(): React.JSX.Element {
   // -------------------------------------------------------------------------
 
   return (
-    <SafeAreaView className="flex-1 bg-black" edges={['bottom']}>
+    <SafeAreaView className="flex-1 bg-dracula-bg" edges={['bottom']}>
       <ScrollView className="flex-1 px-6 py-6" contentContainerClassName="flex-grow">
         {/* Back button */}
         <Pressable onPress={handleBackToMRZ} className="mb-4">
-          <Text className="text-indigo-400 text-sm font-medium">
+          <Text className="text-dracula-purple text-sm font-medium">
             ← Back to MRZ Entry
           </Text>
         </Pressable>
 
-        <Text className="text-white text-2xl font-bold mb-2">NFC Scan</Text>
-        <Text className="text-zinc-400 text-sm mb-8">
+        <Text className="text-dracula-fg text-2xl font-bold mb-2">NFC Scan</Text>
+        <Text className="text-dracula-comment text-sm mb-8">
           Read passport chip via NFC
         </Text>
 
@@ -642,19 +646,19 @@ export function PassportScanScreen(): React.JSX.Element {
           {/* Ready state */}
           {scanState === 'ready' && (
             <>
-              <View className="w-32 h-32 rounded-full bg-zinc-900 items-center justify-center">
+              <View className="w-32 h-32 rounded-full bg-dracula-surface items-center justify-center">
                 <Text className="text-6xl">📔</Text>
               </View>
 
-              <Text className="text-zinc-300 text-base text-center leading-6 max-w-xs">
+              <Text className="text-dracula-fg/80 text-base text-center leading-6 max-w-xs">
                 Hold the back of your phone against the data page of your passport
               </Text>
 
               <Pressable
                 onPress={handleBeginScan}
-                className="w-full rounded-2xl py-4 items-center bg-indigo-600 active:bg-indigo-700"
+                className="w-full rounded-2xl py-4 items-center bg-dracula-purple active:bg-dracula-purple/80"
               >
-                <Text className="text-white text-base font-semibold">
+                <Text className="text-dracula-fg text-base font-semibold">
                   Begin NFC Scan
                 </Text>
               </Pressable>
@@ -664,19 +668,19 @@ export function PassportScanScreen(): React.JSX.Element {
           {/* Scanning state */}
           {scanState === 'scanning' && (
             <>
-              <View className="w-32 h-32 rounded-full bg-indigo-900/30 items-center justify-center">
+              <View className="w-32 h-32 rounded-full bg-dracula-purple/20 items-center justify-center">
                 <ActivityIndicator size="large" color="#818CF8" />
               </View>
 
-              <Text className="text-white text-lg font-semibold">
+              <Text className="text-dracula-fg text-lg font-semibold">
                 Keep phone steady against passport...
               </Text>
 
               <Pressable
                 onPress={handleCancel}
-                className="w-full rounded-2xl py-4 items-center bg-zinc-800 active:bg-zinc-700"
+                className="w-full rounded-2xl py-4 items-center bg-dracula-surface/70 active:bg-dracula-comment/40"
               >
-                <Text className="text-white text-base font-semibold">Cancel</Text>
+                <Text className="text-dracula-fg text-base font-semibold">Cancel</Text>
               </Pressable>
             </>
           )}
@@ -684,21 +688,21 @@ export function PassportScanScreen(): React.JSX.Element {
           {/* Success state */}
           {scanState === 'success' && nfcResult && (
             <>
-              <View className="w-24 h-24 rounded-full bg-green-900/30 items-center justify-center">
+              <View className="w-24 h-24 rounded-full bg-dracula-green/20 items-center justify-center">
                 <Text className="text-5xl">✓</Text>
               </View>
 
-              <Text className="text-green-400 text-lg font-semibold">
+              <Text className="text-dracula-green text-lg font-semibold">
                 Passport read successfully!
               </Text>
 
               {/* Debug panel */}
-              <View className="w-full bg-zinc-900 rounded-2xl overflow-hidden">
+              <View className="w-full bg-dracula-surface rounded-2xl overflow-hidden">
                 <Pressable
                   onPress={() => setDebugExpanded((prev) => !prev)}
                   className="px-4 py-3 flex-row justify-between items-center"
                 >
-                  <Text className="text-zinc-300 text-sm font-semibold">
+                  <Text className="text-dracula-fg/80 text-sm font-semibold">
                     🔍 Debug Info — Tap to {debugExpanded ? 'collapse' : 'expand'}
                   </Text>
                 </Pressable>
@@ -707,7 +711,7 @@ export function PassportScanScreen(): React.JSX.Element {
                   <View className="px-4 pb-4 gap-y-4">
                     {/* MRZ Input section */}
                     <View>
-                      <Text className="text-indigo-400 text-xs font-bold uppercase tracking-wider mb-2">
+                      <Text className="text-dracula-purple text-xs font-bold uppercase tracking-wider mb-2">
                         MRZ Input (entered by user)
                       </Text>
                       <DebugRow label="Document Number" value={mrzInput.documentNumber} />
@@ -718,7 +722,7 @@ export function PassportScanScreen(): React.JSX.Element {
 
                     {/* NFC Chip Data section */}
                     <View>
-                      <Text className="text-green-400 text-xs font-bold uppercase tracking-wider mb-2">
+                      <Text className="text-dracula-green text-xs font-bold uppercase tracking-wider mb-2">
                         NFC Chip Data (read from passport)
                       </Text>
                       <DebugRow label="Document Number" value={nfcResult.data.documentNumber} />
@@ -734,7 +738,7 @@ export function PassportScanScreen(): React.JSX.Element {
                     {/* Raw NFC Data section */}
                     {nfcResult.rawDG1Hex && (
                       <View>
-                        <Text className="text-amber-400 text-xs font-bold uppercase tracking-wider mb-2">
+                        <Text className="text-dracula-orange text-xs font-bold uppercase tracking-wider mb-2">
                           Raw NFC Data
                         </Text>
                         <DebugRow
@@ -769,9 +773,9 @@ export function PassportScanScreen(): React.JSX.Element {
 
               <Pressable
                 onPress={handleContinueToProof}
-                className="w-full rounded-2xl py-4 items-center bg-indigo-600 active:bg-indigo-700"
+                className="w-full rounded-2xl py-4 items-center bg-dracula-purple active:bg-dracula-purple/80"
               >
-                <Text className="text-white text-base font-semibold">
+                <Text className="text-dracula-fg text-base font-semibold">
                   Continue to Proof Generation
                 </Text>
               </Pressable>
@@ -781,28 +785,28 @@ export function PassportScanScreen(): React.JSX.Element {
           {/* Error state */}
           {scanState === 'error' && (
             <>
-              <View className="w-32 h-32 rounded-full bg-red-900/20 items-center justify-center">
+              <View className="w-32 h-32 rounded-full bg-dracula-red/20 items-center justify-center">
                 <Text className="text-5xl">⚠️</Text>
               </View>
 
-              <Text className="text-red-400 text-lg font-semibold">Scan Failed</Text>
-              <Text className="text-zinc-400 text-sm text-center max-w-xs">
+              <Text className="text-dracula-red text-lg font-semibold">Scan Failed</Text>
+              <Text className="text-dracula-comment text-sm text-center max-w-xs">
                 {errorMessage ?? 'Could not read passport NFC chip. Please try again.'}
               </Text>
 
               <Pressable
                 onPress={handleRetry}
-                className="w-full rounded-2xl py-4 items-center bg-zinc-800 active:bg-zinc-700"
+                className="w-full rounded-2xl py-4 items-center bg-dracula-surface/70 active:bg-dracula-comment/40"
               >
-                <Text className="text-white text-base font-semibold">Try Again</Text>
+                <Text className="text-dracula-fg text-base font-semibold">Try Again</Text>
               </Pressable>
 
               {process.env.EXPO_PUBLIC_DEV_BYPASS === 'true' && (
                 <Pressable
                   onPress={handleDevSkip}
-                  className="w-full rounded-2xl py-3 items-center border border-amber-700/50 active:bg-amber-900/20"
+                  className="w-full rounded-2xl py-3 items-center border border-dracula-orange/50 active:bg-dracula-orange/20"
                 >
-                  <Text className="text-amber-500 text-sm font-medium">
+                  <Text className="text-dracula-orange text-sm font-medium">
                     [DEV] Skip NFC — use dummy data
                   </Text>
                 </Pressable>
@@ -812,7 +816,7 @@ export function PassportScanScreen(): React.JSX.Element {
         </View>
 
         <View className="mt-auto pt-6">
-          <Text className="text-zinc-600 text-xs text-center leading-5">
+          <Text className="text-dracula-comment/50 text-xs text-center leading-5">
             Your passport data is processed locally.{'\n'}
             Nothing is sent to any server.
           </Text>
@@ -829,8 +833,8 @@ export function PassportScanScreen(): React.JSX.Element {
 function DebugRow({ label, value }: { label: string; value: string }): React.JSX.Element {
   return (
     <View className="flex-row justify-between py-1">
-      <Text className="text-zinc-500 text-xs">{label}</Text>
-      <Text className="text-zinc-300 text-xs font-mono flex-shrink ml-4" numberOfLines={1}>
+      <Text className="text-dracula-comment/70 text-xs">{label}</Text>
+      <Text className="text-dracula-fg/80 text-xs font-mono flex-shrink ml-4" numberOfLines={1}>
         {value}
       </Text>
     </View>
