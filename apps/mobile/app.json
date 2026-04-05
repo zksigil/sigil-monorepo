@@ -1,11 +1,11 @@
 {
   "expo": {
-    "name": "ZK Identity Verifier",
-    "slug": "zkproof-verifier",
+    "name": "Sigil",
+    "slug": "sigil",
     "version": "0.1.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
-    "scheme": "zkidentity",
+    "scheme": "sigil",
     "assetBundlePatterns": ["assets/**/*"],
     "userInterfaceStyle": "dark",
     "splash": {
@@ -15,9 +15,12 @@
     },
     "ios": {
       "supportsTablet": false,
-      "bundleIdentifier": "com.zkidentity.app",
+      "bundleIdentifier": "com.sigil.app",
       "buildNumber": "1",
       "infoPlist": {
+        "NSAppTransportSecurity": {
+          "NSAllowsArbitraryLoads": true
+        },
         "NSCameraUsageDescription": "Camera is used to scan QR codes for wallet connection and to help you read your passport MRZ for NFC access.",
         "NFCReaderUsageDescription": "NFC is used to read your passport chip for identity verification. Your passport data never leaves this device.",
         "LSApplicationQueriesSchemes": [
@@ -34,7 +37,7 @@
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#000000"
       },
-      "package": "com.zkidentity.app",
+      "package": "com.sigil.app",
       "permissions": [
         "android.permission.NFC",
         "android.permission.CAMERA"

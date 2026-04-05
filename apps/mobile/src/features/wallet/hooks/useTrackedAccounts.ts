@@ -1,5 +1,9 @@
-import { useMemo, useRef } from 'react';
-import { useReadContracts, useChainId, useAccount } from 'wagmi';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { AppState } from 'react-native';
+import { useChainId, useAccount } from 'wagmi';
+import { createPublicClient, http } from 'viem';
+import { anvil, sepolia, mainnet } from 'viem/chains';
+import { RPC_URLS } from '../../../infrastructure/blockchain/appKitConfig';
 import { VERIFICATION_REGISTRY_ABI } from '../../../infrastructure/blockchain/contractAbis';
 import { CONTRACT_ADDRESSES } from '../../../infrastructure/blockchain/contracts';
 import { SUPPORTED_CHAIN_IDS } from '../../../shared/constants/chains';
@@ -29,6 +33,27 @@ export function formatQuarter(timestamp: bigint): string {
   return `Q${q} ${date.getFullYear()}`;
 }
 
+// ---------------------------------------------------------------------------
+// Standalone viem clients — bypass wagmi/WalletConnect transport so reads
+// work reliably even when the app returns from background.
+// ---------------------------------------------------------------------------
+
+const CHAIN_CONFIG = {
+  31337: { chain: anvil, rpc: RPC_URLS[anvil.id] },
+  11155111: { chain: sepolia, rpc: RPC_URLS[sepolia.id] },
+  1: { chain: mainnet, rpc: RPC_URLS[mainnet.id] },
+} as const;
+
+function getPublicClient(chainId: number) {
+  const cfg = CHAIN_CONFIG[chainId as keyof typeof CHAIN_CONFIG];
+  if (!cfg) return null;
+  return createPublicClient({ chain: cfg.chain, transport: http(cfg.rpc) });
+}
+
+// ---------------------------------------------------------------------------
+// Hook
+// ---------------------------------------------------------------------------
+
 export function useTrackedAccounts(): {
   accounts: TrackedAccount[];
   isLoading: boolean;
@@ -38,8 +63,6 @@ export function useTrackedAccounts(): {
   const { addresses } = useAccount();
 
   // Deduplicate wallet addresses and keep a stable order.
-  // wagmi puts the active address first, which reshuffles the list on account switch.
-  // We lock in the order on first load so the list stays stable and the green dot moves instead.
   const stableOrderRef = useRef<`0x${string}`[] | null>(null);
   const walletAddresses = useMemo<`0x${string}`[]>(() => {
     const deduped = addresses ? ([...new Set(addresses)] as `0x${string}`[]) : [];
@@ -52,60 +75,116 @@ export function useTrackedAccounts(): {
       stableOrderRef.current.length !== deduped.length ||
       !deduped.every((a) => stableOrderRef.current!.some((s) => s.toLowerCase() === a.toLowerCase()))
     ) {
-      // New set of addresses (first load, or addresses added/removed) — snapshot the order
       stableOrderRef.current = deduped;
     }
     return stableOrderRef.current;
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [JSON.stringify(addresses)]);
 
-  const contractAddress = isSupportedChain(chainId)
-    ? CONTRACT_ADDRESSES[chainId].verificationRegistry
-    : '0x0000000000000000000000000000000000000000';
+  const [accounts, setAccounts] = useState<TrackedAccount[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const hasFetchedRef = useRef(false);
+  const fetchIdRef = useRef(0);
 
-  const enabled = isSupportedChain(chainId) && walletAddresses.length > 0;
+  const fetchStatus = useCallback(async () => {
+    if (!isSupportedChain(chainId) || walletAddresses.length === 0) {
+      setAccounts(walletAddresses.map((addr) => ({
+        address: addr,
+        shortAddress: `${addr.slice(0, 6)}...${addr.slice(-4)}`,
+        isBaseVerified: false,
+        baseExpiry: null,
+        isUniqueVerified: false,
+        uniqueExpiry: null,
+        hasAnyVerification: false,
+      })));
+      setIsLoading(false);
+      return;
+    }
 
-  // 4 reads per address: isVerified, isPrimaryVerified, getBaseExpiry, getPrimaryExpiry
-  const contracts = useMemo(
-    () =>
-      walletAddresses.flatMap((address) => [
-        { address: contractAddress, abi: VERIFICATION_REGISTRY_ABI, functionName: 'isVerified' as const, args: [address] as const },
-        { address: contractAddress, abi: VERIFICATION_REGISTRY_ABI, functionName: 'isPrimaryVerified' as const, args: [address] as const },
-        { address: contractAddress, abi: VERIFICATION_REGISTRY_ABI, functionName: 'getBaseExpiry' as const, args: [address] as const },
-        { address: contractAddress, abi: VERIFICATION_REGISTRY_ABI, functionName: 'getPrimaryExpiry' as const, args: [address] as const },
-      ]),
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [contractAddress, JSON.stringify(walletAddresses)],
-  );
+    const client = getPublicClient(chainId);
+    if (!client) { setIsLoading(false); return; }
 
-  const { data, isLoading, refetch } = useReadContracts({
-    contracts,
-    query: { enabled, staleTime: 0, gcTime: 0, refetchOnMount: 'always' },
-  });
+    const contractAddress = CONTRACT_ADDRESSES[chainId].verificationRegistry;
+    if (contractAddress === '0x0000000000000000000000000000000000000000') { setIsLoading(false); return; }
 
-  const accounts = useMemo<TrackedAccount[]>(() =>
-    walletAddresses.map((address, i) => {
-      const isBaseVerified = (data?.[i * 4]?.result as boolean | undefined) ?? false;
-      const isUniqueVerified = (data?.[i * 4 + 1]?.result as boolean | undefined) ?? false;
-      const baseExpiry = (data?.[i * 4 + 2]?.result as bigint | undefined) ?? null;
-      const uniqueExpiry = (data?.[i * 4 + 3]?.result as bigint | undefined) ?? null;
-      return {
-        address,
-        shortAddress: `${address.slice(0, 6)}...${address.slice(-4)}`,
-        isBaseVerified,
-        baseExpiry,
-        isUniqueVerified,
-        uniqueExpiry,
-        hasAnyVerification: isBaseVerified || isUniqueVerified,
-      };
-    }),
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [JSON.stringify(walletAddresses), data],
-  );
+    const id = ++fetchIdRef.current;
+    // Only show loading spinner on first fetch — subsequent refetches update silently
+    if (!hasFetchedRef.current) setIsLoading(true);
+
+    try {
+      const results = await Promise.all(
+        walletAddresses.map(async (addr): Promise<TrackedAccount> => {
+          const [isBase, isPrimary, baseExp, primaryExp] = await Promise.all([
+            client.readContract({
+              address: contractAddress,
+              abi: VERIFICATION_REGISTRY_ABI,
+              functionName: 'isVerified',
+              args: [addr],
+            }).catch(() => false as boolean),
+            client.readContract({
+              address: contractAddress,
+              abi: VERIFICATION_REGISTRY_ABI,
+              functionName: 'isPrimaryVerified',
+              args: [addr],
+            }).catch(() => false as boolean),
+            client.readContract({
+              address: contractAddress,
+              abi: VERIFICATION_REGISTRY_ABI,
+              functionName: 'getBaseExpiry',
+              args: [addr],
+            }).catch(() => null as bigint | null),
+            client.readContract({
+              address: contractAddress,
+              abi: VERIFICATION_REGISTRY_ABI,
+              functionName: 'getPrimaryExpiry',
+              args: [addr],
+            }).catch(() => null as bigint | null),
+          ]);
+
+          return {
+            address: addr,
+            shortAddress: `${addr.slice(0, 6)}...${addr.slice(-4)}`,
+            isBaseVerified: isBase as boolean,
+            baseExpiry: baseExp as bigint | null,
+            isUniqueVerified: isPrimary as boolean,
+            uniqueExpiry: primaryExp as bigint | null,
+            hasAnyVerification: (isBase as boolean) || (isPrimary as boolean),
+          };
+        }),
+      );
+
+      // Only apply if this is still the latest fetch
+      if (id === fetchIdRef.current) {
+        hasFetchedRef.current = true;
+        setAccounts(results);
+      }
+    } catch (err) {
+      console.error('[ACCOUNTS] Failed to fetch verification status:', err);
+    } finally {
+      if (id === fetchIdRef.current) {
+        setIsLoading(false);
+      }
+    }
+  }, [chainId, walletAddresses]);
+
+  // Fetch on mount and when addresses/chain change
+  useEffect(() => {
+    void fetchStatus();
+  }, [fetchStatus]);
+
+  // Re-fetch when app returns to foreground
+  useEffect(() => {
+    const sub = AppState.addEventListener('change', (state) => {
+      if (state === 'active') {
+        void fetchStatus();
+      }
+    });
+    return () => sub.remove();
+  }, [fetchStatus]);
 
   return {
     accounts,
     isLoading,
-    refetch: () => { void refetch(); },
+    refetch: () => { void fetchStatus(); },
   };
 }

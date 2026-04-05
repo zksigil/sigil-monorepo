@@ -1,9 +1,22 @@
 import { createAppKit } from '@reown/appkit-react-native';
 import { WagmiAdapter } from '@reown/appkit-wagmi-react-native';
 import { http } from 'wagmi';
-import { sepolia, mainnet, anvil } from 'wagmi/chains';
+import { sepolia, mainnet, anvil as anvilDefault } from 'wagmi/chains';
+import { defineChain } from 'viem';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import type { Storage } from '@reown/appkit-react-native';
+
+// ---------------------------------------------------------------------------
+// Override anvil's default RPC (127.0.0.1) with the LAN IP so that all
+// viem/wagmi internals use the correct URL on a physical device.
+// ---------------------------------------------------------------------------
+const ANVIL_RPC = process.env['EXPO_PUBLIC_ANVIL_RPC_URL'] ?? 'http://192.168.45.10:8545';
+const anvil = defineChain({
+  ...anvilDefault,
+  rpcUrls: {
+    default: { http: [ANVIL_RPC] },
+  },
+});
 
 // ---------------------------------------------------------------------------
 // Project ID — obtain from https://cloud.reown.com (free tier available)
@@ -52,21 +65,24 @@ export const appKitStorage: Storage = {
 };
 
 // ---------------------------------------------------------------------------
+// RPC URLs — single source of truth for all transports (wagmi + standalone viem clients)
+// ---------------------------------------------------------------------------
+export const RPC_URLS = {
+  [anvil.id]: process.env['EXPO_PUBLIC_ANVIL_RPC_URL'] ?? 'http://192.168.45.10:8545',
+  [sepolia.id]: process.env['EXPO_PUBLIC_SEPOLIA_RPC_URL'] ?? 'https://rpc.sepolia.org',
+  [mainnet.id]: process.env['EXPO_PUBLIC_MAINNET_RPC_URL'] ?? 'https://ethereum.publicnode.com',
+} as const;
+
+// ---------------------------------------------------------------------------
 // WagmiAdapter — requires wagmi Chain tuple (readonly non-empty)
 // ---------------------------------------------------------------------------
 export const wagmiAdapter = new WagmiAdapter({
   projectId,
   networks: [sepolia, mainnet, anvil] as const,
   transports: {
-    [sepolia.id]: http(
-      process.env['EXPO_PUBLIC_SEPOLIA_RPC_URL'] ?? 'https://rpc.sepolia.org',
-    ),
-    [mainnet.id]: http(
-      process.env['EXPO_PUBLIC_MAINNET_RPC_URL'] ?? 'https://ethereum.publicnode.com',
-    ),
-    [anvil.id]: http(
-      process.env['EXPO_PUBLIC_ANVIL_RPC_URL'] ?? 'http://127.0.0.1:8545',
-    ),
+    [sepolia.id]: http(RPC_URLS[sepolia.id]),
+    [mainnet.id]: http(RPC_URLS[mainnet.id]),
+    [anvil.id]: http(RPC_URLS[anvil.id]),
   },
 });
 
@@ -77,18 +93,18 @@ export const appKit = createAppKit({
   projectId,
   // wagmi Chain objects are structurally compatible with AppKit's Network type
   networks: [sepolia, mainnet, anvil] as unknown as Parameters<typeof createAppKit>[0]['networks'],
-  defaultNetwork: sepolia,
+  defaultNetwork: anvil,
   adapters: [wagmiAdapter],
   storage: appKitStorage,
   enableAnalytics: false,
   metadata: {
-    name: 'ZK Identity Verifier',
+    name: 'Sigil',
     description: 'Verify your Ethereum wallet with your passport — privately.',
-    url: 'https://zkidentity.app',
-    icons: ['https://zkidentity.app/icon.png'],
+    url: 'https://sigil.app',
+    icons: ['https://sigil.app/icon.png'],
     redirect: {
-      native: 'zkidentity://',
-      universal: 'https://zkidentity.app',
+      native: 'sigil://',
+      universal: 'https://sigil.app',
     },
   },
   features: {

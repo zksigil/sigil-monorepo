@@ -1,4 +1,4 @@
-# ZK Identity Verifier — Claude Code Reference
+# Sigil — Claude Code Reference
 
 ## What This Project Does
 Mobile app (iOS + Android) for verifying Ethereum wallets with government-issued passports via NFC + ZK proofs (zkPassport). Passport data NEVER leaves the device.
@@ -71,7 +71,7 @@ Then update `EXPO_PUBLIC_VERIFICATION_REGISTRY_ADDRESS` in `.env`.
 ## iOS NFC Entitlement (Phase 2 Prerequisite)
 Before implementing NFC:
 1. Apple Developer Portal: enable NFC Tag Reading capability
-2. `ios/zkproof-verifier.entitlements`: add `com.apple.developer.nfc.readersession.formats`
+2. `ios/mobile/mobile.entitlements`: add `com.apple.developer.nfc.readersession.formats`
 3. Info.plist: `NFCReaderUsageDescription` (already in app.json)
 4. Minimum iOS 16.0 (set in app.json)
 
@@ -232,7 +232,7 @@ function isPrimaryVerified(address wallet) external view returns (bool);
 - Consider ERC-4337 paymaster for gas (eliminates funder-address deanonymization)
 
 ### Phase 3 TODO
-- [ ] Update NFC module to read SOD (`SELECT EF.SOD` after DG1 in `src/infrastructure/nfc/index.ts`)
+- [x] Update NFC module to read SOD (`SELECT EF.SOD` after DG1 in `src/infrastructure/nfc/index.ts`)
 - [ ] Redesign `VerificationRegistry.sol` per two-tier interface above
 - [ ] Deploy `ProtocolConfig.sol` with default parameters and hard bounds
 - [ ] Deploy `ProofVerifier.sol` (stub initially, real verifier after circuit is written)

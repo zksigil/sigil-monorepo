@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-pragma solidity 0.8.24;
+pragma solidity 0.8.28;
 
 /// @title IVerificationRegistry
 /// @notice Two-tier on-chain identity registry backed by ZK passport proofs.

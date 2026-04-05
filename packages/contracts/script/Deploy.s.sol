@@ -1,10 +1,12 @@
 // SPDX-License-Identifier: MIT
-pragma solidity 0.8.24;
+pragma solidity 0.8.28;
 
 import {Script, console2} from "forge-std/Script.sol";
 import {ProtocolConfig} from "../src/ProtocolConfig.sol";
 import {ProofVerifier} from "../src/ProofVerifier.sol";
 import {VerificationRegistry} from "../src/VerificationRegistry.sol";
+import {BaseUltraHonkVerifier} from "../src/verifiers/BaseUltraHonkVerifier.sol";
+import {PrimaryUltraHonkVerifier} from "../src/verifiers/PrimaryUltraHonkVerifier.sol";
 
 /// @notice Full deployment script for Sigil contracts on Sepolia / Ethereum Mainnet.
 ///
@@ -40,11 +42,18 @@ contract Deploy is Script {
         console2.log("  cooldownPeriod:     ", config.cooldownPeriod() / 1 days, "days");
         console2.log("  maxDailyRegistrations:", config.maxDailyRegistrations());
 
-        // 2. ProofVerifier stub — replace with real Noir verifier after circuit is ready
-        verifier = new ProofVerifier();
-        console2.log("ProofVerifier (stub): ", address(verifier));
+        // 2. UltraHonk verifiers (generated from Noir circuits)
+        BaseUltraHonkVerifier baseHonk = new BaseUltraHonkVerifier();
+        console2.log("BaseUltraHonkVerifier:", address(baseHonk));
 
-        // 3. VerificationRegistry
+        PrimaryUltraHonkVerifier primaryHonk = new PrimaryUltraHonkVerifier();
+        console2.log("PrimaryUltraHonkVerifier:", address(primaryHonk));
+
+        // 3. ProofVerifier — marshals typed inputs and delegates to UltraHonk verifiers
+        verifier = new ProofVerifier(address(baseHonk), address(primaryHonk));
+        console2.log("ProofVerifier:        ", address(verifier));
+
+        // 4. VerificationRegistry
         registry = new VerificationRegistry(deployer, config, verifier);
         console2.log("VerificationRegistry: ", address(registry));
 
@@ -54,6 +63,5 @@ contract Deploy is Script {
         console2.log("Next steps:");
         console2.log("  1. Update EXPO_PUBLIC_VERIFICATION_REGISTRY_ADDRESS in apps/mobile/.env");
         console2.log("  2. Deploy TimelockController and call registry.transferGovernance(timelock)");
-        console2.log("  3. Replace ProofVerifier stub once Noir circuit is ready");
     }
 }

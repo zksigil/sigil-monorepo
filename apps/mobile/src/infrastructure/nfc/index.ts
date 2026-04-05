@@ -139,7 +139,7 @@ const S: readonly (readonly number[])[] = [
   [2,12,4,1,7,10,11,6,8,5,3,15,13,0,14,9,14,11,2,12,4,7,13,1,5,0,15,10,3,9,8,6,4,2,1,11,10,13,7,8,15,9,12,5,6,3,0,14,11,8,12,7,1,14,2,13,6,15,0,9,10,4,5,3],
   [12,1,10,15,9,2,6,8,0,13,3,4,14,7,5,11,10,15,4,2,7,12,9,5,6,1,13,14,0,11,3,8,9,14,15,5,2,8,12,3,7,0,4,10,1,13,11,6,4,3,2,12,9,5,15,10,11,14,1,7,6,0,8,13],
   [4,11,2,14,15,0,8,13,3,12,9,7,5,10,6,1,13,0,11,7,4,9,1,10,14,3,5,12,2,15,8,6,1,4,11,13,12,3,7,14,10,15,6,8,0,5,9,2,6,11,13,8,1,4,10,7,9,5,0,15,14,2,3,12],
-  [13,2,8,4,6,15,11,1,10,9,3,14,5,0,12,7,1,15,13,8,10,3,7,4,12,5,6,2,0,14,9,11,7,0,9,3,4,6,10,2,8,5,14,12,11,15,1,13,11,14,4,1,9,12,14,2,0,6,10,13,15,3,5,8],
+  [13,2,8,4,6,15,11,1,10,9,3,14,5,0,12,7,1,15,13,8,10,3,7,4,12,5,6,11,0,14,9,2,7,11,4,1,9,12,14,2,0,6,10,13,15,3,5,8,2,1,14,7,4,10,8,13,15,12,9,0,3,5,6,11],
 ];
 
 const P: readonly number[] = [
@@ -163,8 +163,8 @@ const PC2: readonly number[] = [
 
 const SHIFTS: readonly number[] = [1,1,2,2,2,2,2,2,1,2,2,2,2,2,2,1];
 
-function permute(input: number[], table: readonly number[], inputBits: number): number[] {
-  const output: number[] = new Array(table.length).fill(0);
+function permute(input: number[], table: readonly number[], _inputBits: number): number[] {
+  const output: number[] = new Array(Math.ceil(table.length / 8)).fill(0);
   for (let i = 0; i < table.length; i++) {
     const srcBit = table[i]! - 1;
     const srcByte = Math.floor(srcBit / 8);
@@ -367,9 +367,19 @@ function tdesDecryptCBC(data: number[], key: number[], iv: number[]): number[] {
   return result;
 }
 
+/** 3DES encrypt a single 8-byte block (EDE with 16-byte key = K1||K2, K3=K1) */
+function tdesEncryptBlock(block: number[], key: number[]): number[] {
+  const k1 = key.slice(0, 8);
+  const k2 = key.slice(8, 16);
+  const enc1 = desEncryptBlock(block, k1);
+  const dec = desDecryptBlock(enc1, k2);
+  return desEncryptBlock(dec, k1);
+}
+
 /**
  * ISO 9797-1 MAC Algorithm 3 (Retail MAC) with 3DES.
  * Process all blocks with single DES (K1), then encrypt final block with 3DES (K1,K2).
+ * Applies ISO 9797-1 Method 2 padding internally (0x80 + zeros to block boundary).
  */
 function retailMAC(data: number[], key: number[]): number[] {
   const k1 = key.slice(0, 8);
@@ -508,10 +518,17 @@ function deriveSessionKeys(kSeed: number[]): Omit<SessionKeys, 'ssc'> {
 // BAC Protocol execution
 // ---------------------------------------------------------------------------
 
+interface BACResult {
+  success: boolean;
+  session?: SessionKeys;
+  statusWord?: [number, number];
+  message?: string;
+}
+
 async function performBAC(
   mrzInput: MRZBACInput,
   transceiveFn: (cmd: number[]) => Promise<number[]>,
-): Promise<SessionKeys | null> {
+): Promise<BACResult> {
   try {
     const { kEnc, kMac } = deriveBACKeys(mrzInput);
 
@@ -521,8 +538,14 @@ async function performBAC(
     console.log('[NFC-BAC] GET CHALLENGE response:', toHex(challengeResp));
 
     if (!isSuccess(challengeResp) || challengeResp.length < 10) {
-      console.warn('[NFC-BAC] GET CHALLENGE failed');
-      return null;
+      const sw1 = challengeResp[challengeResp.length - 2] ?? 0;
+      const sw2 = challengeResp[challengeResp.length - 1] ?? 0;
+      console.warn('[NFC-BAC] GET CHALLENGE failed', sw1.toString(16), sw2.toString(16));
+      return {
+        success: false,
+        statusWord: [sw1, sw2],
+        message: 'GET CHALLENGE failed',
+      };
     }
 
     const rndIC = challengeResp.slice(0, 8);
@@ -542,15 +565,28 @@ async function performBAC(
     // Step 5: MAC over encrypted data
     const mifd = retailMAC(eifd, kMac);
 
+    console.log('[NFC-BAC] RND.IFD:', toHex(rndIFD));
+    console.log('[NFC-BAC] K.IFD:', toHex(kIFD));
+    console.log('[NFC-BAC] S:', toHex(s), `(${s.length} bytes)`);
+    console.log('[NFC-BAC] E.IFD:', toHex(eifd), `(${eifd.length} bytes)`);
+    console.log('[NFC-BAC] M.IFD:', toHex(mifd), `(${mifd.length} bytes)`);
+
     // Step 6: EXTERNAL AUTHENTICATE
     const extAuthData = [...eifd, ...mifd]; // 32 + 8 = 40 bytes
+    // Command: 00 82 00 00 Lc=28 <data> Le=28 (expect 40 bytes response: E.IC || M.IC)
     const extAuthCmd = [0x00, 0x82, 0x00, 0x00, 0x28, ...extAuthData, 0x28];
     const extAuthResp = await transceiveFn(extAuthCmd);
     console.log('[NFC-BAC] EXTERNAL_AUTHENTICATE response:', toHex(extAuthResp));
 
     if (!isSuccess(extAuthResp) || extAuthResp.length < 42) {
-      console.warn('[NFC-BAC] EXTERNAL AUTHENTICATE failed, status:', toHex(extAuthResp.slice(-2)));
-      return null;
+      const sw1 = extAuthResp[extAuthResp.length - 2] ?? 0;
+      const sw2 = extAuthResp[extAuthResp.length - 1] ?? 0;
+      console.warn('[NFC-BAC] EXTERNAL AUTHENTICATE failed, status:', toHex([sw1, sw2]));
+      return {
+        success: false,
+        statusWord: [sw1, sw2],
+        message: `EXTERNAL AUTHENTICATE failed, status: ${toHex([sw1, sw2])}`,
+      };
     }
 
     // Step 7: Parse response — E.IC (32 bytes) + M.IC (8 bytes) + SW (2 bytes)
@@ -582,10 +618,16 @@ async function performBAC(
     console.log('[NFC-BAC] SSC:', toHex(ssc));
     console.log('[NFC-BAC] Session keys established successfully');
 
-    return { ksEnc, ksMac, ssc };
+    return {
+      success: true,
+      session: { ksEnc, ksMac, ssc },
+    };
   } catch (err) {
     console.error('[NFC-BAC] BAC protocol error:', err);
-    return null;
+    return {
+      success: false,
+      message: err instanceof Error ? err.message : String(err),
+    };
   }
 }
 
@@ -621,19 +663,19 @@ function wrapReadBinaryAPDU(
 
   // CLA=0x0C (secure messaging), INS=0xB0, P1P2=offset, no Lc data
   const cmdHeader = [0x0c, 0xb0, (offset >> 8) & 0xff, offset & 0xff];
-  const paddedHeader = padISO9797(cmdHeader);
 
   // DO'97': expected response length
   const do97 = [0x97, 0x01, length & 0xff];
 
-  // Build MAC input: SSC || padded header || padded DO'97'
-  const macInput = [...padISO9797(ssc), ...paddedHeader, ...padISO9797(do97)];
+  // MAC input per ICAO 9303-11: SSC || pad(cmdHeader) || DO'97'
+  // Only header is padded. retailMAC applies final padding.
+  const macInput = [...ssc, ...padISO9797(cmdHeader), ...do97];
   const mac = retailMAC(macInput, session.ksMac);
 
   // DO'8E': MAC (8 bytes)
   const do8E = [0x8e, 0x08, ...mac];
 
-  // Assemble protected APDU
+  // Assemble protected APDU (with trailing Le=0x00)
   const data = [...do97, ...do8E];
   const command = [0x0c, 0xb0, (offset >> 8) & 0xff, offset & 0xff, data.length, ...data, 0x00];
 
@@ -647,25 +689,49 @@ function wrapSelectFileAPDU(
 ): { command: number[]; newSSC: number[] } {
   const ssc = incrementSSC(session.ssc);
 
-  // CLA=0x0C, INS=0xA4, P1=0x02, P2=0x0C
-  const cmdHeader = [0x0c, 0xa4, 0x02, 0x0c];
-  const paddedHeader = padISO9797(cmdHeader);
+  const claForSM = 0x0c; // Standard ICAO 9303-11
+  const cmdHeader = [claForSM, 0xa4, 0x02, 0x0c];
 
-  // DO'87': encrypted data — pad fileId, encrypt, wrap in TLV
-  const paddedData = padISO9797(fileId);
+  // ICAO 9303-11 Step 1: Encrypt file ID in DO'87'
+  // Pad file ID to 8-byte boundary with 0x80 + zeros
+  const paddedFileId = [...fileId, 0x80];
+  while (paddedFileId.length % 8 !== 0) {
+    paddedFileId.push(0x00);
+  }
+  console.log('[NFC-SM] wrapSelectFileAPDU: fileId=', toHex(fileId), 'padded=', toHex(paddedFileId));
+
+  // Encrypt with 3DES-CBC — zero IV per ICAO 9303-11 §9.8.6.1
   const iv = [0, 0, 0, 0, 0, 0, 0, 0];
-  const encData = tdesEncryptCBC(paddedData, session.ksEnc, iv);
-  // DO'87' = 0x87 + length + 0x01 (padding indicator) + encrypted data
-  const do87 = [0x87, encData.length + 1, 0x01, ...encData];
+  const encryptedFileId = tdesEncryptCBC(paddedFileId, session.ksEnc, iv);
+  console.log('[NFC-SM] Encrypted file ID:', toHex(encryptedFileId));
 
-  // Build MAC input: SSC || padded header || padded DO'87'
-  const macInput = [...padISO9797(ssc), ...paddedHeader, ...padISO9797(do87)];
-  const mac = retailMAC(macInput, session.ksMac);
+  // Build DO'87' object: [0x87] [length] [0x01] [encrypted data]
+  // 0x01 = padding indicator (ISO 9797-1 Method 2 was used)
+  const do87Content = [0x01, ...encryptedFileId];
+  const do87 = [0x87, do87Content.length, ...do87Content];
+  console.log('[NFC-SM] DO\'87\':', toHex(do87));
 
+  // MAC input per ICAO 9303-11: SSC || pad(cmdHeader) || DO'87'
+  // Only the header is padded to block boundary. DOs are concatenated raw.
+  // retailMAC applies final ISO 9797-1 M2 padding to the entire input.
+  const macInput = [
+    ...ssc,
+    ...padISO9797(cmdHeader),
+    ...do87,
+  ];
+  console.log('[NFC-SM] MAC input:', toHex(macInput));
+
+  let mac = retailMAC(macInput, session.ksMac);
+  console.log('[NFC-SM] MAC:', toHex(mac));
+
+  // Build DO'8E' object: [0x8E] [0x08] [mac]
   const do8E = [0x8e, 0x08, ...mac];
 
+  // Build final command: [CLA INS P1 P2] [Lc] [DO'87'] [DO'8E'] [Le]
   const data = [...do87, ...do8E];
-  const command = [0x0c, 0xa4, 0x02, 0x0c, data.length, ...data, 0x00];
+  const command = [claForSM, 0xa4, 0x02, 0x0c, data.length, ...data, 0x00];
+  
+  console.log('[NFC-SM] Full SM SELECT command:', toHex(command));
 
   return { command, newSSC: ssc };
 }
@@ -675,20 +741,23 @@ function unwrapSMResponse(
   response: number[],
   session: SessionKeys,
 ): { data: number[]; newSSC: number[] } | null {
-  const ssc = incrementSSC(session.ssc);
-
-  // Strip status word (last 2 bytes — 0x9000)
-  if (response.length < 2) return null;
-  const sw1 = response[response.length - 2]!;
-  const sw2 = response[response.length - 1]!;
-  if (sw1 !== 0x90 || sw2 !== 0x00) {
-    console.warn('[NFC-SM] Response status:', sw1.toString(16), sw2.toString(16));
+  // Check for plain status word (2 bytes, not SM response with DO's)
+  if (response.length === 2) {
+    const sw1 = response[0]!;
+    const sw2 = response[1]!;
+    console.log('[NFC-SM] Received plain status word:', sw1.toString(16), sw2.toString(16));
+    if (sw1 !== 0x90 || sw2 !== 0x00) {
+      console.warn('[NFC-SM] Command failed with status:', sw1.toString(16), sw2.toString(16));
+      return null;
+    }
+    // Unexpected: 9000 as plain response when we expect SM response
     return null;
   }
 
-  const body = response.slice(0, response.length - 2);
+  const ssc = incrementSSC(session.ssc);
 
-  // Parse TLV data objects
+  // Parse TLV data objects from SM response
+  const body = response;
   let encryptedData: number[] | null = null;
   let macValue: number[] | null = null;
   let do99: number[] | null = null;
@@ -720,9 +789,22 @@ function unwrapSMResponse(
     }
   }
 
+  // Check status in DO'99' if present (for SELECT responses)
+  if (do99 && do99.length >= 2) {
+    const statusSW1 = do99[do99.length - 2]!;
+    const statusSW2 = do99[do99.length - 1]!;
+    console.log('[NFC-SM] Status from DO\'99\':', statusSW1.toString(16), statusSW2.toString(16));
+    if (statusSW1 !== 0x90 || statusSW2 !== 0x00) {
+      console.warn('[NFC-SM] Command failed with status:', statusSW1.toString(16), statusSW2.toString(16));
+      return null; // Command failed
+    }
+  }
+
   // Verify MAC (log warning only)
   if (macValue) {
-    const macInputParts: number[] = [...padISO9797(ssc)];
+    // MAC input for response per ICAO 9303-11: SSC || DO'87' || DO'99'
+    // DOs are NOT individually padded. retailMAC applies final padding.
+    const macInputParts: number[] = [...ssc];
     if (encryptedData) {
       // Reconstruct DO'87' for MAC calculation
       const do87Len = encryptedData.length + 1; // +1 for padding indicator
@@ -735,10 +817,10 @@ function unwrapSMResponse(
         do87.push(0x82, (do87Len >> 8) & 0xff, do87Len & 0xff);
       }
       do87.push(0x01, ...encryptedData);
-      macInputParts.push(...padISO9797(do87));
+      macInputParts.push(...do87);
     }
     if (do99) {
-      macInputParts.push(...padISO9797([0x99, do99.length, ...do99]));
+      macInputParts.push(0x99, do99.length, ...do99);
     }
     const expectedMac = retailMAC(macInputParts, session.ksMac);
     if (toHex(macValue) !== toHex(expectedMac)) {
@@ -746,7 +828,7 @@ function unwrapSMResponse(
     }
   }
 
-  // Decrypt DO'87' data
+  // Decrypt DO'87' data — zero IV per ICAO 9303-11 §9.8.6.1
   if (encryptedData && encryptedData.length > 0) {
     const iv = [0, 0, 0, 0, 0, 0, 0, 0];
     const decrypted = tdesDecryptCBC(encryptedData, session.ksEnc, iv);
@@ -781,8 +863,15 @@ function buildReadBinary(offset: number, length: number): number[] {
 }
 
 async function transceive(command: number[]): Promise<number[]> {
-  const response = await NfcManager.isoDepHandler.transceive(command);
-  return response;
+  console.log('[NFC] transceive sending:', command.length, 'bytes, first:', command.slice(0, 5).map(b => b.toString(16).padStart(2, '0')).join(' '));
+  try {
+    const response = await NfcManager.isoDepHandler.transceive(command);
+    console.log('[NFC] transceive received:', response.length, 'bytes');
+    return response;
+  } catch (err) {
+    console.error('[NFC] transceive error:', err instanceof Error ? err.message : String(err));
+    throw err;
+  }
 }
 
 /** Check that the status bytes indicate success (0x90 0x00) */
@@ -928,7 +1017,8 @@ async function readDG1Plain(): Promise<NFCReadResult> {
 }
 
 async function readDG1SecureMessaging(session: SessionKeys): Promise<NFCReadResult> {
-  // SELECT DG1 with SM
+  // SELECT DG1 directly from eMRTD app context (don't try master file)
+  // After BAC, the passport is locked to the eMRTD app; selecting master file breaks security context
   const { command: selectCmd, newSSC: ssc1 } = wrapSelectFileAPDU([0x01, 0x01], session);
   const selectResp = await transceive(selectCmd);
   console.log('[NFC-SM] SELECT DG1 response:', toHex(selectResp));
@@ -1152,6 +1242,8 @@ export async function readPassportNFC(mrzInput: MRZBACInput): Promise<NFCReadRes
       }, NFC_TIMEOUT_MS);
     });
 
+    console.log('[NFC] Technology acquired, starting read sequence');
+
     const readPromise = (async (): Promise<NFCReadResult> => {
       // Select eMRTD application (AID: A0000002471001)
       const selectApp = [0x00, 0xa4, 0x04, 0x0c, 0x07, 0xa0, 0x00, 0x00, 0x02, 0x47, 0x10, 0x01];
@@ -1170,23 +1262,25 @@ export async function readPassportNFC(mrzInput: MRZBACInput): Promise<NFCReadRes
 
       // Attempt BAC
       console.log('[NFC-BAC] Attempting BAC with MRZ data...');
-      const session = await performBAC(mrzInput, transceive);
+      const bacResult = await performBAC(mrzInput, transceive);
 
-      if (session) {
+      if (bacResult.success && bacResult.session) {
         console.log('[NFC-BAC] BAC succeeded — reading DG1 with Secure Messaging');
-        return readDG1SecureMessaging(session);
+        return readDG1SecureMessaging(bacResult.session);
       }
 
-      // BAC failed — almost certainly wrong MRZ data (doc number, DOB, or expiry).
-      // Do not fall back to a plain read: all modern passports require BAC/PACE,
-      // and a silent fallback would produce a confusing generic error instead of
-      // telling the user to correct their passport details.
-      console.warn('[NFC-BAC] BAC authentication failed — MRZ data likely incorrect');
+      const statusWord = bacResult.statusWord ? toHex(bacResult.statusWord) : 'unknown';
+      console.warn('[NFC-BAC] BAC authentication failed', bacResult.message ?? '', 'status', statusWord);
+
+      const message = bacResult.statusWord?.[0] === 0x67 && bacResult.statusWord?.[1] === 0x00
+        ? 'Passport rejected BAC authentication with status 0x6700. This may mean the passport requires PACE or the MRZ data is incorrect.'
+        : 'Passport authentication failed. Check that your document number, date of birth, and expiry date are correct.';
+
       return {
         success: false,
         error: {
           code: 'auth_failed',
-          message: 'Passport authentication failed. Check that your document number, date of birth, and expiry date are correct.',
+          message,
         },
       };
     })();

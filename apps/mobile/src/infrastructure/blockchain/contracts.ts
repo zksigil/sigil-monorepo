@@ -18,8 +18,6 @@ export const CONTRACT_ADDRESSES: Record<SupportedChainId, { verificationRegistry
     verificationRegistry: '0x0000000000000000000000000000000000000000',
   },
   31337: {
-    verificationRegistry:
-      (process.env['EXPO_PUBLIC_ANVIL_REGISTRY_ADDRESS'] as Address | undefined) ??
-      '0x0000000000000000000000000000000000000000',
+    verificationRegistry: '0x9fE46736679d2D9a65F0992F2272dE9f3c7fa6e0' as Address,
   },
 };

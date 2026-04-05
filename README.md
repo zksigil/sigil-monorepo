@@ -1,4 +1,4 @@
-# zkproof-verifier
+# Sigil
 
 Mobile app for verifying Ethereum wallets with government-issued passports using NFC + ZK proofs. Passport data never leaves the device.
 

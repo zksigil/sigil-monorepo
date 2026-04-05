@@ -25,8 +25,8 @@
 		<dict>
 			<key>CFBundleURLSchemes</key>
 			<array>
-				<string>zkidentity</string>
-				<string>exp+zkidentity</string>
+				<string>sigil</string>
+				<string>exp+sigil</string>
 			</array>
 		</dict>
 	</array>
@@ -39,7 +39,7 @@
 	<key>NSAppTransportSecurity</key>
 	<dict>
 		<key>NSAllowsArbitraryLoads</key>
-		<false/>
+		<true/>
 		<key>NSAllowsLocalNetworking</key>
 		<true/>
 	</dict>
@@ -63,5 +63,21 @@
 	</array>
 	<key>UIViewControllerBasedStatusBarAppearance</key>
 	<false/>
+	<key>NFCReaderUsageDescription</key>
+	<string>NFC is used to read your passport chip for identity verification. Your passport data never leaves this device.</string>
+	<key>com.apple.developer.nfc.readersession.iso7816.select-identifiers</key>
+	<array>
+		<string>A0000002471001</string>
+		<string>A0000002472001</string>
+		<string>00000000000000</string>
+	</array>
+	<key>LSApplicationQueriesSchemes</key>
+	<array>
+		<string>metamask</string>
+		<string>trust</string>
+		<string>cbwallet</string>
+		<string>rainbow</string>
+		<string>zerion</string>
+	</array>
 </dict>
 </plist>

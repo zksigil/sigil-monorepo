@@ -1,38 +1,23 @@
 import { useCallback } from 'react';
 import { Linking } from 'react-native';
-import { useConnectors } from 'wagmi';
 import { useAppKit } from '@reown/appkit-react-native';
+import { useWalletInfo } from '@reown/appkit-react-native';
 
 /**
  * Returns a function that deep-links into the currently connected wallet app.
- * Reads the native/universal redirect URL from the active WalletConnect session.
- * Falls back to opening the AppKit modal if no redirect URL is found.
+ * Uses AppKit's useWalletInfo() for the redirect URL (more reliable than raw
+ * WC provider session), then falls back to opening the AppKit Account view.
  */
 export function useOpenWallet(): () => void {
-  const connectors = useConnectors();
+  const { walletInfo } = useWalletInfo();
   const { open: openAppKit } = useAppKit();
 
   return useCallback(() => {
-    const wcConnector = connectors.find((c) => c.type === 'walletConnect');
-    if (!wcConnector) {
-      void openAppKit();
-      return;
+    const url = walletInfo?.redirect?.native ?? walletInfo?.redirect?.universal;
+    if (url) {
+      void Linking.openURL(url);
+    } else {
+      void openAppKit({ view: 'Account' });
     }
-
-    wcConnector.getProvider().then((provider) => {
-      // WalletConnect EthereumProvider stores the wallet's redirect in the session
-      const redirect = (provider as {
-        session?: { peer?: { metadata?: { redirect?: { native?: string; universal?: string } } } };
-      })?.session?.peer?.metadata?.redirect;
-
-      const url = redirect?.native ?? redirect?.universal;
-      if (url) {
-        void Linking.openURL(url);
-      } else {
-        void openAppKit();
-      }
-    }).catch(() => {
-      void openAppKit();
-    });
-  }, [connectors, openAppKit]);
+  }, [walletInfo, openAppKit]);
 }

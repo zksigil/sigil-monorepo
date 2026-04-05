@@ -10,7 +10,7 @@ const Stack = createNativeStackNavigator<RootStackParamList>();
 
 // Deep-link config for WalletConnect callbacks
 const linking = {
-  prefixes: ['zkidentity://'],
+  prefixes: ['sigil://'],
   config: {
     screens: {
       Home: '',
@@ -33,7 +33,7 @@ export function RootNavigator(): React.JSX.Element {
         <Stack.Screen
           name="Home"
           component={HomeScreen}
-          options={{ title: 'ZK Identity Verifier' }}
+          options={{ title: 'Sigil' }}
         />
         <Stack.Screen
           name="PassportScan"

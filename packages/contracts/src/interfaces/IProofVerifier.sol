@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-pragma solidity 0.8.24;
+pragma solidity 0.8.28;
 
 /// @title IProofVerifier
 /// @notice Interface for ZK proof verification. Implemented as a separate contract so the

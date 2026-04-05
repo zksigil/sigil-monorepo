@@ -3,6 +3,7 @@ import {
   View,
   Text,
   ActivityIndicator,
+  AppState,
   BackHandler,
   ScrollView,
   Pressable,
@@ -10,9 +11,10 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRoute, useNavigation } from '@react-navigation/native';
 import { useAccount, useChainId, useWriteContract, useWaitForTransactionReceipt } from 'wagmi';
-import { simulateContract } from 'wagmi/actions';
 import type { BaseError } from 'wagmi';
-import { wagmiAdapter } from '../../../infrastructure/blockchain/appKitConfig';
+import { createPublicClient, http } from 'viem';
+import { anvil, sepolia, mainnet } from 'viem/chains';
+import { RPC_URLS } from '../../../infrastructure/blockchain/appKitConfig';
 import type { RootStackRouteProp, RootStackNavigationProp } from '../../../app/navigation/types';
 import { useProofGeneration } from '../hooks/useProofGeneration';
 import type { BaseProofOutput, PrimaryProofOutput } from '../services/proofService';
@@ -110,6 +112,23 @@ function decimalOrHexToBytes32(value: string): `0x${string}` {
 }
 
 // ---------------------------------------------------------------------------
+// Standalone public client for simulation — avoids wagmi/WalletConnect transport
+// which can fail when the app backgrounds during a WC session check.
+// ---------------------------------------------------------------------------
+
+const CHAIN_CONFIG = {
+  31337: { chain: anvil, rpc: RPC_URLS[anvil.id] },
+  11155111: { chain: sepolia, rpc: RPC_URLS[sepolia.id] },
+  1: { chain: mainnet, rpc: RPC_URLS[mainnet.id] },
+} as const;
+
+function getPublicClient(chainId: number) {
+  const cfg = CHAIN_CONFIG[chainId as keyof typeof CHAIN_CONFIG];
+  if (!cfg) return null;
+  return createPublicClient({ chain: cfg.chain, transport: http(cfg.rpc) });
+}
+
+// ---------------------------------------------------------------------------
 // Component
 // ---------------------------------------------------------------------------
 
@@ -180,20 +199,47 @@ export function ProofGenerationScreen(): React.JSX.Element {
   }, [address, generate, passportData, tier]);
 
   // Navigate to success when tx is confirmed
+  const navigatedRef = useRef(false);
+  const navigateToSuccess = useCallback((hash: `0x${string}`, wallet: `0x${string}`) => {
+    if (navigatedRef.current) return;
+    navigatedRef.current = true;
+    if (proofResult?.type === 'primary') {
+      setPrimaryNullifier(wallet, decimalOrHexToBytes32(proofResult.nullifier));
+    }
+    navigation.navigate('VerificationSuccess', {
+      txHash: hash,
+      groupSize: 1,
+      verifiedAddress: wallet,
+      tier,
+    });
+  }, [navigation, tier, proofResult, setPrimaryNullifier]);
+
   useEffect(() => {
     if (isConfirmed && txHash && address) {
-      // For primary tier, save the nullifier to the store so unregisterPrimary can use it
-      if (proofResult?.type === 'primary') {
-        setPrimaryNullifier(address, decimalOrHexToBytes32(proofResult.nullifier));
-      }
-      navigation.navigate('VerificationSuccess', {
-        txHash,
-        groupSize: 1,
-        verifiedAddress: address,
-        tier,
-      });
+      navigateToSuccess(txHash, address);
     }
-  }, [isConfirmed, txHash, navigation, address, tier, proofResult, setPrimaryNullifier]);
+  }, [isConfirmed, txHash, address, navigateToSuccess]);
+
+  // When the app returns from background (e.g. after MetaMask approval), wagmi's
+  // useWaitForTransactionReceipt may not resume polling on React Native. Manually
+  // check the receipt using the standalone viem client as a fallback.
+  useEffect(() => {
+    if (!txHash || !address) return;
+    const sub = AppState.addEventListener('change', (state) => {
+      if (state !== 'active') return;
+      const client = getPublicClient(chainId);
+      if (!client) return;
+      void client.getTransactionReceipt({ hash: txHash }).then((receipt) => {
+        if (receipt.status === 'success') {
+          console.log('[TX] Receipt found on foreground return');
+          navigateToSuccess(txHash, address);
+        }
+      }).catch(() => {
+        // tx may not be mined yet — wagmi hook will keep polling
+      });
+    });
+    return () => sub.remove();
+  }, [txHash, address, chainId, navigateToSuccess]);
 
   // Surface write/receipt errors
   useEffect(() => {
@@ -226,6 +272,16 @@ export function ProofGenerationScreen(): React.JSX.Element {
     setStep('submitting');
     setSubmitError(null);
 
+    // Use a standalone viem publicClient for simulation so the RPC call
+    // doesn't go through wagmi's WalletConnect transport (which fails when
+    // the app backgrounds during a WC session check).
+    const publicClient = getPublicClient(chainId);
+    if (!publicClient) {
+      setSubmitError(`No RPC configured for chain ${chainId}.`);
+      setStep('error');
+      return;
+    }
+
     if (proofResult.type === 'primary') {
       const primaryCall = {
         address: registryAddress,
@@ -241,10 +297,10 @@ export function ProofGenerationScreen(): React.JSX.Element {
 
       try {
         console.log('[TX] Simulating registerPrimary to', registryAddress);
-        await simulateContract(wagmiAdapter.wagmiConfig, { ...primaryCall, account: address });
+        await publicClient.simulateContract({ ...primaryCall, account: address });
       } catch (simError) {
+        console.error('[TX] Simulation failed:', simError);
         const friendly = parseContractError(simError);
-        console.error('[TX] Simulation failed:', friendly);
         setSubmitError(friendly);
         setStep('error');
         return;
@@ -266,10 +322,10 @@ export function ProofGenerationScreen(): React.JSX.Element {
 
       try {
         console.log('[TX] Simulating registerBase to', registryAddress);
-        await simulateContract(wagmiAdapter.wagmiConfig, { ...baseCall, account: address });
+        await publicClient.simulateContract({ ...baseCall, account: address });
       } catch (simError) {
+        console.error('[TX] Simulation failed:', simError);
         const friendly = parseContractError(simError);
-        console.error('[TX] Simulation failed:', friendly);
         setSubmitError(friendly);
         setStep('error');
         return;
