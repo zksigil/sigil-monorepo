@@ -19,11 +19,15 @@
 import { sha256 } from '@noble/hashes/sha2';
 import { keccak256, encodePacked, type Hex } from 'viem';
 import type { BaseZKProof, PrimaryZKProof, ZKProof } from '../../../shared/types/verification';
+import { parseSod } from '../../../infrastructure/sod/parseSod';
 
 // ---------------------------------------------------------------------------
-// BN254 prime (circuit field modulus)
+// Circuit constants
 // ---------------------------------------------------------------------------
 const BN254_PRIME = 21888242871839275222246405745257275088548364400416034343698204186575808495617n;
+
+/** Must match SIGNED_ATTRS_MAX_LEN in the Noir circuits. */
+const SIGNED_ATTRS_MAX_LEN = 512;
 
 // ---------------------------------------------------------------------------
 // Public interface
@@ -68,6 +72,23 @@ export function setCircuitPaths(basePath: string, primaryPath: string): void {
 }
 
 // ---------------------------------------------------------------------------
+// Test function to verify native module loading
+// ---------------------------------------------------------------------------
+
+export function testMoproModuleLoading(): boolean {
+  try {
+    console.log('[TEST] Testing Mopro native module loading...');
+    const Mopro = loadMoproModule();
+    console.log('[TEST] ✅ Mopro module loaded successfully');
+    console.log('[TEST] Available functions:', Object.keys(Mopro).filter(key => typeof (Mopro as unknown as Record<string, unknown>)[key] === 'function'));
+    return true;
+  } catch (e) {
+    console.error('[TEST] ❌ Mopro module loading failed:', e);
+    return false;
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Real Mopro implementation
 // ---------------------------------------------------------------------------
 
@@ -90,11 +111,28 @@ export async function generateBaseProof(input: ProofInput): Promise<BaseProofOut
   const hashedAddr = walletAddressToField(input.walletAddress);
   const passportExpiry = (input.passportExpiryUnix ?? 0).toString();
 
+  // Parse SOD to extract RSA fields
+  console.log('[PROOF] Parsing SOD for RSA verification...');
+  const sod = parseSod(input.rawSODHex);
+  const signedAttrs = padToLength(sod.signedAttrs, SIGNED_ATTRS_MAX_LEN);
+  const signedAttrsLen = sod.signedAttrs.length;
+  const signature = ensureLength(sod.signature, 256, 'signature');
+  const pubkey = ensureLength(sod.pubkeyModulus, 256, 'pubkey');
+
+  console.log('[PROOF] Computing redc_param (Barrett reduction)...');
+  const redcParam = await Mopro.computeRedcParam(pubkey.buffer as ArrayBuffer);
+
   console.log('[PROOF] Computing base inputs (native Poseidon2)...');
   const baseInputs = await Mopro.computeBaseInputs(
     dg1Hash,
     sodHash,
     epochDay,
+    signedAttrs.buffer as ArrayBuffer,
+    signedAttrsLen,
+    signature.buffer as ArrayBuffer,
+    pubkey.buffer as ArrayBuffer,
+    redcParam,
+    sod.exponent,
     hashedAddr,
     passportExpiry,
   );
@@ -153,11 +191,28 @@ export async function generatePrimaryProof(input: ProofInput): Promise<PrimaryPr
   const hashedAddr = walletAddressToField(input.walletAddress);
   const passportExpiry = (input.passportExpiryUnix ?? 0).toString();
 
+  // Parse SOD to extract RSA fields
+  console.log('[PROOF] Parsing SOD for RSA verification...');
+  const sod = parseSod(input.rawSODHex);
+  const signedAttrs = padToLength(sod.signedAttrs, SIGNED_ATTRS_MAX_LEN);
+  const signedAttrsLen = sod.signedAttrs.length;
+  const signature = ensureLength(sod.signature, 256, 'signature');
+  const pubkey = ensureLength(sod.pubkeyModulus, 256, 'pubkey');
+
+  console.log('[PROOF] Computing redc_param (Barrett reduction)...');
+  const redcParam = await Mopro.computeRedcParam(pubkey.buffer as ArrayBuffer);
+
   console.log('[PROOF] Computing primary inputs (native Poseidon2)...');
   const primaryInputs = await Mopro.computePrimaryInputs(
     dg1Hash,
     sodHash,
     nonce,
+    signedAttrs.buffer as ArrayBuffer,
+    signedAttrsLen,
+    signature.buffer as ArrayBuffer,
+    pubkey.buffer as ArrayBuffer,
+    redcParam,
+    sod.exponent,
     hashedAddr,
     passportExpiry,
   );
@@ -198,6 +253,64 @@ export async function generatePrimaryProof(input: ProofInput): Promise<PrimaryPr
     nullifier: primaryInputs.nullifier,
     nextCommitment: primaryInputs.nextCommitment,
   };
+}
+
+// ---------------------------------------------------------------------------
+// Nonce recovery — stateless primary-tier nonce discovery from passport data
+// ---------------------------------------------------------------------------
+
+export interface NonceRecoveryResult {
+  /** The current nonce (the one whose nullifier has an active slot on-chain). */
+  nonce: number;
+  /** The nullifier for the current nonce. */
+  nullifier: string;
+  /** The nextCommitment stored on-chain for this slot. */
+  nextCommitment: string;
+}
+
+/**
+ * Recover the current primary-tier nonce by scanning on-chain primarySlots.
+ *
+ * Iterates nonces 1..maxNonce, computes the nullifier for each using Mopro's
+ * native Poseidon2, and checks if `s_primarySlots[nullifier]` exists on-chain.
+ * Returns the nonce whose slot is active, or null if no primary registration found.
+ *
+ * This enables fully stateless recovery after phone loss — the passport + chain
+ * data is sufficient to reconstruct all state.
+ */
+export async function recoverPrimaryNonce(
+  rawDG1Hex: string,
+  rawSODHex: string,
+  readSlot: (nullifier: string) => Promise<{ hashedAddress: string; nextCommitment: string }>,
+  maxNonce = 20,
+): Promise<NonceRecoveryResult | null> {
+  const Mopro = loadMoproModule();
+
+  const dg1Hash = sha256ToField(stripHexPrefix(rawDG1Hex));
+  const sodHash = sha256ToField(stripHexPrefix(rawSODHex));
+
+  for (let n = 1; n <= maxNonce; n++) {
+    const nullifierStr = await Mopro.computeNullifier(
+      dg1Hash,
+      sodHash,
+      n.toString(),
+    );
+
+    const slot = await readSlot(nullifierStr);
+
+    // hashedAddress == bytes32(0) means empty slot
+    if (slot.hashedAddress !== '0x' + '00'.repeat(32)) {
+      console.log(`[RECOVERY] Found active primary slot at nonce ${n}`);
+      return {
+        nonce: n,
+        nullifier: nullifierStr,
+        nextCommitment: slot.nextCommitment,
+      };
+    }
+  }
+
+  console.log(`[RECOVERY] No active primary slot found (checked nonces 1..${maxNonce})`);
+  return null;
 }
 
 // ---------------------------------------------------------------------------
@@ -250,19 +363,44 @@ export function generateStubProof(input: StubProofInput): StubProofOutput {
 // Internal helpers
 // ---------------------------------------------------------------------------
 
+/** Zero-pad a byte array to the target length. */
+function padToLength(bytes: Uint8Array, targetLen: number): Uint8Array {
+  if (bytes.length > targetLen) {
+    throw new Error(`signedAttrs is ${bytes.length} bytes, exceeds max ${targetLen}`);
+  }
+  if (bytes.length === targetLen) return bytes;
+  const padded = new Uint8Array(targetLen);
+  padded.set(bytes);
+  return padded;
+}
+
+/** Ensure a byte array is exactly the expected length. */
+function ensureLength(bytes: Uint8Array, expected: number, label: string): Uint8Array {
+  if (bytes.length !== expected) {
+    throw new Error(`${label} is ${bytes.length} bytes, expected ${expected} (RSA-2048)`);
+  }
+  return bytes;
+}
+
 /** Lazy-load the mopro native module. Throws if not available. */
 function loadMoproModule(): MoproInterface {
+  console.log('[MOPRO] Attempting to load mopro-ffi native module...');
   try {
     // eslint-disable-next-line @typescript-eslint/no-var-requires
     const mod = require('mopro-ffi');
+    console.log('[MOPRO] Successfully loaded mopro-ffi module:', typeof mod);
+
     // The generated index.tsx does `export * from './generated/...'` so named
     // exports (computeBaseInputs, generateNoirProof, etc.) are at mod top-level.
     if (!mod?.computeBaseInputs) {
+      console.error('[MOPRO] ERROR: computeBaseInputs function not found in module');
       throw new Error('Mopro native module not available.');
     }
+    console.log('[MOPRO] ✅ Mopro native module loaded successfully');
     return mod as MoproInterface;
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);
+    console.error('[MOPRO] ❌ Failed to load mopro-ffi:', msg);
     throw new Error(`Mopro native module not available: ${msg}`);
   }
 }
@@ -336,6 +474,12 @@ interface MoproInterface {
     dg1Hash: string,
     sodHash: string,
     epochDay: string,
+    signedAttrs: ArrayBuffer,
+    signedAttrsLen: number,
+    signature: ArrayBuffer,
+    pubkey: ArrayBuffer,
+    redcParam: ArrayBuffer,
+    exponent: number,
     hashedAddress: string,
     passportExpiry: string,
   ): Promise<BaseInputsResult> | BaseInputsResult;
@@ -344,9 +488,25 @@ interface MoproInterface {
     dg1Hash: string,
     sodHash: string,
     nonce: string,
+    signedAttrs: ArrayBuffer,
+    signedAttrsLen: number,
+    signature: ArrayBuffer,
+    pubkey: ArrayBuffer,
+    redcParam: ArrayBuffer,
+    exponent: number,
     hashedAddress: string,
     passportExpiry: string,
   ): Promise<PrimaryInputsResult> | PrimaryInputsResult;
+
+  computeRedcParam(
+    modulusBytes: ArrayBuffer,
+  ): Promise<ArrayBuffer> | ArrayBuffer;
+
+  computeNullifier(
+    dg1Hash: string,
+    sodHash: string,
+    nonce: string,
+  ): Promise<string> | string;
 
   getNoirVerificationKey(
     circuitPath: string,

@@ -15,7 +15,7 @@
     },
     "ios": {
       "supportsTablet": false,
-      "bundleIdentifier": "com.sigil.app",
+      "bundleIdentifier": "com.zk.sigil",
       "buildNumber": "1",
       "infoPlist": {
         "NSAppTransportSecurity": {
@@ -37,7 +37,7 @@
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#000000"
       },
-      "package": "com.sigil.app",
+      "package": "com.zk.sigil",
       "permissions": [
         "android.permission.NFC",
         "android.permission.CAMERA"

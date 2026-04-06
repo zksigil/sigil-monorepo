@@ -7,8 +7,8 @@
     "exports": {
         ".": {
             "source": "./src/index.tsx",
-            "types": "./lib/typescript/src/index.d.ts",
-            "default": "./lib/module/index.js"
+            "types": "./src/index.tsx",
+            "default": "./src/index.tsx"
         },
         "./package.json": "./package.json"
     },
@@ -164,6 +164,6 @@
         "version": "0.54.5"
     },
     "dependencies": {
-        "uniffi-bindgen-react-native": "0.29.3-1"
+        "uniffi-bindgen-react-native": "0.29.0-0"
     }
 }

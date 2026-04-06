@@ -20,129 +20,155 @@ extern "C" {
     int8_t poll_result
     );
     typedef void
-    (*UniffiForeignFutureDroppedCallback)(
+    (*UniffiForeignFutureFree)(
     uint64_t handle
     );
     typedef void
     (*UniffiCallbackInterfaceFree)(
     uint64_t handle
-    );
-    typedef uint64_t
-    (*UniffiCallbackInterfaceClone)(
-    uint64_t handle
-    );typedef struct UniffiForeignFutureDroppedCallbackStruct {
+    );typedef struct UniffiForeignFuture {
         uint64_t handle;
-        UniffiForeignFutureDroppedCallback free;
-    } UniffiForeignFutureDroppedCallbackStruct;typedef struct UniffiForeignFutureResultU8 {
+        UniffiForeignFutureFree free;
+    } UniffiForeignFuture;typedef struct UniffiForeignFutureStructU8 {
         uint8_t return_value;
         RustCallStatus call_status;
-    } UniffiForeignFutureResultU8;
+    } UniffiForeignFutureStructU8;
     typedef void
     (*UniffiForeignFutureCompleteU8)(
     uint64_t callback_data, 
-    UniffiForeignFutureResultU8 result
-    );typedef struct UniffiForeignFutureResultI8 {
+    UniffiForeignFutureStructU8 result
+    );typedef struct UniffiForeignFutureStructI8 {
         int8_t return_value;
         RustCallStatus call_status;
-    } UniffiForeignFutureResultI8;
+    } UniffiForeignFutureStructI8;
     typedef void
     (*UniffiForeignFutureCompleteI8)(
     uint64_t callback_data, 
-    UniffiForeignFutureResultI8 result
-    );typedef struct UniffiForeignFutureResultU16 {
+    UniffiForeignFutureStructI8 result
+    );typedef struct UniffiForeignFutureStructU16 {
         uint16_t return_value;
         RustCallStatus call_status;
-    } UniffiForeignFutureResultU16;
+    } UniffiForeignFutureStructU16;
     typedef void
     (*UniffiForeignFutureCompleteU16)(
     uint64_t callback_data, 
-    UniffiForeignFutureResultU16 result
-    );typedef struct UniffiForeignFutureResultI16 {
+    UniffiForeignFutureStructU16 result
+    );typedef struct UniffiForeignFutureStructI16 {
         int16_t return_value;
         RustCallStatus call_status;
-    } UniffiForeignFutureResultI16;
+    } UniffiForeignFutureStructI16;
     typedef void
     (*UniffiForeignFutureCompleteI16)(
     uint64_t callback_data, 
-    UniffiForeignFutureResultI16 result
-    );typedef struct UniffiForeignFutureResultU32 {
+    UniffiForeignFutureStructI16 result
+    );typedef struct UniffiForeignFutureStructU32 {
         uint32_t return_value;
         RustCallStatus call_status;
-    } UniffiForeignFutureResultU32;
+    } UniffiForeignFutureStructU32;
     typedef void
     (*UniffiForeignFutureCompleteU32)(
     uint64_t callback_data, 
-    UniffiForeignFutureResultU32 result
-    );typedef struct UniffiForeignFutureResultI32 {
+    UniffiForeignFutureStructU32 result
+    );typedef struct UniffiForeignFutureStructI32 {
         int32_t return_value;
         RustCallStatus call_status;
-    } UniffiForeignFutureResultI32;
+    } UniffiForeignFutureStructI32;
     typedef void
     (*UniffiForeignFutureCompleteI32)(
     uint64_t callback_data, 
-    UniffiForeignFutureResultI32 result
-    );typedef struct UniffiForeignFutureResultU64 {
+    UniffiForeignFutureStructI32 result
+    );typedef struct UniffiForeignFutureStructU64 {
         uint64_t return_value;
         RustCallStatus call_status;
-    } UniffiForeignFutureResultU64;
+    } UniffiForeignFutureStructU64;
     typedef void
     (*UniffiForeignFutureCompleteU64)(
     uint64_t callback_data, 
-    UniffiForeignFutureResultU64 result
-    );typedef struct UniffiForeignFutureResultI64 {
+    UniffiForeignFutureStructU64 result
+    );typedef struct UniffiForeignFutureStructI64 {
         int64_t return_value;
         RustCallStatus call_status;
-    } UniffiForeignFutureResultI64;
+    } UniffiForeignFutureStructI64;
     typedef void
     (*UniffiForeignFutureCompleteI64)(
     uint64_t callback_data, 
-    UniffiForeignFutureResultI64 result
-    );typedef struct UniffiForeignFutureResultF32 {
+    UniffiForeignFutureStructI64 result
+    );typedef struct UniffiForeignFutureStructF32 {
         float return_value;
         RustCallStatus call_status;
-    } UniffiForeignFutureResultF32;
+    } UniffiForeignFutureStructF32;
     typedef void
     (*UniffiForeignFutureCompleteF32)(
     uint64_t callback_data, 
-    UniffiForeignFutureResultF32 result
-    );typedef struct UniffiForeignFutureResultF64 {
+    UniffiForeignFutureStructF32 result
+    );typedef struct UniffiForeignFutureStructF64 {
         double return_value;
         RustCallStatus call_status;
-    } UniffiForeignFutureResultF64;
+    } UniffiForeignFutureStructF64;
     typedef void
     (*UniffiForeignFutureCompleteF64)(
     uint64_t callback_data, 
-    UniffiForeignFutureResultF64 result
-    );typedef struct UniffiForeignFutureResultRustBuffer {
+    UniffiForeignFutureStructF64 result
+    );typedef struct UniffiForeignFutureStructPointer {
+        void * return_value;
+        RustCallStatus call_status;
+    } UniffiForeignFutureStructPointer;
+    typedef void
+    (*UniffiForeignFutureCompletePointer)(
+    uint64_t callback_data, 
+    UniffiForeignFutureStructPointer result
+    );typedef struct UniffiForeignFutureStructRustBuffer {
         RustBuffer return_value;
         RustCallStatus call_status;
-    } UniffiForeignFutureResultRustBuffer;
+    } UniffiForeignFutureStructRustBuffer;
     typedef void
     (*UniffiForeignFutureCompleteRustBuffer)(
     uint64_t callback_data, 
-    UniffiForeignFutureResultRustBuffer result
-    );typedef struct UniffiForeignFutureResultVoid {
+    UniffiForeignFutureStructRustBuffer result
+    );typedef struct UniffiForeignFutureStructVoid {
         RustCallStatus call_status;
-    } UniffiForeignFutureResultVoid;
+    } UniffiForeignFutureStructVoid;
     typedef void
     (*UniffiForeignFutureCompleteVoid)(
     uint64_t callback_data, 
-    UniffiForeignFutureResultVoid result
+    UniffiForeignFutureStructVoid result
     );
     RustBuffer uniffi_zkpassport_circuits_fn_func_compute_base_inputs(
         RustBuffer dg1_hash, 
         RustBuffer sod_hash, 
         RustBuffer epoch_day, 
+        RustBuffer signed_attrs, 
+        uint32_t signed_attrs_len, 
+        RustBuffer signature, 
+        RustBuffer pubkey, 
+        RustBuffer redc_param, 
+        uint32_t exponent, 
         RustBuffer hashed_address, 
         RustBuffer passport_expiry, 
+        RustCallStatus *uniffi_out_err
+    );
+    RustBuffer uniffi_zkpassport_circuits_fn_func_compute_nullifier(
+        RustBuffer dg1_hash, 
+        RustBuffer sod_hash, 
+        RustBuffer nonce, 
         RustCallStatus *uniffi_out_err
     );
     RustBuffer uniffi_zkpassport_circuits_fn_func_compute_primary_inputs(
         RustBuffer dg1_hash, 
         RustBuffer sod_hash, 
         RustBuffer nonce, 
+        RustBuffer signed_attrs, 
+        uint32_t signed_attrs_len, 
+        RustBuffer signature, 
+        RustBuffer pubkey, 
+        RustBuffer redc_param, 
+        uint32_t exponent, 
         RustBuffer hashed_address, 
         RustBuffer passport_expiry, 
+        RustCallStatus *uniffi_out_err
+    );
+    RustBuffer uniffi_zkpassport_circuits_fn_func_compute_redc_param(
+        RustBuffer modulus_bytes, 
         RustCallStatus *uniffi_out_err
     );
     RustBuffer uniffi_zkpassport_circuits_fn_func_generate_noir_proof(
@@ -336,6 +362,21 @@ extern "C" {
         /*handle*/ uint64_t handle, 
         RustCallStatus *uniffi_out_err
     );
+    void ffi_zkpassport_circuits_rust_future_poll_pointer(
+        /*handle*/ uint64_t handle, 
+        UniffiRustFutureContinuationCallback callback, 
+        /*handle*/ uint64_t callback_data
+    );
+    void ffi_zkpassport_circuits_rust_future_cancel_pointer(
+        /*handle*/ uint64_t handle
+    );
+    void ffi_zkpassport_circuits_rust_future_free_pointer(
+        /*handle*/ uint64_t handle
+    );
+    void * ffi_zkpassport_circuits_rust_future_complete_pointer(
+        /*handle*/ uint64_t handle, 
+        RustCallStatus *uniffi_out_err
+    );
     void ffi_zkpassport_circuits_rust_future_poll_rust_buffer(
         /*handle*/ uint64_t handle, 
         UniffiRustFutureContinuationCallback callback, 
@@ -368,7 +409,11 @@ extern "C" {
     );
     uint16_t uniffi_zkpassport_circuits_checksum_func_compute_base_inputs(
     );
+    uint16_t uniffi_zkpassport_circuits_checksum_func_compute_nullifier(
+    );
     uint16_t uniffi_zkpassport_circuits_checksum_func_compute_primary_inputs(
+    );
+    uint16_t uniffi_zkpassport_circuits_checksum_func_compute_redc_param(
     );
     uint16_t uniffi_zkpassport_circuits_checksum_func_generate_noir_proof(
     );
@@ -670,7 +715,7 @@ namespace uniffi::zkpassport_circuits::cb::rustfuturecontinuationcallback {
             rs_pollResult);
     }
 
-    [[maybe_unused]] static UniffiRustFutureContinuationCallback
+    static UniffiRustFutureContinuationCallback
     makeCallbackFunction( // uniffi::zkpassport_circuits::cb::rustfuturecontinuationcallback
                     jsi::Runtime &rt,
                      std::shared_ptr<uniffi_runtime::UniffiCallInvoker> callInvoker,
@@ -717,9 +762,49 @@ namespace uniffi::zkpassport_circuits::cb::rustfuturecontinuationcallback {
         rsLambda = nullptr;
     }
 } // namespace uniffi::zkpassport_circuits::cb::rustfuturecontinuationcallback
-    // Implementation of callback function calling from Rust to JS ForeignFutureDroppedCallback
+    // Implementation of callback function calling from JS to Rust ForeignFutureFree,
+    // passed from Rust to JS as part of async callbacks.
+namespace uniffi::zkpassport_circuits {
+using CallInvoker = uniffi_runtime::UniffiCallInvoker;
 
-// Callback function: uniffi::zkpassport_circuits::cb::foreignfuturedroppedcallback::UniffiForeignFutureDroppedCallback
+template <> struct Bridging<UniffiForeignFutureFree> {
+  static jsi::Value toJs(jsi::Runtime &rt, std::shared_ptr<CallInvoker> callInvoker, UniffiForeignFutureFree rsCallback) {
+    return jsi::Function::createFromHostFunction(
+        rt,
+        jsi::PropNameID::forAscii(rt, "--ForeignFutureFree"),
+        1,
+        [rsCallback, callInvoker](
+            jsi::Runtime &rt,
+            const jsi::Value &thisValue,
+            const jsi::Value *arguments,
+            size_t count) -> jsi::Value
+        {
+            return intoRust(rt, callInvoker, thisValue, arguments, count, rsCallback);
+        }
+    );
+  }
+
+  static jsi::Value intoRust(
+      jsi::Runtime &rt,
+      std::shared_ptr<CallInvoker> callInvoker,
+      const jsi::Value &thisValue,
+      const jsi::Value *args,
+      size_t count,
+      UniffiForeignFutureFree func) {
+    // Convert the arguments into the Rust, with Bridging<T>::fromJs,
+    // then call the rs_callback with those arguments.
+        func(uniffi_jsi::Bridging<uint64_t>::fromJs(rt, callInvoker, args[0])
+        );
+
+        
+        return jsi::Value::undefined();
+  }
+};
+} // namespace uniffi::zkpassport_circuits
+    // Implementation of free callback function CallbackInterfaceFree
+
+
+// Callback function: uniffi::zkpassport_circuits::st::foreignfuture::foreignfuture::free::UniffiCallbackInterfaceFree
 //
 // We have the following constraints:
 // - we need to pass a function pointer to Rust.
@@ -731,7 +816,7 @@ namespace uniffi::zkpassport_circuits::cb::rustfuturecontinuationcallback {
 //
 // We then give the `callback` function pointer to Rust which will call the lambda sometime in the
 // future.
-namespace uniffi::zkpassport_circuits::cb::foreignfuturedroppedcallback {
+namespace uniffi::zkpassport_circuits::st::foreignfuture::foreignfuture::free {
     using namespace facebook;
 
     // We need to store a lambda in a global so we can call it from
@@ -762,7 +847,7 @@ namespace uniffi::zkpassport_circuits::cb::foreignfuturedroppedcallback {
 
             
         } catch (const jsi::JSError &error) {
-            std::cout << "Error in callback UniffiForeignFutureDroppedCallback: "
+            std::cout << "Error in callback UniffiCallbackInterfaceFree: "
                     << error.what() << std::endl;
             throw error;
         }
@@ -788,8 +873,8 @@ namespace uniffi::zkpassport_circuits::cb::foreignfuturedroppedcallback {
             rs_handle);
     }
 
-    [[maybe_unused]] static UniffiForeignFutureDroppedCallback
-    makeCallbackFunction( // uniffi::zkpassport_circuits::cb::foreignfuturedroppedcallback
+    static UniffiCallbackInterfaceFree
+    makeCallbackFunction( // uniffi::zkpassport_circuits::st::foreignfuture::foreignfuture::free
                     jsi::Runtime &rt,
                      std::shared_ptr<uniffi_runtime::UniffiCallInvoker> callInvoker,
                      const jsi::Value &value) {
@@ -832,35 +917,33 @@ namespace uniffi::zkpassport_circuits::cb::foreignfuturedroppedcallback {
         // then the pointer will no longer be left dangling.
         rsLambda = nullptr;
     }
-} // namespace uniffi::zkpassport_circuits::cb::foreignfuturedroppedcallback
-    // Implementation of free callback function CallbackInterfaceFree
-
+} // namespace uniffi::zkpassport_circuits::st::foreignfuture::foreignfuture::free
 namespace uniffi::zkpassport_circuits {
 using namespace facebook;
 using CallInvoker = uniffi_runtime::UniffiCallInvoker;
 
-template <> struct Bridging<UniffiForeignFutureDroppedCallbackStruct> {
-  static UniffiForeignFutureDroppedCallbackStruct fromJs(jsi::Runtime &rt,
+template <> struct Bridging<UniffiForeignFuture> {
+  static UniffiForeignFuture fromJs(jsi::Runtime &rt,
     std::shared_ptr<CallInvoker> callInvoker,
     const jsi::Value &jsValue
   ) {
     // Check if the input is an object
     if (!jsValue.isObject()) {
-      throw jsi::JSError(rt, "Expected an object for UniffiForeignFutureDroppedCallbackStruct");
+      throw jsi::JSError(rt, "Expected an object for UniffiForeignFuture");
     }
 
     // Get the object from the jsi::Value
     auto jsObject = jsValue.getObject(rt);
 
     // Create the vtable struct
-    UniffiForeignFutureDroppedCallbackStruct rsObject;
+    UniffiForeignFuture rsObject;
 
     // Create the vtable from the js callbacks.
     rsObject.handle = uniffi_jsi::Bridging<uint64_t>::fromJs(
         rt, callInvoker,
         jsObject.getProperty(rt, "handle")
       );
-    rsObject.free = uniffi::zkpassport_circuits::cb::foreignfuturedroppedcallback::makeCallbackFunction(
+    rsObject.free = uniffi::zkpassport_circuits::st::foreignfuture::foreignfuture::free::makeCallbackFunction(
           rt, callInvoker, jsObject.getProperty(rt, "free")
         );
 
@@ -873,21 +956,21 @@ namespace uniffi::zkpassport_circuits {
 using namespace facebook;
 using CallInvoker = uniffi_runtime::UniffiCallInvoker;
 
-template <> struct Bridging<UniffiForeignFutureResultU8> {
-  static UniffiForeignFutureResultU8 fromJs(jsi::Runtime &rt,
+template <> struct Bridging<UniffiForeignFutureStructU8> {
+  static UniffiForeignFutureStructU8 fromJs(jsi::Runtime &rt,
     std::shared_ptr<CallInvoker> callInvoker,
     const jsi::Value &jsValue
   ) {
     // Check if the input is an object
     if (!jsValue.isObject()) {
-      throw jsi::JSError(rt, "Expected an object for UniffiForeignFutureResultU8");
+      throw jsi::JSError(rt, "Expected an object for UniffiForeignFutureStructU8");
     }
 
     // Get the object from the jsi::Value
     auto jsObject = jsValue.getObject(rt);
 
     // Create the vtable struct
-    UniffiForeignFutureResultU8 rsObject;
+    UniffiForeignFutureStructU8 rsObject;
 
     // Create the vtable from the js callbacks.
     rsObject.return_value = uniffi_jsi::Bridging<uint8_t>::fromJs(
@@ -935,7 +1018,7 @@ template <> struct Bridging<UniffiForeignFutureCompleteU8> {
       UniffiForeignFutureCompleteU8 func) {
     // Convert the arguments into the Rust, with Bridging<T>::fromJs,
     // then call the rs_callback with those arguments.
-        func(uniffi_jsi::Bridging<uint64_t>::fromJs(rt, callInvoker, args[0]), uniffi::zkpassport_circuits::Bridging<UniffiForeignFutureResultU8>::fromJs(rt, callInvoker, args[1])
+        func(uniffi_jsi::Bridging<uint64_t>::fromJs(rt, callInvoker, args[0]), uniffi::zkpassport_circuits::Bridging<UniffiForeignFutureStructU8>::fromJs(rt, callInvoker, args[1])
         );
 
         
@@ -947,21 +1030,21 @@ namespace uniffi::zkpassport_circuits {
 using namespace facebook;
 using CallInvoker = uniffi_runtime::UniffiCallInvoker;
 
-template <> struct Bridging<UniffiForeignFutureResultI8> {
-  static UniffiForeignFutureResultI8 fromJs(jsi::Runtime &rt,
+template <> struct Bridging<UniffiForeignFutureStructI8> {
+  static UniffiForeignFutureStructI8 fromJs(jsi::Runtime &rt,
     std::shared_ptr<CallInvoker> callInvoker,
     const jsi::Value &jsValue
   ) {
     // Check if the input is an object
     if (!jsValue.isObject()) {
-      throw jsi::JSError(rt, "Expected an object for UniffiForeignFutureResultI8");
+      throw jsi::JSError(rt, "Expected an object for UniffiForeignFutureStructI8");
     }
 
     // Get the object from the jsi::Value
     auto jsObject = jsValue.getObject(rt);
 
     // Create the vtable struct
-    UniffiForeignFutureResultI8 rsObject;
+    UniffiForeignFutureStructI8 rsObject;
 
     // Create the vtable from the js callbacks.
     rsObject.return_value = uniffi_jsi::Bridging<int8_t>::fromJs(
@@ -1009,7 +1092,7 @@ template <> struct Bridging<UniffiForeignFutureCompleteI8> {
       UniffiForeignFutureCompleteI8 func) {
     // Convert the arguments into the Rust, with Bridging<T>::fromJs,
     // then call the rs_callback with those arguments.
-        func(uniffi_jsi::Bridging<uint64_t>::fromJs(rt, callInvoker, args[0]), uniffi::zkpassport_circuits::Bridging<UniffiForeignFutureResultI8>::fromJs(rt, callInvoker, args[1])
+        func(uniffi_jsi::Bridging<uint64_t>::fromJs(rt, callInvoker, args[0]), uniffi::zkpassport_circuits::Bridging<UniffiForeignFutureStructI8>::fromJs(rt, callInvoker, args[1])
         );
 
         
@@ -1021,21 +1104,21 @@ namespace uniffi::zkpassport_circuits {
 using namespace facebook;
 using CallInvoker = uniffi_runtime::UniffiCallInvoker;
 
-template <> struct Bridging<UniffiForeignFutureResultU16> {
-  static UniffiForeignFutureResultU16 fromJs(jsi::Runtime &rt,
+template <> struct Bridging<UniffiForeignFutureStructU16> {
+  static UniffiForeignFutureStructU16 fromJs(jsi::Runtime &rt,
     std::shared_ptr<CallInvoker> callInvoker,
     const jsi::Value &jsValue
   ) {
     // Check if the input is an object
     if (!jsValue.isObject()) {
-      throw jsi::JSError(rt, "Expected an object for UniffiForeignFutureResultU16");
+      throw jsi::JSError(rt, "Expected an object for UniffiForeignFutureStructU16");
     }
 
     // Get the object from the jsi::Value
     auto jsObject = jsValue.getObject(rt);
 
     // Create the vtable struct
-    UniffiForeignFutureResultU16 rsObject;
+    UniffiForeignFutureStructU16 rsObject;
 
     // Create the vtable from the js callbacks.
     rsObject.return_value = uniffi_jsi::Bridging<uint16_t>::fromJs(
@@ -1083,7 +1166,7 @@ template <> struct Bridging<UniffiForeignFutureCompleteU16> {
       UniffiForeignFutureCompleteU16 func) {
     // Convert the arguments into the Rust, with Bridging<T>::fromJs,
     // then call the rs_callback with those arguments.
-        func(uniffi_jsi::Bridging<uint64_t>::fromJs(rt, callInvoker, args[0]), uniffi::zkpassport_circuits::Bridging<UniffiForeignFutureResultU16>::fromJs(rt, callInvoker, args[1])
+        func(uniffi_jsi::Bridging<uint64_t>::fromJs(rt, callInvoker, args[0]), uniffi::zkpassport_circuits::Bridging<UniffiForeignFutureStructU16>::fromJs(rt, callInvoker, args[1])
         );
 
         
@@ -1095,21 +1178,21 @@ namespace uniffi::zkpassport_circuits {
 using namespace facebook;
 using CallInvoker = uniffi_runtime::UniffiCallInvoker;
 
-template <> struct Bridging<UniffiForeignFutureResultI16> {
-  static UniffiForeignFutureResultI16 fromJs(jsi::Runtime &rt,
+template <> struct Bridging<UniffiForeignFutureStructI16> {
+  static UniffiForeignFutureStructI16 fromJs(jsi::Runtime &rt,
     std::shared_ptr<CallInvoker> callInvoker,
     const jsi::Value &jsValue
   ) {
     // Check if the input is an object
     if (!jsValue.isObject()) {
-      throw jsi::JSError(rt, "Expected an object for UniffiForeignFutureResultI16");
+      throw jsi::JSError(rt, "Expected an object for UniffiForeignFutureStructI16");
     }
 
     // Get the object from the jsi::Value
     auto jsObject = jsValue.getObject(rt);
 
     // Create the vtable struct
-    UniffiForeignFutureResultI16 rsObject;
+    UniffiForeignFutureStructI16 rsObject;
 
     // Create the vtable from the js callbacks.
     rsObject.return_value = uniffi_jsi::Bridging<int16_t>::fromJs(
@@ -1157,7 +1240,7 @@ template <> struct Bridging<UniffiForeignFutureCompleteI16> {
       UniffiForeignFutureCompleteI16 func) {
     // Convert the arguments into the Rust, with Bridging<T>::fromJs,
     // then call the rs_callback with those arguments.
-        func(uniffi_jsi::Bridging<uint64_t>::fromJs(rt, callInvoker, args[0]), uniffi::zkpassport_circuits::Bridging<UniffiForeignFutureResultI16>::fromJs(rt, callInvoker, args[1])
+        func(uniffi_jsi::Bridging<uint64_t>::fromJs(rt, callInvoker, args[0]), uniffi::zkpassport_circuits::Bridging<UniffiForeignFutureStructI16>::fromJs(rt, callInvoker, args[1])
         );
 
         
@@ -1169,21 +1252,21 @@ namespace uniffi::zkpassport_circuits {
 using namespace facebook;
 using CallInvoker = uniffi_runtime::UniffiCallInvoker;
 
-template <> struct Bridging<UniffiForeignFutureResultU32> {
-  static UniffiForeignFutureResultU32 fromJs(jsi::Runtime &rt,
+template <> struct Bridging<UniffiForeignFutureStructU32> {
+  static UniffiForeignFutureStructU32 fromJs(jsi::Runtime &rt,
     std::shared_ptr<CallInvoker> callInvoker,
     const jsi::Value &jsValue
   ) {
     // Check if the input is an object
     if (!jsValue.isObject()) {
-      throw jsi::JSError(rt, "Expected an object for UniffiForeignFutureResultU32");
+      throw jsi::JSError(rt, "Expected an object for UniffiForeignFutureStructU32");
     }
 
     // Get the object from the jsi::Value
     auto jsObject = jsValue.getObject(rt);
 
     // Create the vtable struct
-    UniffiForeignFutureResultU32 rsObject;
+    UniffiForeignFutureStructU32 rsObject;
 
     // Create the vtable from the js callbacks.
     rsObject.return_value = uniffi_jsi::Bridging<uint32_t>::fromJs(
@@ -1231,7 +1314,7 @@ template <> struct Bridging<UniffiForeignFutureCompleteU32> {
       UniffiForeignFutureCompleteU32 func) {
     // Convert the arguments into the Rust, with Bridging<T>::fromJs,
     // then call the rs_callback with those arguments.
-        func(uniffi_jsi::Bridging<uint64_t>::fromJs(rt, callInvoker, args[0]), uniffi::zkpassport_circuits::Bridging<UniffiForeignFutureResultU32>::fromJs(rt, callInvoker, args[1])
+        func(uniffi_jsi::Bridging<uint64_t>::fromJs(rt, callInvoker, args[0]), uniffi::zkpassport_circuits::Bridging<UniffiForeignFutureStructU32>::fromJs(rt, callInvoker, args[1])
         );
 
         
@@ -1243,21 +1326,21 @@ namespace uniffi::zkpassport_circuits {
 using namespace facebook;
 using CallInvoker = uniffi_runtime::UniffiCallInvoker;
 
-template <> struct Bridging<UniffiForeignFutureResultI32> {
-  static UniffiForeignFutureResultI32 fromJs(jsi::Runtime &rt,
+template <> struct Bridging<UniffiForeignFutureStructI32> {
+  static UniffiForeignFutureStructI32 fromJs(jsi::Runtime &rt,
     std::shared_ptr<CallInvoker> callInvoker,
     const jsi::Value &jsValue
   ) {
     // Check if the input is an object
     if (!jsValue.isObject()) {
-      throw jsi::JSError(rt, "Expected an object for UniffiForeignFutureResultI32");
+      throw jsi::JSError(rt, "Expected an object for UniffiForeignFutureStructI32");
     }
 
     // Get the object from the jsi::Value
     auto jsObject = jsValue.getObject(rt);
 
     // Create the vtable struct
-    UniffiForeignFutureResultI32 rsObject;
+    UniffiForeignFutureStructI32 rsObject;
 
     // Create the vtable from the js callbacks.
     rsObject.return_value = uniffi_jsi::Bridging<int32_t>::fromJs(
@@ -1305,7 +1388,7 @@ template <> struct Bridging<UniffiForeignFutureCompleteI32> {
       UniffiForeignFutureCompleteI32 func) {
     // Convert the arguments into the Rust, with Bridging<T>::fromJs,
     // then call the rs_callback with those arguments.
-        func(uniffi_jsi::Bridging<uint64_t>::fromJs(rt, callInvoker, args[0]), uniffi::zkpassport_circuits::Bridging<UniffiForeignFutureResultI32>::fromJs(rt, callInvoker, args[1])
+        func(uniffi_jsi::Bridging<uint64_t>::fromJs(rt, callInvoker, args[0]), uniffi::zkpassport_circuits::Bridging<UniffiForeignFutureStructI32>::fromJs(rt, callInvoker, args[1])
         );
 
         
@@ -1317,21 +1400,21 @@ namespace uniffi::zkpassport_circuits {
 using namespace facebook;
 using CallInvoker = uniffi_runtime::UniffiCallInvoker;
 
-template <> struct Bridging<UniffiForeignFutureResultU64> {
-  static UniffiForeignFutureResultU64 fromJs(jsi::Runtime &rt,
+template <> struct Bridging<UniffiForeignFutureStructU64> {
+  static UniffiForeignFutureStructU64 fromJs(jsi::Runtime &rt,
     std::shared_ptr<CallInvoker> callInvoker,
     const jsi::Value &jsValue
   ) {
     // Check if the input is an object
     if (!jsValue.isObject()) {
-      throw jsi::JSError(rt, "Expected an object for UniffiForeignFutureResultU64");
+      throw jsi::JSError(rt, "Expected an object for UniffiForeignFutureStructU64");
     }
 
     // Get the object from the jsi::Value
     auto jsObject = jsValue.getObject(rt);
 
     // Create the vtable struct
-    UniffiForeignFutureResultU64 rsObject;
+    UniffiForeignFutureStructU64 rsObject;
 
     // Create the vtable from the js callbacks.
     rsObject.return_value = uniffi_jsi::Bridging<uint64_t>::fromJs(
@@ -1379,7 +1462,7 @@ template <> struct Bridging<UniffiForeignFutureCompleteU64> {
       UniffiForeignFutureCompleteU64 func) {
     // Convert the arguments into the Rust, with Bridging<T>::fromJs,
     // then call the rs_callback with those arguments.
-        func(uniffi_jsi::Bridging<uint64_t>::fromJs(rt, callInvoker, args[0]), uniffi::zkpassport_circuits::Bridging<UniffiForeignFutureResultU64>::fromJs(rt, callInvoker, args[1])
+        func(uniffi_jsi::Bridging<uint64_t>::fromJs(rt, callInvoker, args[0]), uniffi::zkpassport_circuits::Bridging<UniffiForeignFutureStructU64>::fromJs(rt, callInvoker, args[1])
         );
 
         
@@ -1391,21 +1474,21 @@ namespace uniffi::zkpassport_circuits {
 using namespace facebook;
 using CallInvoker = uniffi_runtime::UniffiCallInvoker;
 
-template <> struct Bridging<UniffiForeignFutureResultI64> {
-  static UniffiForeignFutureResultI64 fromJs(jsi::Runtime &rt,
+template <> struct Bridging<UniffiForeignFutureStructI64> {
+  static UniffiForeignFutureStructI64 fromJs(jsi::Runtime &rt,
     std::shared_ptr<CallInvoker> callInvoker,
     const jsi::Value &jsValue
   ) {
     // Check if the input is an object
     if (!jsValue.isObject()) {
-      throw jsi::JSError(rt, "Expected an object for UniffiForeignFutureResultI64");
+      throw jsi::JSError(rt, "Expected an object for UniffiForeignFutureStructI64");
     }
 
     // Get the object from the jsi::Value
     auto jsObject = jsValue.getObject(rt);
 
     // Create the vtable struct
-    UniffiForeignFutureResultI64 rsObject;
+    UniffiForeignFutureStructI64 rsObject;
 
     // Create the vtable from the js callbacks.
     rsObject.return_value = uniffi_jsi::Bridging<int64_t>::fromJs(
@@ -1453,7 +1536,7 @@ template <> struct Bridging<UniffiForeignFutureCompleteI64> {
       UniffiForeignFutureCompleteI64 func) {
     // Convert the arguments into the Rust, with Bridging<T>::fromJs,
     // then call the rs_callback with those arguments.
-        func(uniffi_jsi::Bridging<uint64_t>::fromJs(rt, callInvoker, args[0]), uniffi::zkpassport_circuits::Bridging<UniffiForeignFutureResultI64>::fromJs(rt, callInvoker, args[1])
+        func(uniffi_jsi::Bridging<uint64_t>::fromJs(rt, callInvoker, args[0]), uniffi::zkpassport_circuits::Bridging<UniffiForeignFutureStructI64>::fromJs(rt, callInvoker, args[1])
         );
 
         
@@ -1465,21 +1548,21 @@ namespace uniffi::zkpassport_circuits {
 using namespace facebook;
 using CallInvoker = uniffi_runtime::UniffiCallInvoker;
 
-template <> struct Bridging<UniffiForeignFutureResultF32> {
-  static UniffiForeignFutureResultF32 fromJs(jsi::Runtime &rt,
+template <> struct Bridging<UniffiForeignFutureStructF32> {
+  static UniffiForeignFutureStructF32 fromJs(jsi::Runtime &rt,
     std::shared_ptr<CallInvoker> callInvoker,
     const jsi::Value &jsValue
   ) {
     // Check if the input is an object
     if (!jsValue.isObject()) {
-      throw jsi::JSError(rt, "Expected an object for UniffiForeignFutureResultF32");
+      throw jsi::JSError(rt, "Expected an object for UniffiForeignFutureStructF32");
     }
 
     // Get the object from the jsi::Value
     auto jsObject = jsValue.getObject(rt);
 
     // Create the vtable struct
-    UniffiForeignFutureResultF32 rsObject;
+    UniffiForeignFutureStructF32 rsObject;
 
     // Create the vtable from the js callbacks.
     rsObject.return_value = uniffi_jsi::Bridging<float>::fromJs(
@@ -1527,7 +1610,7 @@ template <> struct Bridging<UniffiForeignFutureCompleteF32> {
       UniffiForeignFutureCompleteF32 func) {
     // Convert the arguments into the Rust, with Bridging<T>::fromJs,
     // then call the rs_callback with those arguments.
-        func(uniffi_jsi::Bridging<uint64_t>::fromJs(rt, callInvoker, args[0]), uniffi::zkpassport_circuits::Bridging<UniffiForeignFutureResultF32>::fromJs(rt, callInvoker, args[1])
+        func(uniffi_jsi::Bridging<uint64_t>::fromJs(rt, callInvoker, args[0]), uniffi::zkpassport_circuits::Bridging<UniffiForeignFutureStructF32>::fromJs(rt, callInvoker, args[1])
         );
 
         
@@ -1539,21 +1622,21 @@ namespace uniffi::zkpassport_circuits {
 using namespace facebook;
 using CallInvoker = uniffi_runtime::UniffiCallInvoker;
 
-template <> struct Bridging<UniffiForeignFutureResultF64> {
-  static UniffiForeignFutureResultF64 fromJs(jsi::Runtime &rt,
+template <> struct Bridging<UniffiForeignFutureStructF64> {
+  static UniffiForeignFutureStructF64 fromJs(jsi::Runtime &rt,
     std::shared_ptr<CallInvoker> callInvoker,
     const jsi::Value &jsValue
   ) {
     // Check if the input is an object
     if (!jsValue.isObject()) {
-      throw jsi::JSError(rt, "Expected an object for UniffiForeignFutureResultF64");
+      throw jsi::JSError(rt, "Expected an object for UniffiForeignFutureStructF64");
     }
 
     // Get the object from the jsi::Value
     auto jsObject = jsValue.getObject(rt);
 
     // Create the vtable struct
-    UniffiForeignFutureResultF64 rsObject;
+    UniffiForeignFutureStructF64 rsObject;
 
     // Create the vtable from the js callbacks.
     rsObject.return_value = uniffi_jsi::Bridging<double>::fromJs(
@@ -1601,7 +1684,7 @@ template <> struct Bridging<UniffiForeignFutureCompleteF64> {
       UniffiForeignFutureCompleteF64 func) {
     // Convert the arguments into the Rust, with Bridging<T>::fromJs,
     // then call the rs_callback with those arguments.
-        func(uniffi_jsi::Bridging<uint64_t>::fromJs(rt, callInvoker, args[0]), uniffi::zkpassport_circuits::Bridging<UniffiForeignFutureResultF64>::fromJs(rt, callInvoker, args[1])
+        func(uniffi_jsi::Bridging<uint64_t>::fromJs(rt, callInvoker, args[0]), uniffi::zkpassport_circuits::Bridging<UniffiForeignFutureStructF64>::fromJs(rt, callInvoker, args[1])
         );
 
         
@@ -1613,21 +1696,95 @@ namespace uniffi::zkpassport_circuits {
 using namespace facebook;
 using CallInvoker = uniffi_runtime::UniffiCallInvoker;
 
-template <> struct Bridging<UniffiForeignFutureResultRustBuffer> {
-  static UniffiForeignFutureResultRustBuffer fromJs(jsi::Runtime &rt,
+template <> struct Bridging<UniffiForeignFutureStructPointer> {
+  static UniffiForeignFutureStructPointer fromJs(jsi::Runtime &rt,
     std::shared_ptr<CallInvoker> callInvoker,
     const jsi::Value &jsValue
   ) {
     // Check if the input is an object
     if (!jsValue.isObject()) {
-      throw jsi::JSError(rt, "Expected an object for UniffiForeignFutureResultRustBuffer");
+      throw jsi::JSError(rt, "Expected an object for UniffiForeignFutureStructPointer");
     }
 
     // Get the object from the jsi::Value
     auto jsObject = jsValue.getObject(rt);
 
     // Create the vtable struct
-    UniffiForeignFutureResultRustBuffer rsObject;
+    UniffiForeignFutureStructPointer rsObject;
+
+    // Create the vtable from the js callbacks.
+    rsObject.return_value = uniffi_jsi::Bridging<void *>::fromJs(
+        rt, callInvoker,
+        jsObject.getProperty(rt, "returnValue")
+      );
+    rsObject.call_status = uniffi::zkpassport_circuits::Bridging<RustCallStatus>::fromJs(
+        rt, callInvoker,
+        jsObject.getProperty(rt, "callStatus")
+      );
+
+    return rsObject;
+  }
+};
+
+} // namespace uniffi::zkpassport_circuits
+    // Implementation of callback function calling from JS to Rust ForeignFutureCompletePointer,
+    // passed from Rust to JS as part of async callbacks.
+namespace uniffi::zkpassport_circuits {
+using CallInvoker = uniffi_runtime::UniffiCallInvoker;
+
+template <> struct Bridging<UniffiForeignFutureCompletePointer> {
+  static jsi::Value toJs(jsi::Runtime &rt, std::shared_ptr<CallInvoker> callInvoker, UniffiForeignFutureCompletePointer rsCallback) {
+    return jsi::Function::createFromHostFunction(
+        rt,
+        jsi::PropNameID::forAscii(rt, "--ForeignFutureCompletePointer"),
+        2,
+        [rsCallback, callInvoker](
+            jsi::Runtime &rt,
+            const jsi::Value &thisValue,
+            const jsi::Value *arguments,
+            size_t count) -> jsi::Value
+        {
+            return intoRust(rt, callInvoker, thisValue, arguments, count, rsCallback);
+        }
+    );
+  }
+
+  static jsi::Value intoRust(
+      jsi::Runtime &rt,
+      std::shared_ptr<CallInvoker> callInvoker,
+      const jsi::Value &thisValue,
+      const jsi::Value *args,
+      size_t count,
+      UniffiForeignFutureCompletePointer func) {
+    // Convert the arguments into the Rust, with Bridging<T>::fromJs,
+    // then call the rs_callback with those arguments.
+        func(uniffi_jsi::Bridging<uint64_t>::fromJs(rt, callInvoker, args[0]), uniffi::zkpassport_circuits::Bridging<UniffiForeignFutureStructPointer>::fromJs(rt, callInvoker, args[1])
+        );
+
+        
+        return jsi::Value::undefined();
+  }
+};
+} // namespace uniffi::zkpassport_circuits
+namespace uniffi::zkpassport_circuits {
+using namespace facebook;
+using CallInvoker = uniffi_runtime::UniffiCallInvoker;
+
+template <> struct Bridging<UniffiForeignFutureStructRustBuffer> {
+  static UniffiForeignFutureStructRustBuffer fromJs(jsi::Runtime &rt,
+    std::shared_ptr<CallInvoker> callInvoker,
+    const jsi::Value &jsValue
+  ) {
+    // Check if the input is an object
+    if (!jsValue.isObject()) {
+      throw jsi::JSError(rt, "Expected an object for UniffiForeignFutureStructRustBuffer");
+    }
+
+    // Get the object from the jsi::Value
+    auto jsObject = jsValue.getObject(rt);
+
+    // Create the vtable struct
+    UniffiForeignFutureStructRustBuffer rsObject;
 
     // Create the vtable from the js callbacks.
     rsObject.return_value = uniffi::zkpassport_circuits::Bridging<RustBuffer>::fromJs(
@@ -1675,7 +1832,7 @@ template <> struct Bridging<UniffiForeignFutureCompleteRustBuffer> {
       UniffiForeignFutureCompleteRustBuffer func) {
     // Convert the arguments into the Rust, with Bridging<T>::fromJs,
     // then call the rs_callback with those arguments.
-        func(uniffi_jsi::Bridging<uint64_t>::fromJs(rt, callInvoker, args[0]), uniffi::zkpassport_circuits::Bridging<UniffiForeignFutureResultRustBuffer>::fromJs(rt, callInvoker, args[1])
+        func(uniffi_jsi::Bridging<uint64_t>::fromJs(rt, callInvoker, args[0]), uniffi::zkpassport_circuits::Bridging<UniffiForeignFutureStructRustBuffer>::fromJs(rt, callInvoker, args[1])
         );
 
         
@@ -1687,21 +1844,21 @@ namespace uniffi::zkpassport_circuits {
 using namespace facebook;
 using CallInvoker = uniffi_runtime::UniffiCallInvoker;
 
-template <> struct Bridging<UniffiForeignFutureResultVoid> {
-  static UniffiForeignFutureResultVoid fromJs(jsi::Runtime &rt,
+template <> struct Bridging<UniffiForeignFutureStructVoid> {
+  static UniffiForeignFutureStructVoid fromJs(jsi::Runtime &rt,
     std::shared_ptr<CallInvoker> callInvoker,
     const jsi::Value &jsValue
   ) {
     // Check if the input is an object
     if (!jsValue.isObject()) {
-      throw jsi::JSError(rt, "Expected an object for UniffiForeignFutureResultVoid");
+      throw jsi::JSError(rt, "Expected an object for UniffiForeignFutureStructVoid");
     }
 
     // Get the object from the jsi::Value
     auto jsObject = jsValue.getObject(rt);
 
     // Create the vtable struct
-    UniffiForeignFutureResultVoid rsObject;
+    UniffiForeignFutureStructVoid rsObject;
 
     // Create the vtable from the js callbacks.
     rsObject.call_status = uniffi::zkpassport_circuits::Bridging<RustCallStatus>::fromJs(
@@ -1745,7 +1902,7 @@ template <> struct Bridging<UniffiForeignFutureCompleteVoid> {
       UniffiForeignFutureCompleteVoid func) {
     // Convert the arguments into the Rust, with Bridging<T>::fromJs,
     // then call the rs_callback with those arguments.
-        func(uniffi_jsi::Bridging<uint64_t>::fromJs(rt, callInvoker, args[0]), uniffi::zkpassport_circuits::Bridging<UniffiForeignFutureResultVoid>::fromJs(rt, callInvoker, args[1])
+        func(uniffi_jsi::Bridging<uint64_t>::fromJs(rt, callInvoker, args[0]), uniffi::zkpassport_circuits::Bridging<UniffiForeignFutureStructVoid>::fromJs(rt, callInvoker, args[1])
         );
 
         
@@ -1811,17 +1968,33 @@ NativeZkpassportCircuits::NativeZkpassportCircuits(
     props["ubrn_uniffi_zkpassport_circuits_fn_func_compute_base_inputs"] = jsi::Function::createFromHostFunction(
         rt,
         jsi::PropNameID::forAscii(rt, "ubrn_uniffi_zkpassport_circuits_fn_func_compute_base_inputs"),
-        5,
+        11,
         [this](jsi::Runtime &rt, const jsi::Value &thisVal, const jsi::Value *args, size_t count) -> jsi::Value {
             return this->cpp_uniffi_zkpassport_circuits_fn_func_compute_base_inputs(rt, thisVal, args, count);
+        }
+    );
+    props["ubrn_uniffi_zkpassport_circuits_fn_func_compute_nullifier"] = jsi::Function::createFromHostFunction(
+        rt,
+        jsi::PropNameID::forAscii(rt, "ubrn_uniffi_zkpassport_circuits_fn_func_compute_nullifier"),
+        3,
+        [this](jsi::Runtime &rt, const jsi::Value &thisVal, const jsi::Value *args, size_t count) -> jsi::Value {
+            return this->cpp_uniffi_zkpassport_circuits_fn_func_compute_nullifier(rt, thisVal, args, count);
         }
     );
     props["ubrn_uniffi_zkpassport_circuits_fn_func_compute_primary_inputs"] = jsi::Function::createFromHostFunction(
         rt,
         jsi::PropNameID::forAscii(rt, "ubrn_uniffi_zkpassport_circuits_fn_func_compute_primary_inputs"),
-        5,
+        11,
         [this](jsi::Runtime &rt, const jsi::Value &thisVal, const jsi::Value *args, size_t count) -> jsi::Value {
             return this->cpp_uniffi_zkpassport_circuits_fn_func_compute_primary_inputs(rt, thisVal, args, count);
+        }
+    );
+    props["ubrn_uniffi_zkpassport_circuits_fn_func_compute_redc_param"] = jsi::Function::createFromHostFunction(
+        rt,
+        jsi::PropNameID::forAscii(rt, "ubrn_uniffi_zkpassport_circuits_fn_func_compute_redc_param"),
+        1,
+        [this](jsi::Runtime &rt, const jsi::Value &thisVal, const jsi::Value *args, size_t count) -> jsi::Value {
+            return this->cpp_uniffi_zkpassport_circuits_fn_func_compute_redc_param(rt, thisVal, args, count);
         }
     );
     props["ubrn_uniffi_zkpassport_circuits_fn_func_generate_noir_proof"] = jsi::Function::createFromHostFunction(
@@ -1856,12 +2029,28 @@ NativeZkpassportCircuits::NativeZkpassportCircuits(
             return this->cpp_uniffi_zkpassport_circuits_checksum_func_compute_base_inputs(rt, thisVal, args, count);
         }
     );
+    props["ubrn_uniffi_zkpassport_circuits_checksum_func_compute_nullifier"] = jsi::Function::createFromHostFunction(
+        rt,
+        jsi::PropNameID::forAscii(rt, "ubrn_uniffi_zkpassport_circuits_checksum_func_compute_nullifier"),
+        0,
+        [this](jsi::Runtime &rt, const jsi::Value &thisVal, const jsi::Value *args, size_t count) -> jsi::Value {
+            return this->cpp_uniffi_zkpassport_circuits_checksum_func_compute_nullifier(rt, thisVal, args, count);
+        }
+    );
     props["ubrn_uniffi_zkpassport_circuits_checksum_func_compute_primary_inputs"] = jsi::Function::createFromHostFunction(
         rt,
         jsi::PropNameID::forAscii(rt, "ubrn_uniffi_zkpassport_circuits_checksum_func_compute_primary_inputs"),
         0,
         [this](jsi::Runtime &rt, const jsi::Value &thisVal, const jsi::Value *args, size_t count) -> jsi::Value {
             return this->cpp_uniffi_zkpassport_circuits_checksum_func_compute_primary_inputs(rt, thisVal, args, count);
+        }
+    );
+    props["ubrn_uniffi_zkpassport_circuits_checksum_func_compute_redc_param"] = jsi::Function::createFromHostFunction(
+        rt,
+        jsi::PropNameID::forAscii(rt, "ubrn_uniffi_zkpassport_circuits_checksum_func_compute_redc_param"),
+        0,
+        [this](jsi::Runtime &rt, const jsi::Value &thisVal, const jsi::Value *args, size_t count) -> jsi::Value {
+            return this->cpp_uniffi_zkpassport_circuits_checksum_func_compute_redc_param(rt, thisVal, args, count);
         }
     );
     props["ubrn_uniffi_zkpassport_circuits_checksum_func_generate_noir_proof"] = jsi::Function::createFromHostFunction(
@@ -1933,10 +2122,8 @@ void NativeZkpassportCircuits::set(jsi::Runtime& rt, const jsi::PropNameID& name
 NativeZkpassportCircuits::~NativeZkpassportCircuits() {
     // Cleanup for callback function RustFutureContinuationCallback
 uniffi::zkpassport_circuits::cb::rustfuturecontinuationcallback::cleanup();
-    // Cleanup for callback function ForeignFutureDroppedCallback
-uniffi::zkpassport_circuits::cb::foreignfuturedroppedcallback::cleanup();
     // Cleanup for "free" callback function CallbackInterfaceFree
-
+uniffi::zkpassport_circuits::st::foreignfuture::foreignfuture::free::cleanup();
 }
 
 // Utility functions for serialization/deserialization of strings.
@@ -1955,7 +2142,17 @@ jsi::Value NativeZkpassportCircuits::cpp_uniffi_internal_fn_func_ffi__arraybuffe
 // Methods calling directly into the uniffi generated C API of the Rust crate.
 jsi::Value NativeZkpassportCircuits::cpp_uniffi_zkpassport_circuits_fn_func_compute_base_inputs(jsi::Runtime& rt, const jsi::Value& thisVal, const jsi::Value* args, size_t count) {
         RustCallStatus status = uniffi::zkpassport_circuits::Bridging<RustCallStatus>::rustSuccess(rt);
-        auto value = uniffi_zkpassport_circuits_fn_func_compute_base_inputs(uniffi::zkpassport_circuits::Bridging<RustBuffer>::fromJs(rt, callInvoker, args[0]), uniffi::zkpassport_circuits::Bridging<RustBuffer>::fromJs(rt, callInvoker, args[1]), uniffi::zkpassport_circuits::Bridging<RustBuffer>::fromJs(rt, callInvoker, args[2]), uniffi::zkpassport_circuits::Bridging<RustBuffer>::fromJs(rt, callInvoker, args[3]), uniffi::zkpassport_circuits::Bridging<RustBuffer>::fromJs(rt, callInvoker, args[4]), 
+        auto value = uniffi_zkpassport_circuits_fn_func_compute_base_inputs(uniffi::zkpassport_circuits::Bridging<RustBuffer>::fromJs(rt, callInvoker, args[0]), uniffi::zkpassport_circuits::Bridging<RustBuffer>::fromJs(rt, callInvoker, args[1]), uniffi::zkpassport_circuits::Bridging<RustBuffer>::fromJs(rt, callInvoker, args[2]), uniffi::zkpassport_circuits::Bridging<RustBuffer>::fromJs(rt, callInvoker, args[3]), uniffi_jsi::Bridging<uint32_t>::fromJs(rt, callInvoker, args[4]), uniffi::zkpassport_circuits::Bridging<RustBuffer>::fromJs(rt, callInvoker, args[5]), uniffi::zkpassport_circuits::Bridging<RustBuffer>::fromJs(rt, callInvoker, args[6]), uniffi::zkpassport_circuits::Bridging<RustBuffer>::fromJs(rt, callInvoker, args[7]), uniffi_jsi::Bridging<uint32_t>::fromJs(rt, callInvoker, args[8]), uniffi::zkpassport_circuits::Bridging<RustBuffer>::fromJs(rt, callInvoker, args[9]), uniffi::zkpassport_circuits::Bridging<RustBuffer>::fromJs(rt, callInvoker, args[10]), 
+            &status
+        );
+        uniffi::zkpassport_circuits::Bridging<RustCallStatus>::copyIntoJs(rt, callInvoker, status, args[count - 1]);
+
+        
+        return uniffi::zkpassport_circuits::Bridging<RustBuffer>::toJs(rt, callInvoker, value);
+}
+jsi::Value NativeZkpassportCircuits::cpp_uniffi_zkpassport_circuits_fn_func_compute_nullifier(jsi::Runtime& rt, const jsi::Value& thisVal, const jsi::Value* args, size_t count) {
+        RustCallStatus status = uniffi::zkpassport_circuits::Bridging<RustCallStatus>::rustSuccess(rt);
+        auto value = uniffi_zkpassport_circuits_fn_func_compute_nullifier(uniffi::zkpassport_circuits::Bridging<RustBuffer>::fromJs(rt, callInvoker, args[0]), uniffi::zkpassport_circuits::Bridging<RustBuffer>::fromJs(rt, callInvoker, args[1]), uniffi::zkpassport_circuits::Bridging<RustBuffer>::fromJs(rt, callInvoker, args[2]), 
             &status
         );
         uniffi::zkpassport_circuits::Bridging<RustCallStatus>::copyIntoJs(rt, callInvoker, status, args[count - 1]);
@@ -1965,7 +2162,17 @@ jsi::Value NativeZkpassportCircuits::cpp_uniffi_zkpassport_circuits_fn_func_comp
 }
 jsi::Value NativeZkpassportCircuits::cpp_uniffi_zkpassport_circuits_fn_func_compute_primary_inputs(jsi::Runtime& rt, const jsi::Value& thisVal, const jsi::Value* args, size_t count) {
         RustCallStatus status = uniffi::zkpassport_circuits::Bridging<RustCallStatus>::rustSuccess(rt);
-        auto value = uniffi_zkpassport_circuits_fn_func_compute_primary_inputs(uniffi::zkpassport_circuits::Bridging<RustBuffer>::fromJs(rt, callInvoker, args[0]), uniffi::zkpassport_circuits::Bridging<RustBuffer>::fromJs(rt, callInvoker, args[1]), uniffi::zkpassport_circuits::Bridging<RustBuffer>::fromJs(rt, callInvoker, args[2]), uniffi::zkpassport_circuits::Bridging<RustBuffer>::fromJs(rt, callInvoker, args[3]), uniffi::zkpassport_circuits::Bridging<RustBuffer>::fromJs(rt, callInvoker, args[4]), 
+        auto value = uniffi_zkpassport_circuits_fn_func_compute_primary_inputs(uniffi::zkpassport_circuits::Bridging<RustBuffer>::fromJs(rt, callInvoker, args[0]), uniffi::zkpassport_circuits::Bridging<RustBuffer>::fromJs(rt, callInvoker, args[1]), uniffi::zkpassport_circuits::Bridging<RustBuffer>::fromJs(rt, callInvoker, args[2]), uniffi::zkpassport_circuits::Bridging<RustBuffer>::fromJs(rt, callInvoker, args[3]), uniffi_jsi::Bridging<uint32_t>::fromJs(rt, callInvoker, args[4]), uniffi::zkpassport_circuits::Bridging<RustBuffer>::fromJs(rt, callInvoker, args[5]), uniffi::zkpassport_circuits::Bridging<RustBuffer>::fromJs(rt, callInvoker, args[6]), uniffi::zkpassport_circuits::Bridging<RustBuffer>::fromJs(rt, callInvoker, args[7]), uniffi_jsi::Bridging<uint32_t>::fromJs(rt, callInvoker, args[8]), uniffi::zkpassport_circuits::Bridging<RustBuffer>::fromJs(rt, callInvoker, args[9]), uniffi::zkpassport_circuits::Bridging<RustBuffer>::fromJs(rt, callInvoker, args[10]), 
+            &status
+        );
+        uniffi::zkpassport_circuits::Bridging<RustCallStatus>::copyIntoJs(rt, callInvoker, status, args[count - 1]);
+
+        
+        return uniffi::zkpassport_circuits::Bridging<RustBuffer>::toJs(rt, callInvoker, value);
+}
+jsi::Value NativeZkpassportCircuits::cpp_uniffi_zkpassport_circuits_fn_func_compute_redc_param(jsi::Runtime& rt, const jsi::Value& thisVal, const jsi::Value* args, size_t count) {
+        RustCallStatus status = uniffi::zkpassport_circuits::Bridging<RustCallStatus>::rustSuccess(rt);
+        auto value = uniffi_zkpassport_circuits_fn_func_compute_redc_param(uniffi::zkpassport_circuits::Bridging<RustBuffer>::fromJs(rt, callInvoker, args[0]), 
             &status
         );
         uniffi::zkpassport_circuits::Bridging<RustCallStatus>::copyIntoJs(rt, callInvoker, status, args[count - 1]);
@@ -2010,8 +2217,22 @@ jsi::Value NativeZkpassportCircuits::cpp_uniffi_zkpassport_circuits_checksum_fun
         
         return uniffi_jsi::Bridging<uint16_t>::toJs(rt, callInvoker, value);
 }
+jsi::Value NativeZkpassportCircuits::cpp_uniffi_zkpassport_circuits_checksum_func_compute_nullifier(jsi::Runtime& rt, const jsi::Value& thisVal, const jsi::Value* args, size_t count) {
+        auto value = uniffi_zkpassport_circuits_checksum_func_compute_nullifier(
+        );
+
+        
+        return uniffi_jsi::Bridging<uint16_t>::toJs(rt, callInvoker, value);
+}
 jsi::Value NativeZkpassportCircuits::cpp_uniffi_zkpassport_circuits_checksum_func_compute_primary_inputs(jsi::Runtime& rt, const jsi::Value& thisVal, const jsi::Value* args, size_t count) {
         auto value = uniffi_zkpassport_circuits_checksum_func_compute_primary_inputs(
+        );
+
+        
+        return uniffi_jsi::Bridging<uint16_t>::toJs(rt, callInvoker, value);
+}
+jsi::Value NativeZkpassportCircuits::cpp_uniffi_zkpassport_circuits_checksum_func_compute_redc_param(jsi::Runtime& rt, const jsi::Value& thisVal, const jsi::Value* args, size_t count) {
+        auto value = uniffi_zkpassport_circuits_checksum_func_compute_redc_param(
         );
 
         

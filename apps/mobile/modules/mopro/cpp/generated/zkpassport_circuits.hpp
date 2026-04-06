@@ -22,12 +22,16 @@ class NativeZkpassportCircuits : public jsi::HostObject {
     jsi::Value cpp_uniffi_internal_fn_func_ffi__string_to_arraybuffer(jsi::Runtime& rt, const jsi::Value& thisVal, const jsi::Value* args, size_t count);
     jsi::Value cpp_uniffi_internal_fn_func_ffi__arraybuffer_to_string(jsi::Runtime& rt, const jsi::Value& thisVal, const jsi::Value* args, size_t count);
     jsi::Value cpp_uniffi_zkpassport_circuits_fn_func_compute_base_inputs(jsi::Runtime& rt, const jsi::Value& thisVal, const jsi::Value* args, size_t count);
+    jsi::Value cpp_uniffi_zkpassport_circuits_fn_func_compute_nullifier(jsi::Runtime& rt, const jsi::Value& thisVal, const jsi::Value* args, size_t count);
     jsi::Value cpp_uniffi_zkpassport_circuits_fn_func_compute_primary_inputs(jsi::Runtime& rt, const jsi::Value& thisVal, const jsi::Value* args, size_t count);
+    jsi::Value cpp_uniffi_zkpassport_circuits_fn_func_compute_redc_param(jsi::Runtime& rt, const jsi::Value& thisVal, const jsi::Value* args, size_t count);
     jsi::Value cpp_uniffi_zkpassport_circuits_fn_func_generate_noir_proof(jsi::Runtime& rt, const jsi::Value& thisVal, const jsi::Value* args, size_t count);
     jsi::Value cpp_uniffi_zkpassport_circuits_fn_func_get_noir_verification_key(jsi::Runtime& rt, const jsi::Value& thisVal, const jsi::Value* args, size_t count);
     jsi::Value cpp_uniffi_zkpassport_circuits_fn_func_verify_noir_proof(jsi::Runtime& rt, const jsi::Value& thisVal, const jsi::Value* args, size_t count);
     jsi::Value cpp_uniffi_zkpassport_circuits_checksum_func_compute_base_inputs(jsi::Runtime& rt, const jsi::Value& thisVal, const jsi::Value* args, size_t count);
+    jsi::Value cpp_uniffi_zkpassport_circuits_checksum_func_compute_nullifier(jsi::Runtime& rt, const jsi::Value& thisVal, const jsi::Value* args, size_t count);
     jsi::Value cpp_uniffi_zkpassport_circuits_checksum_func_compute_primary_inputs(jsi::Runtime& rt, const jsi::Value& thisVal, const jsi::Value* args, size_t count);
+    jsi::Value cpp_uniffi_zkpassport_circuits_checksum_func_compute_redc_param(jsi::Runtime& rt, const jsi::Value& thisVal, const jsi::Value* args, size_t count);
     jsi::Value cpp_uniffi_zkpassport_circuits_checksum_func_generate_noir_proof(jsi::Runtime& rt, const jsi::Value& thisVal, const jsi::Value* args, size_t count);
     jsi::Value cpp_uniffi_zkpassport_circuits_checksum_func_get_noir_verification_key(jsi::Runtime& rt, const jsi::Value& thisVal, const jsi::Value* args, size_t count);
     jsi::Value cpp_uniffi_zkpassport_circuits_checksum_func_verify_noir_proof(jsi::Runtime& rt, const jsi::Value& thisVal, const jsi::Value* args, size_t count);

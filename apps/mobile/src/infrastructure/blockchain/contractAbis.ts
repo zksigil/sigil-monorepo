@@ -118,6 +118,18 @@ export const VERIFICATION_REGISTRY_ABI = [
     stateMutability: 'view',
   },
 
+  // --- Primary Slot (for nonce recovery) ---
+  {
+    type: 'function',
+    name: 's_primarySlots',
+    inputs: [{ name: 'nullifier', type: 'bytes32', internalType: 'bytes32' }],
+    outputs: [
+      { name: 'hashedAddress', type: 'bytes32', internalType: 'bytes32' },
+      { name: 'nextCommitment', type: 'bytes32', internalType: 'bytes32' },
+    ],
+    stateMutability: 'view',
+  },
+
   // --- Events ---
   {
     type: 'event',

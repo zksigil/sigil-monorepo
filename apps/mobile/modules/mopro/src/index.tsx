@@ -6,7 +6,13 @@ import installer from './NativeMoproFfi';
 //   code is reloaded (e.g. during development with metro).
 let rustInstalled = false;
 if (!rustInstalled) {
-  installer.installRustCrate();
+  try {
+    const result = installer.installRustCrate();
+    console.log('[MOPRO-INDEX] installRustCrate result:', result);
+    console.log('[MOPRO-INDEX] globalThis.NativeZkpassportCircuits:', typeof (globalThis as any).NativeZkpassportCircuits);
+  } catch (e) {
+    console.error('[MOPRO-INDEX] installRustCrate CRASHED:', e);
+  }
   rustInstalled = true;
 }
 
@@ -23,7 +29,12 @@ import * as zkpassport_circuits from './generated/zkpassport_circuits';
 //   is reloaded (e.g. during development with metro).
 let initialized = false;
 if (!initialized) {
-  zkpassport_circuits.default.initialize();
+  try {
+    zkpassport_circuits.default.initialize();
+    console.log('[MOPRO-INDEX] initialize succeeded');
+  } catch (e) {
+    console.error('[MOPRO-INDEX] initialize FAILED:', e);
+  }
   initialized = true;
 }
 

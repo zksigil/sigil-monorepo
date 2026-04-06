@@ -19,18 +19,13 @@ noir_rs = { package = "noir", git = "https://github.com/zkmopro/noir-rs", featur
 
 bn254_blackbox_solver = { git = "https://github.com/noir-lang/noir.git", rev = "b33131574388d836341cea9b6380f3b1a8493eb8" }
 
+num-bigint = "0.4"
+
 [dev-dependencies]
 serial_test = "3.0.0"
 
 [build-dependencies]
 mopro-ffi = { version = "0.3.5", features = ["build"] }
 
-# Force uniffi to 0.29.3 so the contract version (30) matches uniffi-bindgen-react-native 0.29.3-1.
-# mopro-ffi 0.3.5 pins uniffi =0.29.0 but 0.29.3 is API-compatible.
-[patch.crates-io]
-uniffi = { git = "https://github.com/mozilla/uniffi-rs", tag = "v0.29.3" }
-uniffi_core = { git = "https://github.com/mozilla/uniffi-rs", tag = "v0.29.3" }
-uniffi_macros = { git = "https://github.com/mozilla/uniffi-rs", tag = "v0.29.3" }
-uniffi_bindgen = { git = "https://github.com/mozilla/uniffi-rs", tag = "v0.29.3" }
-uniffi_meta = { git = "https://github.com/mozilla/uniffi-rs", tag = "v0.29.3" }
-uniffi_udl = { git = "https://github.com/mozilla/uniffi-rs", tag = "v0.29.3" }
+# mopro-ffi 0.3.5 pins uniffi =0.29.0. The bindgen tool must match.
+# uniffi-bindgen-react-native downgraded to 0.29.0-0 to align with the Rust runtime.
