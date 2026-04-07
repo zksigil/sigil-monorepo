@@ -65,10 +65,12 @@ export type ProofOutput = BaseProofOutput | PrimaryProofOutput;
 /** These paths are set after the circuit JSONs are copied to the writable FS. */
 let BASE_CIRCUIT_PATH: string | null = null;
 let PRIMARY_CIRCUIT_PATH: string | null = null;
+let SRS_PATH: string | null = null;
 
-export function setCircuitPaths(basePath: string, primaryPath: string): void {
+export function setCircuitPaths(basePath: string, primaryPath: string, srsPath?: string): void {
   BASE_CIRCUIT_PATH = basePath;
   PRIMARY_CIRCUIT_PATH = primaryPath;
+  SRS_PATH = srsPath ?? null;
 }
 
 // ---------------------------------------------------------------------------
@@ -119,8 +121,19 @@ export async function generateBaseProof(input: ProofInput): Promise<BaseProofOut
   const signature = ensureLength(sod.signature, 256, 'signature');
   const pubkey = ensureLength(sod.pubkeyModulus, 256, 'pubkey');
 
+  // JS-side RSA verification sanity check (before sending to circuit)
+  console.log('[PROOF-DBG] Verifying RSA signature in JS...');
+  const jsRsaResult = verifyRSASignatureJS(sod.signedAttrs, signature, pubkey, sod.exponent);
+  console.log('[PROOF-DBG] JS RSA verify:', jsRsaResult.valid ? '✅ VALID' : '❌ INVALID');
+  console.log('[PROOF-DBG] JS signedAttrs SHA-256:', jsRsaResult.signedAttrsHash);
+  console.log('[PROOF-DBG] JS recovered hash from sig:', jsRsaResult.recoveredHash);
+  if (jsRsaResult.paddingInfo) {
+    console.log('[PROOF-DBG] PKCS#1 padding:', jsRsaResult.paddingInfo);
+  }
+
   console.log('[PROOF] Computing redc_param (Barrett reduction)...');
   const redcParam = await Mopro.computeRedcParam(pubkey.buffer as ArrayBuffer);
+  console.log('[PROOF-DBG] redcParam byteLength:', redcParam.byteLength);
 
   console.log('[PROOF] Computing base inputs (native Poseidon2)...');
   const baseInputs = await Mopro.computeBaseInputs(
@@ -137,10 +150,18 @@ export async function generateBaseProof(input: ProofInput): Promise<BaseProofOut
     passportExpiry,
   );
 
+  console.log('[PROOF-DBG] baseInputs count:', baseInputs.inputs.length, '(expected 1289)');
+  console.log('[PROOF-DBG] epochNullifier:', baseInputs.epochNullifier);
+  console.log('[PROOF-DBG] first 5 inputs (dg1,sod,day,sa[0],sa[1]):', baseInputs.inputs.slice(0, 5));
+  console.log('[PROOF-DBG] inputs[3..11] (signedAttrs[0..7]):', baseInputs.inputs.slice(3, 11));
+  console.log('[PROOF-DBG] last 5 inputs:', baseInputs.inputs.slice(-5));
+  console.log('[PROOF-DBG] input[515] (signed_attrs_len):', baseInputs.inputs[515]);
+  console.log('[PROOF-DBG] input[1286] (exponent):', baseInputs.inputs[1285]);
+
   console.log('[PROOF] Getting base VK...');
   const vkBuf = await Mopro.getNoirVerificationKey(
     BASE_CIRCUIT_PATH,
-    undefined,
+    SRS_PATH ?? undefined,
     true,
     false,
   );
@@ -148,7 +169,7 @@ export async function generateBaseProof(input: ProofInput): Promise<BaseProofOut
   console.log('[PROOF] Generating base proof (5-15s)...');
   const proofBuf = await Mopro.generateNoirProof(
     BASE_CIRCUIT_PATH,
-    undefined,
+    SRS_PATH ?? undefined,
     baseInputs.inputs,
     true,
     vkBuf,
@@ -220,7 +241,7 @@ export async function generatePrimaryProof(input: ProofInput): Promise<PrimaryPr
   console.log('[PROOF] Getting primary VK...');
   const vkBuf = await Mopro.getNoirVerificationKey(
     PRIMARY_CIRCUIT_PATH,
-    undefined,
+    SRS_PATH ?? undefined,
     true,
     false,
   );
@@ -228,7 +249,7 @@ export async function generatePrimaryProof(input: ProofInput): Promise<PrimaryPr
   console.log('[PROOF] Generating primary proof (5-15s)...');
   const proofBuf = await Mopro.generateNoirProof(
     PRIMARY_CIRCUIT_PATH,
-    undefined,
+    SRS_PATH ?? undefined,
     primaryInputs.inputs,
     true,
     vkBuf,

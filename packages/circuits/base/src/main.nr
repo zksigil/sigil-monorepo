@@ -46,7 +46,7 @@ fn main(
     // ---------------------------------------------------------------
 
     // Hash the signedAttrs (variable length, zero-padded)
-    let signed_attrs_hash: [u8; 32] = sha256::sha256_var(signed_attrs, signed_attrs_len);
+    let signed_attrs_hash: [u8; 32] = sha256::sha256_var(signed_attrs, signed_attrs_len as u64);
 
     // Pack pubkey bytes into u128 limbs for BigNumParams (18 limbs for 2048-bit)
     let pubkey_limbs = pack_be_bytes_256(pubkey);

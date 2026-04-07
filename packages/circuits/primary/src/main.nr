@@ -42,7 +42,7 @@ fn main(
     // 1. RSA signature verification: DSC signed the SOD's signedAttrs
     // ---------------------------------------------------------------
 
-    let signed_attrs_hash: [u8; 32] = sha256::sha256_var(signed_attrs, signed_attrs_len);
+    let signed_attrs_hash: [u8; 32] = sha256::sha256_var(signed_attrs, signed_attrs_len as u64);
 
     let pubkey_limbs = pack_be_bytes_256(pubkey);
     let redc_limbs = pack_be_bytes_257(redc_param);
