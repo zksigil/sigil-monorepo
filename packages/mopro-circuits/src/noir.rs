@@ -91,9 +91,9 @@ pub fn generate_noir_proof(
     setup_srs_from_bytecode(bytecode.as_str(), srs_path.as_deref(), false)
         .map_err(|e| MoproError::NoirError(format!("SRS setup failed: {e}")))?;
     let witness = from_vec_str_to_witness_map(inputs.iter().map(|s| s.as_str()).collect())
-        .map_err(|e| MoproError::NoirError(format!("Witness construction failed: {e}")))?;
+        .map_err(|e| MoproError::NoirError(format!("Witness construction failed: {e:?}")))?;
     prove_ultra_honk_keccak(bytecode.as_str(), witness, vk, false, low_memory_mode)
-        .map_err(|e| MoproError::NoirError(format!("Proof generation failed: {e}")))
+        .map_err(|e| MoproError::NoirError(format!("Proof generation failed: {e:?}")))
 }
 
 /// Verify an UltraHonk-Keccak proof locally (optional — the contract verifies on-chain).
@@ -284,8 +284,8 @@ pub fn compute_redc_param(modulus_bytes: Vec<u8>) -> Result<Vec<u8>, MoproError>
         return Err(MoproError::NoirError("Modulus is zero".into()));
     }
 
-    // 2^(2*2048 + 6) = 2^4102
-    let numerator = BigUint::from(1u32) << 4102u32;
+    // 2^(2*2048 + 4) = 2^4100  (Barrett reduction parameter for 2048-bit modulus)
+    let numerator = BigUint::from(1u32) << 4100u32;
     let redc = &numerator / &modulus;
 
     // Convert to 257-byte big-endian, zero-padded on the left

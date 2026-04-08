@@ -116,6 +116,10 @@ export async function generateBaseProof(input: ProofInput): Promise<BaseProofOut
   // Parse SOD to extract RSA fields
   console.log('[PROOF] Parsing SOD for RSA verification...');
   const sod = parseSod(input.rawSODHex);
+  console.log('[PROOF-DBG] Parsed SOD exponent:', sod.exponent);
+  console.log('[PROOF-DBG] Parsed SOD signedAttrs length:', sod.signedAttrs.length);
+  console.log('[DEBUG-SIG] signature:', JSON.stringify(Array.from(sod.signature)));
+  console.log('[DEBUG-PUBKEY] pubkey:', JSON.stringify(Array.from(sod.pubkeyModulus)));
   const signedAttrs = padToLength(sod.signedAttrs, SIGNED_ATTRS_MAX_LEN);
   const signedAttrsLen = sod.signedAttrs.length;
   const signature = ensureLength(sod.signature, 256, 'signature');
@@ -134,6 +138,9 @@ export async function generateBaseProof(input: ProofInput): Promise<BaseProofOut
   console.log('[PROOF] Computing redc_param (Barrett reduction)...');
   const redcParam = await Mopro.computeRedcParam(pubkey.buffer as ArrayBuffer);
   console.log('[PROOF-DBG] redcParam byteLength:', redcParam.byteLength);
+  console.log('[PROOF-DBG] First 10 bytes of signature:', Array.from(new Uint8Array(signature.buffer)).slice(0, 10));
+  console.log('[PROOF-DBG] First 10 bytes of pubkey:', Array.from(new Uint8Array(pubkey.buffer)).slice(0, 10));
+  console.log('[PROOF-DBG] First 10 bytes of redcParam:', Array.from(new Uint8Array(redcParam)).slice(0, 10));
 
   console.log('[PROOF] Computing base inputs (native Poseidon2)...');
   const baseInputs = await Mopro.computeBaseInputs(
@@ -156,7 +163,7 @@ export async function generateBaseProof(input: ProofInput): Promise<BaseProofOut
   console.log('[PROOF-DBG] inputs[3..11] (signedAttrs[0..7]):', baseInputs.inputs.slice(3, 11));
   console.log('[PROOF-DBG] last 5 inputs:', baseInputs.inputs.slice(-5));
   console.log('[PROOF-DBG] input[515] (signed_attrs_len):', baseInputs.inputs[515]);
-  console.log('[PROOF-DBG] input[1286] (exponent):', baseInputs.inputs[1285]);
+  console.log('[PROOF-DBG] input[1285] (exponent):', baseInputs.inputs[1285]);
 
   console.log('[PROOF] Getting base VK...');
   const vkBuf = await Mopro.getNoirVerificationKey(
@@ -167,31 +174,41 @@ export async function generateBaseProof(input: ProofInput): Promise<BaseProofOut
   );
 
   console.log('[PROOF] Generating base proof (5-15s)...');
-  const proofBuf = await Mopro.generateNoirProof(
-    BASE_CIRCUIT_PATH,
-    SRS_PATH ?? undefined,
-    baseInputs.inputs,
-    true,
-    vkBuf,
-    false,
-  );
+  try {
+    const proofBuf = await Mopro.generateNoirProof(
+      BASE_CIRCUIT_PATH,
+      SRS_PATH ?? undefined,
+      baseInputs.inputs,
+      true,
+      vkBuf,
+      false,
+    );
 
-  const proofHex = arrayBufferToHex(proofBuf);
-  const vkHex = arrayBufferToHex(vkBuf);
+    const proofHex = arrayBufferToHex(proofBuf);
+    const vkHex = arrayBufferToHex(vkBuf);
 
-  console.log('[PROOF] Base proof generated, size:', proofBuf.byteLength, 'bytes');
+    console.log('[PROOF] Base proof generated, size:', proofBuf.byteLength, 'bytes');
 
-  return {
-    type: 'base',
-    zkProof: {
-      proof: proofHex,
-      vk: vkHex,
+    return {
+      type: 'base',
+      zkProof: {
+        proof: proofHex,
+        vk: vkHex,
+        epochNullifier: baseInputs.epochNullifier,
+        hashedAddress: hashedAddr,
+        passportExpiry,
+      },
       epochNullifier: baseInputs.epochNullifier,
-      hashedAddress: hashedAddr,
-      passportExpiry,
-    },
-    epochNullifier: baseInputs.epochNullifier,
-  };
+    };
+  } catch (error) {
+    console.error('[PROOF] Generation error:', error);
+    if (error instanceof Error) {
+      console.error('[PROOF] Error name:', error.name);
+      console.error('[PROOF] Error message:', error.message);
+      console.error('[PROOF] Error stack:', error.stack);
+    }
+    throw error;
+  }
 }
 
 /**
@@ -383,6 +400,111 @@ export function generateStubProof(input: StubProofInput): StubProofOutput {
 // ---------------------------------------------------------------------------
 // Internal helpers
 // ---------------------------------------------------------------------------
+
+/**
+ * Verify an RSA signature (PKCS#1 v1.5) on signedAttrs and return diagnostic info.
+ * 
+ * This is a JS-side sanity check to validate the RSA signature before sending
+ * to the ZK circuit.
+ */
+interface RSASignatureCheckResult {
+  valid: boolean;
+  signedAttrsHash: string;
+  recoveredHash: string;
+  paddingInfo?: string;
+}
+
+function verifyRSASignatureJS(
+  signedAttrs: Uint8Array,
+  signature: Uint8Array,
+  pubkeyModulus: Uint8Array,
+  exponent: number,
+): RSASignatureCheckResult {
+  try {
+    // Compute SHA-256 hash of signedAttrs
+    const signedAttrsHash = sha256(signedAttrs);
+    const signedAttrsHashHex = Array.from(signedAttrsHash)
+      .map(b => b.toString(16).padStart(2, '0'))
+      .join('');
+
+    // RSA public key operation: decrypt signature using pubkey
+    // signature^exponent mod pubkeyModulus
+    const sigBigInt = BigInt('0x' + Array.from(signature).map(b => b.toString(16).padStart(2, '0')).join(''));
+    const modulusBigInt = BigInt('0x' + Array.from(pubkeyModulus).map(b => b.toString(16).padStart(2, '0')).join(''));
+    const exponentBigInt = BigInt(exponent);
+
+    // Modular exponentiation: sig^exponent mod modulus
+    const decryptedBigInt = modPow(sigBigInt, exponentBigInt, modulusBigInt);
+
+    // Convert decrypted value back to bytes
+    const decryptedBytes = bigIntToBytes(decryptedBigInt, 256);
+
+    // Parse PKCS#1 v1.5 padding: 0x00 || 0x01 || PS || 0x00 || DigestInfo
+    // DigestInfo for SHA-256: 30 31 30 0d 06 09 60 86 48 01 65 03 04 02 01 05 00 04 20 || hash
+    const digestInfoPrefix = '3031300d060960864801650304020105000420';
+    const decryptedHex = Array.from(decryptedBytes)
+      .map(b => b.toString(16).padStart(2, '0'))
+      .join('');
+
+    // Find the recovered hash from the decrypted signature
+    const digestInfoIndex = decryptedHex.indexOf(digestInfoPrefix);
+    let recoveredHash = '';
+    let paddingInfo = '';
+
+    if (digestInfoIndex !== -1) {
+      // Found proper PKCS#1 DigestInfo structure
+      const hashStart = digestInfoIndex + digestInfoPrefix.length;
+      const hashEnd = hashStart + 64; // SHA-256 hash is 32 bytes = 64 hex chars
+      recoveredHash = decryptedHex.slice(hashStart, hashEnd);
+      paddingInfo = `PKCS#1 v1.5 DigestInfo found at byte offset ${digestInfoIndex / 2}`;
+    } else {
+      // Fallback: try to extract last 32 bytes as hash
+      recoveredHash = decryptedHex.slice(-64);
+      paddingInfo = 'PKCS#1 DigestInfo not found, using raw decrypted bytes';
+    }
+
+    const valid = signedAttrsHashHex === recoveredHash;
+
+    return {
+      valid,
+      signedAttrsHash: signedAttrsHashHex,
+      recoveredHash,
+      paddingInfo,
+    };
+  } catch (error) {
+    console.error('[PROOF-DBG] RSA verification error:', error);
+    return {
+      valid: false,
+      signedAttrsHash: '',
+      recoveredHash: '',
+      paddingInfo: `Error: ${error instanceof Error ? error.message : String(error)}`,
+    };
+  }
+}
+
+/** Modular exponentiation: base^exp mod mod */
+function modPow(base: bigint, exp: bigint, mod: bigint): bigint {
+  let result = 1n;
+  base = base % mod;
+  while (exp > 0n) {
+    if (exp % 2n === 1n) {
+      result = (result * base) % mod;
+    }
+    exp = exp / 2n;
+    base = (base * base) % mod;
+  }
+  return result;
+}
+
+/** Convert a bigint to big-endian bytes of specified length */
+function bigIntToBytes(value: bigint, length: number): Uint8Array {
+  const bytes = new Uint8Array(length);
+  for (let i = length - 1; i >= 0; i--) {
+    bytes[i] = Number(value & 0xffn);
+    value = value >> 8n;
+  }
+  return bytes;
+}
 
 /** Zero-pad a byte array to the target length. */
 function padToLength(bytes: Uint8Array, targetLen: number): Uint8Array {

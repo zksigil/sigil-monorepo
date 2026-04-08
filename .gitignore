@@ -27,6 +27,9 @@ ios/DerivedData/
 packages/contracts/cache/
 packages/contracts/out/
 
+# Rust (mopro-circuits)
+packages/mopro-circuits/target/
+
 # Environment
 .env
 .env.*

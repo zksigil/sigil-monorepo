@@ -82,10 +82,9 @@ fn pack_be_bytes_256(bytes: [u8; 256]) -> [u128; 18] {
     let mut limbs = [0 as u128; 18];
     let mut k: u32 = 0;
 
-    // First limb: 256 - 17*15 = 1 byte
-    let first_limb_bytes: u32 = 256 - 17 * 15; // = 1
+    // First limb: 1 byte
     let mut val: Field = 0;
-    for _ in 0..first_limb_bytes {
+    for _ in 0..1 {
         val = val * 256 + bytes[k] as Field;
         k += 1;
     }
@@ -113,10 +112,9 @@ fn pack_be_bytes_257(bytes: [u8; 257]) -> [u128; 18] {
     let mut limbs = [0 as u128; 18];
     let mut k: u32 = 0;
 
-    // First limb: 257 - 17*15 = 2 bytes
-    let first_limb_bytes: u32 = 257 - 17 * 15; // = 2
+    // First limb: 2 bytes
     let mut val: Field = 0;
-    for _ in 0..first_limb_bytes {
+    for _ in 0..2 {
         val = val * 256 + bytes[k] as Field;
         k += 1;
     }
