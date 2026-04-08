@@ -43,3 +43,6 @@ packages/mopro-circuits/target/
 
 # claude
 CLAUDE.md
+
+.qwen/
+.claude/
