@@ -13,18 +13,12 @@
     "module": "ESNext",
     "moduleResolution": "bundler",
     "jsx": "react-native",
-    "baseUrl": ".",
-    "paths": {
-      "@app/*": ["src/app/*"],
-      "@features/*": ["src/features/*"],
-      "@shared/*": ["src/shared/*"],
-      "@infrastructure/*": ["src/infrastructure/*"]
-    },
     "allowJs": true,
     "resolveJsonModule": true,
     "allowSyntheticDefaultImports": true,
     "esModuleInterop": true,
-    "skipLibCheck": true
+    "skipLibCheck": true,
+    "types": ["jest"]
   },
   "include": [
     "src",
