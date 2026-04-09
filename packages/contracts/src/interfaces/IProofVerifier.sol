@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-pragma solidity 0.8.28;
+pragma solidity ^0.8.28;
 
 /// @title IProofVerifier
 /// @notice Interface for ZK proof verification. Implemented as a separate contract so the
@@ -13,18 +13,20 @@ pragma solidity 0.8.28;
 ///      Current stub implementation accepts all proofs. The real implementation will verify
 ///      a Noir UltraHonk proof with the following public inputs per tier:
 ///
-///      Base:    [hashedAddress, passportExpiry, epochNullifier]
-///      Primary: [hashedAddress, passportExpiry, nullifier, nextCommitment]
+///      Base:    [hashedAddress, passportExpiry, epochNullifier, cscaMerkleRoot]
+///      Primary: [hashedAddress, passportExpiry, nullifier, nextCommitment, cscaMerkleRoot]
 interface IProofVerifier {
     /// @notice Verify a base-tier registration or renewal proof.
     /// @param hashedAddress keccak256(abi.encodePacked(wallet)) — binds proof to registering wallet.
     /// @param passportExpiry Expiry timestamp from DG1, asserted < block.timestamp in circuit.
     /// @param epochNullifier Rate-limiting nullifier: hash(s, "epoch", day). Zero for renewals.
+    /// @param cscaMerkleRoot CSCA Merkle root from on-chain registry — binds proof to current ICAO ML.
     /// @param proof Raw proof bytes (format determined by proving system).
     function verifyBaseProof(
         bytes32 hashedAddress,
         uint48 passportExpiry,
         bytes32 epochNullifier,
+        bytes32 cscaMerkleRoot,
         bytes calldata proof
     ) external view returns (bool);
 
@@ -33,11 +35,13 @@ interface IProofVerifier {
     /// @param passportExpiry Expiry timestamp from DG1.
     /// @param nullifier Permanent primary nullifier: hash(s, nonce). Unique per registration slot.
     /// @param nextCommitment Commitment to next nullifier: hash(hash(s, nonce+1)).
+    /// @param cscaMerkleRoot CSCA Merkle root from on-chain registry — binds proof to current ICAO ML.
     function verifyPrimaryProof(
         bytes32 hashedAddress,
         uint48 passportExpiry,
         bytes32 nullifier,
         bytes32 nextCommitment,
+        bytes32 cscaMerkleRoot,
         bytes calldata proof
     ) external view returns (bool);
 }

@@ -4,6 +4,7 @@ pragma solidity 0.8.28;
 import {Test} from "forge-std/Test.sol";
 import {VerificationRegistry} from "../src/VerificationRegistry.sol";
 import {ProtocolConfig} from "../src/ProtocolConfig.sol";
+import {CSCAMerkleTree} from "../src/CSCAMerkleTree.sol";
 import {IVerificationRegistry} from "../src/interfaces/IVerificationRegistry.sol";
 import {IProtocolConfig} from "../src/interfaces/IProtocolConfig.sol";
 import {IProofVerifier} from "../src/interfaces/IProofVerifier.sol";
@@ -15,6 +16,7 @@ contract VerificationRegistryTest is Test {
     VerificationRegistry public registry;
     ProtocolConfig public config;
     MockProofVerifier public verifier;
+    CSCAMerkleTree public cscaTree;
 
     address public governor = makeAddr("governor");
     address public alice = makeAddr("alice");
@@ -25,6 +27,8 @@ contract VerificationRegistryTest is Test {
     // A passport expiry far in the future
     uint48 public constant PASSPORT_EXPIRY = type(uint48).max;
     bytes public constant PROOF = hex"";
+
+    bytes32 public constant CSCA_MERKLE_ROOT = 0x06db36480878d971e22b324a7b7d941ed6f986f484059e8ae9ef3c508fa993de;
 
     // Simulate epoch nullifiers (in prod: hash(s, "epoch", day))
     bytes32 public constant EPOCH_NULL_A = keccak256("epoch_A_day0");
@@ -49,7 +53,8 @@ contract VerificationRegistryTest is Test {
     function setUp() public {
         config = new ProtocolConfig(governor);
         verifier = new MockProofVerifier();
-        registry = new VerificationRegistry(governor, config, verifier);
+        cscaTree = new CSCAMerkleTree(CSCA_MERKLE_ROOT, governor);
+        registry = new VerificationRegistry(governor, config, verifier, address(cscaTree));
     }
 
     // =========================================================================
@@ -615,7 +620,7 @@ contract VerificationRegistryTest is Test {
         _registerBase(alice, EPOCH_NULL_A);
 
         // Deploy a new registry and set it as successor
-        VerificationRegistry successor = new VerificationRegistry(governor, config, verifier);
+        VerificationRegistry successor = new VerificationRegistry(governor, config, verifier, address(cscaTree));
 
         // Register alice on the new registry too
         vm.prank(alice);

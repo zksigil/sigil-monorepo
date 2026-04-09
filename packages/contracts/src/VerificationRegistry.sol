@@ -1,9 +1,10 @@
 // SPDX-License-Identifier: MIT
-pragma solidity 0.8.28;
+pragma solidity ^0.8.28;
 
 import {IVerificationRegistry} from "./interfaces/IVerificationRegistry.sol";
 import {IProtocolConfig} from "./interfaces/IProtocolConfig.sol";
 import {IProofVerifier} from "./interfaces/IProofVerifier.sol";
+import {ICSCAMerkleTree} from "./interfaces/ICSCAMerkleTree.sol";
 import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 import {Pausable} from "@openzeppelin/contracts/utils/Pausable.sol";
 import {Poseidon2Lib} from "poseidon2-evm/Poseidon2Lib.sol";
@@ -69,6 +70,7 @@ contract VerificationRegistry is IVerificationRegistry, ReentrancyGuard, Pausabl
     address public s_governor;
     IProtocolConfig public s_config;
     IProofVerifier public s_verifier;
+    ICSCAMerkleTree public s_cscaMerkleTree;
     address public s_successor;
 
     // =========================================================================
@@ -104,14 +106,16 @@ contract VerificationRegistry is IVerificationRegistry, ReentrancyGuard, Pausabl
     // Constructor
     // =========================================================================
 
-    constructor(address governor_, IProtocolConfig config_, IProofVerifier verifier_) {
+    constructor(address governor_, IProtocolConfig config_, IProofVerifier verifier_, address cscaMerkleTree_) {
         if (governor_ == address(0)) revert VerificationRegistry__ZeroAddress();
         if (address(config_) == address(0)) revert VerificationRegistry__ZeroAddress();
         if (address(verifier_) == address(0)) revert VerificationRegistry__ZeroAddress();
+        if (cscaMerkleTree_ == address(0)) revert VerificationRegistry__ZeroAddress();
 
         s_governor = governor_;
         s_config = config_;
         s_verifier = verifier_;
+        s_cscaMerkleTree = ICSCAMerkleTree(cscaMerkleTree_);
     }
 
     // =========================================================================
@@ -143,7 +147,7 @@ contract VerificationRegistry is IVerificationRegistry, ReentrancyGuard, Pausabl
         uint8 count = s_epochCounts[epochNullifier];
         if (count >= s_config.maxDailyRegistrations()) revert VerificationRegistry__RateLimitExceeded();
 
-        if (!s_verifier.verifyBaseProof(hashedAddress, passportExpiry, epochNullifier, proof)) {
+        if (!s_verifier.verifyBaseProof(hashedAddress, passportExpiry, epochNullifier, s_cscaMerkleTree.getRoot(), proof)) {
             revert VerificationRegistry__InvalidProof();
         }
 
@@ -176,7 +180,7 @@ contract VerificationRegistry is IVerificationRegistry, ReentrancyGuard, Pausabl
         if (block.timestamp >= passportExpiry) revert VerificationRegistry__PassportExpired();
 
         // epochNullifier is zero for renewals — rate limiting only applies to new registrations
-        if (!s_verifier.verifyBaseProof(hashedAddress, passportExpiry, bytes32(0), proof)) {
+        if (!s_verifier.verifyBaseProof(hashedAddress, passportExpiry, bytes32(0), s_cscaMerkleTree.getRoot(), proof)) {
             revert VerificationRegistry__InvalidProof();
         }
 
@@ -205,7 +209,7 @@ contract VerificationRegistry is IVerificationRegistry, ReentrancyGuard, Pausabl
 
         if (s_primaryRegistrations[hashedAddress].expiresAt > block.timestamp) revert VerificationRegistry__AlreadyRegistered();
 
-        if (!s_verifier.verifyPrimaryProof(hashedAddress, passportExpiry, nullifier, nextCommitment, proof)) {
+        if (!s_verifier.verifyPrimaryProof(hashedAddress, passportExpiry, nullifier, nextCommitment, s_cscaMerkleTree.getRoot(), proof)) {
             revert VerificationRegistry__InvalidProof();
         }
 
@@ -233,7 +237,7 @@ contract VerificationRegistry is IVerificationRegistry, ReentrancyGuard, Pausabl
         if (slot.hashedAddress == bytes32(0)) revert VerificationRegistry__NotRegistered();
         if (slot.hashedAddress != hashedAddress) revert VerificationRegistry__NotAuthorized();
 
-        if (!s_verifier.verifyPrimaryProof(hashedAddress, passportExpiry, nullifier, slot.nextCommitment, proof)) {
+        if (!s_verifier.verifyPrimaryProof(hashedAddress, passportExpiry, nullifier, slot.nextCommitment, s_cscaMerkleTree.getRoot(), proof)) {
             revert VerificationRegistry__InvalidProof();
         }
 
@@ -267,7 +271,7 @@ contract VerificationRegistry is IVerificationRegistry, ReentrancyGuard, Pausabl
         // Verify proof: proves caller knows s, hash(s,n+1) == revealedNextNullifier, new address
         if (
             !s_verifier.verifyPrimaryProof(
-                newHashedAddress, passportExpiry, revealedNextNullifier, newNextCommitment, proof
+                newHashedAddress, passportExpiry, revealedNextNullifier, newNextCommitment, s_cscaMerkleTree.getRoot(), proof
             )
         ) {
             revert VerificationRegistry__InvalidProof();
@@ -361,6 +365,12 @@ contract VerificationRegistry is IVerificationRegistry, ReentrancyGuard, Pausabl
         if (address(newVerifier) == address(0)) revert VerificationRegistry__ZeroAddress();
         emit VerifierUpdated(address(s_verifier), address(newVerifier));
         s_verifier = newVerifier;
+    }
+
+    function setCSCAMerkleTree(ICSCAMerkleTree newTree) external onlyGovernor {
+        if (address(newTree) == address(0)) revert VerificationRegistry__ZeroAddress();
+        emit CSCAMerkleTreeUpdated(address(s_cscaMerkleTree), address(newTree));
+        s_cscaMerkleTree = newTree;
     }
 
     function setSuccessor(address newSuccessor) external onlyGovernor {

@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-pragma solidity 0.8.28;
+pragma solidity ^0.8.28;
 
 import {IProofVerifier} from "../../src/interfaces/IProofVerifier.sol";
 
@@ -21,6 +21,7 @@ contract MockProofVerifier is IProofVerifier {
         bytes32,
         uint48,
         bytes32,
+        bytes32,
         bytes calldata
     ) external view override returns (bool) {
         if (shouldRevert) revert("MockProofVerifier: forced revert");
@@ -30,6 +31,7 @@ contract MockProofVerifier is IProofVerifier {
     function verifyPrimaryProof(
         bytes32,
         uint48,
+        bytes32,
         bytes32,
         bytes32,
         bytes calldata

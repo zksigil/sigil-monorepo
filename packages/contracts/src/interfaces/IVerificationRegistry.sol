@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-pragma solidity 0.8.28;
+pragma solidity ^0.8.28;
 
 /// @title IVerificationRegistry
 /// @notice Two-tier on-chain identity registry backed by ZK passport proofs.
@@ -39,6 +39,9 @@ interface IVerificationRegistry {
 
     /// @notice Emitted when the ProofVerifier contract is updated.
     event VerifierUpdated(address indexed oldVerifier, address indexed newVerifier);
+
+    /// @notice Emitted when the CSCA Merkle Tree contract is updated.
+    event CSCAMerkleTreeUpdated(address indexed oldTree, address indexed newTree);
 
     /// @notice Emitted when a successor registry is designated.
     event SuccessorSet(address indexed successor);

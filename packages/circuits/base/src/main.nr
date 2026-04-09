@@ -5,25 +5,23 @@ use bignum::{params::BigNumParams, RuntimeBigNum};
 /// Maximum length for signedAttributes DER encoding (zero-padded to this length).
 global SIGNED_ATTRS_MAX_LEN: u32 = 512;
 
-/// Phase 3b: Base-tier registration circuit with RSA signature verification.
+/// Phase 3c: Base-tier registration circuit with RSA signature verification
+/// and CSCA Merkle tree inclusion.
 ///
 /// Proves:
 ///   1. The SOD was signed by the provided DSC public key (RSA-2048/SHA-256/PKCS#1v1.5)
-///   2. Knowledge of (dg1_hash, sod_hash) deriving the passport secret
-///   3. epoch_nullifier = Poseidon2([passport_secret, epoch_day])
+///   2. The DSC public key is included in the ICAO CSCA Merkle tree
+///   3. Knowledge of (dg1_hash, sod_hash) deriving the passport secret
+///   4. epoch_nullifier = Poseidon2([passport_secret, epoch_day])
 ///
 /// The RSA verification ensures the SOD is authentic -- signed by a real DSC.
-/// The app extracts signedAttrs, signature, and pubkey from the DER-encoded SOD
-/// off-circuit. If any extraction is wrong, the RSA verify will fail.
-///
-/// Trust model: The circuit verifies the DSC's RSA signature over signedAttrs.
-/// It does NOT verify that the DSC is in the ICAO Merkle tree (Phase 3c) or
-/// that DG1 hash appears inside signedAttrs (app is trusted for extraction).
+/// The Merkle proof ensures the DSC is an official ICAO CSCA certificate.
 ///
 /// Public inputs visible to the on-chain verifier:
-///   epoch_nullifier -- rate-limiting key (hash of secret + day)
-///   hashed_address  -- keccak256(wallet) as a Field
-///   passport_expiry -- expiry timestamp from DG1
+///   epoch_nullifier    -- rate-limiting key (hash of secret + day)
+///   hashed_address     -- keccak256(wallet) as a Field
+///   passport_expiry    -- expiry timestamp from DG1
+///   csca_merkle_root   -- current CSCA Merkle root from on-chain contract
 fn main(
     // Private inputs (witness)
     dg1_hash: Field,
@@ -36,10 +34,14 @@ fn main(
     pubkey: [u8; 256],
     redc_param: [u8; 257],
     exponent: u32,
+    // CSCA Merkle proof inputs (private witness)
+    csca_merkle_siblings: [Field; 12],
+    csca_leaf_index: u32,
     // Public inputs
     epoch_nullifier: pub Field,
     hashed_address: pub Field,
     passport_expiry: pub Field,
+    csca_merkle_root: pub Field,
 ) {
     // ---------------------------------------------------------------
     // 1. RSA signature verification: DSC signed the SOD's signedAttrs
@@ -59,7 +61,19 @@ fn main(
     assert(rsa_valid, "RSA signature verification failed");
 
     // ---------------------------------------------------------------
-    // 2. Derive passport secret and epoch nullifier (same as Phase 3a)
+    // 2. CSCA Merkle tree verification: DSC pubkey is in ICAO ML
+    // ---------------------------------------------------------------
+
+    let pubkey_as_field = bytes_256_to_field(pubkey);
+    let exponent_as_field: Field = exponent as Field;
+    let leaf = Poseidon2::hash([pubkey_as_field, exponent_as_field], 2);
+
+    // Walk up the Merkle tree from leaf to root (unrolled via for loop with known bound)
+    let computed_root = verify_merkle_proof(leaf, csca_merkle_siblings, csca_leaf_index);
+    assert(computed_root == csca_merkle_root, "CSCA Merkle proof failed");
+
+    // ---------------------------------------------------------------
+    // 3. Derive passport secret and epoch nullifier (same as Phase 3a)
     // ---------------------------------------------------------------
 
     let passport_secret = Poseidon2::hash([dg1_hash, sod_hash], 2);
@@ -69,6 +83,24 @@ fn main(
     // hashed_address and passport_expiry bind this proof to a specific wallet and passport.
     let _ = hashed_address;
     let _ = passport_expiry;
+}
+
+/// Verify a Merkle inclusion proof with 12 siblings.
+/// Returns the computed root from walking up from the leaf.
+#[no_predicates]
+fn verify_merkle_proof(leaf: Field, siblings: [Field; 12], leaf_index: u32) -> Field {
+    let mut current = leaf;
+    let mut index = leaf_index;
+    for i in 0..12 {
+        let sibling = siblings[i];
+        if index % 2 == 0 {
+            current = Poseidon2::hash([current, sibling], 2);
+        } else {
+            current = Poseidon2::hash([sibling, current], 2);
+        }
+        index = index / 2;
+    }
+    current
 }
 
 // ---------------------------------------------------------------------------
@@ -134,4 +166,15 @@ fn pack_be_bytes_257(bytes: [u8; 257]) -> [u128; 18] {
         limbs[17 - i] = limb as u128;
     }
     limbs
+}
+
+/// Convert 256 big-endian bytes to a single Field element.
+/// Used to compute the CSCA Merkle leaf hash from the DSC pubkey.
+/// 256 bytes = 2048 bits; the value is reduced modulo the BN254 field prime.
+fn bytes_256_to_field(bytes: [u8; 256]) -> Field {
+    let mut result: Field = 0;
+    for i in 0..256 {
+        result = result * 256 + bytes[i] as Field;
+    }
+    result
 }
