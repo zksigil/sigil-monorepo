@@ -11,6 +11,8 @@ const mockStubOutput: StubProofOutput = {
   passportNullifierHex: ('0x' + '11'.repeat(32)) as `0x${string}`,
 };
 
+import { CSCA_MERKLE_ROOT } from '../../services/cscaMerkleProof';
+
 // Expected BaseProofOutput produced by the stub fallback path in useProofGeneration
 const expectedBaseOutput: BaseProofOutput = {
   type: 'base',
@@ -20,8 +22,10 @@ const expectedBaseOutput: BaseProofOutput = {
     epochNullifier: mockStubOutput.passportNullifierHex,
     hashedAddress: mockStubOutput.zkProof.publicSignals[1].toString(),
     passportExpiry: '0',
+    cscaMerkleRoot: CSCA_MERKLE_ROOT,
   },
   epochNullifier: mockStubOutput.passportNullifierHex,
+  cscaMerkleRoot: CSCA_MERKLE_ROOT,
 };
 
 jest.mock('../../services/proofService', () => ({

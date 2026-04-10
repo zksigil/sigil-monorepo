@@ -57,9 +57,11 @@ Using `@zkpassport/poseidon2` (v0.6.2) — matches Noir's `poseidon::poseidon2::
 1. ~~Create `CSCAMerkleTree.sol`~~ ✓
 2. ~~Add Merkle inclusion check to Noir circuits~~ ✓
 3. ~~Update `ProofVerifier.sol` to validate root~~ ✓
-4. **Integrate proof generation in `proofService.ts`** — generate Merkle proof + leaf computation
-5. **Update mopro-circuits Rust FFI** — `computeBaseInputs` / `computePrimaryInputs` need Merkle siblings
-6. **Test on Anvil** — deploy full stack, end-to-end proof generation + verification
+4. ~~Integrate proof generation in `proofService.ts`~~ ✓
+5. ~~Update mopro-circuits Rust FFI~~ ✓
+6. **DSC cert coverage** — current blocker (see below)
+7. **Regenerate proof fixtures** — once DSCs are in tree, update `ProofVerifier.t.sol`
+8. **Anvil end-to-end testing** — deploy full stack, test with real passport
 
 ### Root update process (when ICAO releases new Master List)
 ```
@@ -84,3 +86,24 @@ No proof regeneration needed for existing users.
 ### Test status
 - `forge test`: **91 tests pass** (7 new CSCAMerkleTree + 84 existing)
 - ProofVerifier.t.sol real-proof tests commented out (need proof regeneration after circuit change)
+
+### DSC Cert Coverage (known gap)
+**Problem:** The ICAO Master List only contains **CSCA root certs** (269 unique), not DSCs.
+A real passport's SOD is signed by a **DSC** (Document Signer) cert — not a CSCA root.
+The DSC chains up to a CSCA, but the DSC itself is not in the ICAO ML.
+
+**Observed:** USA passport (2016, valid) DSC pubkey NOT in `cscas.json`.
+The `proofService.ts` has a dev fallback (placeholder Merkle proof with 12 zero siblings)
+that works with `MockProofVerifier` — but will fail with the real on-chain verifier.
+
+**TODO: Include DSCs in the maintained cert list**
+Sources to explore:
+1. **Country PKI pages** — US State Dept, German BSI, etc. publish DSCs
+2. **Crowdsourced databases** — Open ePassport project, community submissions
+3. **Extracted from passports** — each tap gives us a DSC pubkey; build a curated list
+
+**Plan:**
+- Maintain a `certs/dscs.json` alongside `cscas.json`
+- Update `build-tree.ts` to include both CSCA and DSC certs in the tree
+- Leaf hash stays `Poseidon2([modulus, exponent])` — same format
+- App fallback will work with real verifier once the DSC is in the tree

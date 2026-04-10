@@ -12,6 +12,8 @@ export interface BaseZKProof {
   hashedAddress: string;
   /** Passport expiry as a unix epoch day (public input). */
   passportExpiry: string;
+  /** CSCA Merkle root (hex) — binds proof to current ICAO Master List. */
+  cscaMerkleRoot: `0x${string}`;
 }
 
 /** Primary-tier proof: sybil resistance via global nullifier chaining. */
@@ -28,6 +30,8 @@ export interface PrimaryZKProof {
   hashedAddress: string;
   /** Passport expiry as a unix epoch day (public input). */
   passportExpiry: string;
+  /** CSCA Merkle root (hex) — binds proof to current ICAO Master List. */
+  cscaMerkleRoot: `0x${string}`;
 }
 
 /** Legacy type kept for backward compatibility with Phase 2 stub code. */

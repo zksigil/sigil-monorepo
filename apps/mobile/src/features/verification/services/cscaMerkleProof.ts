@@ -1,0 +1,105 @@
+/**
+ * CSCA Merkle proof generation — runs on-device in JavaScript.
+ *
+ * Takes the DSC pubkey + exponent from the SOD, looks up the matching cert
+ * in tree-data.json by comparing pubkey hex, and returns the precomputed
+ * 12 Merkle siblings. No Poseidon2 or native modules needed.
+ *
+ * tree-data.json is prebuilt by certs/build-tree.ts which computes all
+ * proofs ahead of time (269 certs × 12 siblings = 3,228 bigints).
+ */
+
+import treeData from "../../../../assets/circuits/tree-data.json";
+
+// ---------------------------------------------------------------------------
+// Constants
+// ---------------------------------------------------------------------------
+
+export const CSCA_MERKLE_ROOT = treeData.root as `0x${string}`;
+
+// ---------------------------------------------------------------------------
+// Types
+// ---------------------------------------------------------------------------
+
+export interface CSCAMerkleProof {
+  /** 12 sibling field elements as decimal strings (matching the Noir circuit). */
+  siblings: string[];
+  /** Leaf index in the tree (0-based). */
+  leafIndex: number;
+  /** The Merkle root (hex, 0x-prefixed, 32 bytes). */
+  root: `0x${string}`;
+}
+
+// ---------------------------------------------------------------------------
+// Lazy index: pubkey modulus hex → cert entry
+// ---------------------------------------------------------------------------
+
+let _lookupCache: Map<string, { index: number; proof: string[] }> | null = null;
+
+function getLookupCache(): Map<string, { index: number; proof: string[] }> {
+  if (!_lookupCache) {
+    _lookupCache = new Map();
+    const certs = treeData.certs as Array<{
+      index: number;
+      modulus_hex: string;
+      proof: string[];
+    }>;
+    for (const cert of certs) {
+      // Store both with and without 0x prefix for flexible matching
+      const key = cert.modulus_hex.toLowerCase().replace(/^0x/, "");
+      _lookupCache!.set(key, { index: cert.index, proof: cert.proof });
+    }
+    console.log(
+      `[CSCA] Indexed ${_lookupCache.size} CSCA certificates for Merkle proof lookup`,
+    );
+  }
+  return _lookupCache;
+}
+
+// ---------------------------------------------------------------------------
+// Public API
+// ---------------------------------------------------------------------------
+
+/**
+ * Find a CSCA Merkle proof for a given DSC public key.
+ *
+ * @param pubkeyModulus - 256-byte RSA-2048 modulus (big-endian).
+ * @param _exponent - RSA public exponent (not used for lookup — matched by modulus).
+ * @returns Merkle proof (siblings + leaf index) or null if pubkey not found.
+ */
+export function findCSCAMerkleProof(
+  pubkeyModulus: Uint8Array,
+  _exponent: number,
+): CSCAMerkleProof | null {
+  // Convert pubkey to hex (no 0x prefix, lowercase)
+  const pubkeyHex = Array.from(pubkeyModulus)
+    .map((b) => b.toString(16).padStart(2, "0"))
+    .join("")
+    .toLowerCase();
+
+  const entry = getLookupCache().get(pubkeyHex);
+  if (!entry) {
+    console.warn(
+      `[CSCA] DSC pubkey not found in CSCA Merkle tree — cert may not be from ICAO ML`,
+    );
+    return null;
+  }
+
+  return {
+    siblings: entry.proof,
+    leafIndex: entry.index,
+    root: treeData.root as `0x${string}`,
+  };
+}
+
+/**
+ * Compute the CSCA leaf hash from pubkey + exponent.
+ * Not needed for proof generation (leaf hash is in tree-data.json).
+ * Returns placeholder.
+ */
+export function computeCSCALeafHash(
+  _pubkeyModulus: Uint8Array,
+  _exponent: number,
+): string {
+  return "0x0";
+}

@@ -36,6 +36,8 @@ export interface ParsedSOD {
   pubkeyModulus: Uint8Array;
   /** RSA public exponent (usually 65537). */
   exponent: number;
+  /** Raw DER bytes of all certificates found in the SOD's certificates field. */
+  certificates: Uint8Array[];
 }
 
 // ---------------------------------------------------------------------------
@@ -144,12 +146,35 @@ export function parseSod(sodHex: string): ParsedSOD {
   }
   const { modulus, exponent } = extractRSAPublicKey(data, certificates);
 
+  // Extract all certificate DER blobs for off-circuit chain verification
+  const allCerts = extractAllCertificates(data, certificates);
+
   return {
     signedAttrs,
     signature,
     pubkeyModulus: modulus,
     exponent,
+    certificates: allCerts,
   };
+}
+
+/**
+ * Extract ALL certificates from the SOD's certificates field.
+ * Returns raw DER bytes for each certificate.
+ */
+function extractAllCertificates(
+  data: Uint8Array,
+  certificates: { contentStart: number; length: number; end: number },
+): Uint8Array[] {
+  const certs: Uint8Array[] = [];
+  let cursor = certificates.contentStart;
+  while (cursor < certificates.end) {
+    const cert = readTagLength(data, cursor);
+    assertTag(data, cursor, TAG_SEQUENCE, 'Certificate');
+    certs.push(data.slice(cursor, cert.end));
+    cursor = cert.end;
+  }
+  return certs;
 }
 
 // ---------------------------------------------------------------------------
@@ -460,4 +485,288 @@ function hexToBytes(hex: string): Uint8Array {
     bytes[i] = parseInt(clean.slice(i * 2, i * 2 + 2), 16);
   }
   return bytes;
+}
+
+function bytesToHex(bytes: Uint8Array): string {
+  return Array.from(bytes).map(b => b.toString(16).padStart(2, '0')).join('');
+}
+
+// ---------------------------------------------------------------------------
+// Certificate chain verification (off-circuit)
+// ---------------------------------------------------------------------------
+
+export interface ParsedCert {
+  raw: Uint8Array;
+  /** DER-encoded TBSCertificate (the signed portion). */
+  tbsBytes: Uint8Array | null;
+  /** RSA signature bytes from the cert's signature field. */
+  signatureBytes: Uint8Array | null;
+  /** Signature algorithm OID (e.g. '1.2.840.113549.1.1.11' = sha256WithRSAEncryption). */
+  sigAlgOid: string | null;
+  modulus: Uint8Array | null;
+  exponent: number | null;
+  subject: Uint8Array | null;
+  issuer: Uint8Array | null;
+}
+
+export interface ChainVerificationResult {
+  valid: boolean;
+  dscModulusHex: string;
+  cscaModulusHex: string | null;
+  cscaName: string | null;
+  cscaSource: 'in_sod_chain' | 'issuer_dn_match' | 'not_found';
+  error: string | null;
+}
+
+function parseCertificate(derBytes: Uint8Array): ParsedCert | null {
+  try {
+    const cert = readTagLength(derBytes, 0);
+    if (cert.tag !== TAG_SEQUENCE) return null;
+    const tbs = readTagLength(derBytes, cert.contentStart);
+    if (tbs.tag !== TAG_SEQUENCE) return null;
+    let c = tbs.contentStart;
+    if (derBytes[c]! === TAG_CONTEXT_0) { const v = readTagLength(derBytes, c); c = v.end; }
+    const serial = readTagLength(derBytes, c); c = serial.end;
+    const sigAlg = readTagLength(derBytes, c);
+    // Extract signature algorithm OID
+    const algOid = readTagLength(derBytes, sigAlg.contentStart);
+    const sigAlgOidHex = bytesToHex(derBytes.slice(algOid.contentStart, algOid.contentStart + algOid.length));
+    c = sigAlg.end;
+    const issuer = readTagLength(derBytes, c);
+    const issuerBytes = derBytes.slice(issuer.contentStart, issuer.end);
+    c = issuer.end;
+    const validity = readTagLength(derBytes, c); c = validity.end;
+    const subject = readTagLength(derBytes, c);
+    const subjectBytes = derBytes.slice(subject.contentStart, subject.end);
+    c = subject.end;
+    const spki = readTagLength(derBytes, c);
+    c = spki.end;
+
+    let modulus: Uint8Array | null = null;
+    let exponent: number | null = null;
+    try {
+      const pubkey = parseRSAPublicKey(derBytes, spki);
+      modulus = pubkey.modulus;
+      exponent = pubkey.exponent;
+    } catch { /* not RSA */ }
+
+    // Extract the signature value from after the SPKI
+    const sigTlv = readTagLength(derBytes, c);
+    const signatureBytes = sigTlv.tag === TAG_BIT_STRING
+      ? derBytes.slice(sigTlv.contentStart + 1, sigTlv.end) // skip unused-bits byte
+      : derBytes.slice(sigTlv.contentStart, sigTlv.end);
+
+    return {
+      raw: derBytes,
+      tbsBytes: derBytes.slice(tbs.contentStart, tbs.end),
+      signatureBytes,
+      sigAlgOid: sigAlgOidHex,
+      modulus,
+      exponent,
+      subject: subjectBytes,
+      issuer: issuerBytes,
+    };
+  } catch {
+    return null;
+  }
+}
+
+interface CSCAEntry {
+  modulus_hex: string;
+  exponent: number;
+  common_name: string | null;
+  country: string | null;
+}
+
+let _cscaByModulus: Map<string, CSCAEntry> | null = null;
+let _cscasByCountry: Map<string, CSCAEntry[]> | null = null;
+
+function getCscaByModulus(): Map<string, CSCAEntry> {
+  if (!_cscaByModulus) {
+    _cscaByModulus = new Map();
+    const raw = require('../../../../../certs/cscas.json');
+    for (const e of (raw as CSCAEntry[])) {
+      _cscaByModulus!.set(e.modulus_hex.toLowerCase(), e);
+    }
+  }
+  return _cscaByModulus;
+}
+
+/**
+ * Get CSCAs grouped by country code. Used to filter candidates
+ * when verifying DSC signatures (much faster than trying all 269).
+ */
+function getCscasByCountry(): Map<string, CSCAEntry[]> {
+  if (!_cscasByCountry) {
+    _cscasByCountry = new Map();
+    const raw = require('../../../../../certs/cscas.json');
+    for (const e of (raw as CSCAEntry[])) {
+      const cc = e.country || '??';
+      if (!_cscasByCountry!.has(cc)) _cscasByCountry!.set(cc, []);
+      _cscasByCountry!.get(cc)!.push(e);
+    }
+  }
+  return _cscasByCountry;
+}
+
+/**
+ * Extract country code (C=XX) from a DER-encoded DN.
+ * OID for countryName: 2.5.4.6 = 55 04 06
+ */
+function extractCountryCodeFromDN(derBytes: Uint8Array): string | null {
+  try {
+    const outer = readTagLength(derBytes, 0);
+    if (outer.tag !== 0x30) return null;
+    let c = outer.contentStart;
+    while (c < outer.end) {
+      const rdn = readTagLength(derBytes, c);
+      if (rdn.tag !== 0x31) { c = rdn.end; continue; }
+      const attr = readTagLength(derBytes, rdn.contentStart);
+      if (attr.tag !== 0x30) { c = rdn.end; continue; }
+      const oid = readTagLength(derBytes, attr.contentStart);
+      if (oid.tag !== 0x06) { c = rdn.end; continue; }
+      const oidHex = bytesToHex(derBytes.slice(oid.contentStart, oid.contentStart + oid.length));
+      if (oidHex === '550406') {
+        // Country code is PrintableString (0x13) or UTF8String (0x0c)
+        const val = readTagLength(derBytes, oid.end);
+        return new TextDecoder().decode(derBytes.slice(val.contentStart, val.contentStart + val.length));
+      }
+      c = rdn.end;
+    }
+  } catch { /* skip */ }
+  return null;
+}
+
+/**
+ * Build a DER-encoded SubjectPublicKeyInfo for an RSA public key.
+ * Needed to import the key into Web Crypto for signature verification.
+ */
+function buildSPKIForRSA(modulus: Uint8Array, exponent: number): ArrayBuffer {
+  // OID: 1.2.840.113549.1.1.1 (rsaEncryption)
+  const rsaOid = new Uint8Array([0x06, 0x09, 0x2a, 0x86, 0x48, 0x86, 0xf7, 0x0d, 0x01, 0x01, 0x01]);
+  const nullParam = new Uint8Array([0x05, 0x00]);
+  const algId = concatUint8Arrays([rsaOid, nullParam]);
+  const algIdTlv = new Uint8Array([TAG_SEQUENCE, algId.length, ...algId]);
+
+  // RSAPublicKey SEQUENCE: SEQUENCE { INTEGER modulus, INTEGER exponent }
+  let modBytes = modulus;
+  if (modBytes[0]! >= 0x80) modBytes = concatUint8Arrays([new Uint8Array([0x00]), modBytes]);
+  const modInt = new Uint8Array([TAG_INTEGER, modBytes.length, ...modBytes]);
+
+  let expVal = exponent;
+  const expBytesArr: number[] = [];
+  do { expBytesArr.unshift(expVal & 0xff); expVal = expVal >> 8; } while (expVal > 0);
+  if (expBytesArr[0]! >= 0x80) expBytesArr.unshift(0);
+  const expInt = new Uint8Array([TAG_INTEGER, expBytesArr.length, ...expBytesArr]);
+
+  const rsaPubKey = concatUint8Arrays([modInt, expInt]);
+  const rsaPubKeyTlv = new Uint8Array([TAG_SEQUENCE, rsaPubKey.length, ...rsaPubKey]);
+
+  // BIT STRING wrapping the RSAPublicKey
+  const bitString = new Uint8Array([TAG_BIT_STRING, rsaPubKeyTlv.length + 1, 0x00, ...rsaPubKeyTlv]);
+
+  const spkiBytes = concatUint8Arrays([algIdTlv, bitString]);
+  const spkiTlv = new Uint8Array([TAG_SEQUENCE, spkiBytes.length, ...spkiBytes]);
+  return spkiTlv.buffer as ArrayBuffer;
+}
+
+function concatUint8Arrays(arrays: Uint8Array[]): Uint8Array {
+  const total = arrays.reduce((s, a) => s + a.length, 0);
+  const result = new Uint8Array(total);
+  let off = 0;
+  for (const a of arrays) { result.set(a, off); off += a.length; }
+  return result;
+}
+
+/**
+ * Verify the DSC cert chains to a known CSCA using actual RSA signature verification.
+ *
+ * 1. Check all certs in SOD chain — is any a known CSCA (exact pubkey match)?
+ * 2. Parse DSC issuer DN to extract country code
+ * 3. Filter CSCAs by country (usually 1-10 candidates instead of 269)
+ * 4. Verify DSC signature against each candidate CSCA pubkey
+ * 5. The one that verifies is the correct issuing CSCA
+ */
+export async function verifyDSCChain(
+  dscPubkeyModulus: Uint8Array,
+  _dscExponent: number,
+  sodCerts: Uint8Array[],
+): Promise<ChainVerificationResult> {
+  const dscHex = bytesToHex(dscPubkeyModulus);
+
+  // Step 1: Check all certs in SOD chain — is any a known CSCA (exact pubkey match)?
+  for (const certDer of sodCerts) {
+    const parsed = parseCertificate(certDer);
+    if (parsed?.modulus) {
+      const modHex = bytesToHex(parsed.modulus);
+      const entry = getCscaByModulus().get(modHex);
+      if (entry) {
+        console.log('[CHAIN] Found CSCA in SOD chain:', entry.common_name);
+        return { valid: true, dscModulusHex: dscHex, cscaModulusHex: modHex, cscaName: entry.common_name, cscaSource: 'in_sod_chain', error: null };
+      }
+    }
+  }
+
+  // Step 2: Parse DSC cert and verify its signature against candidate CSCAs
+  const dscParsed = sodCerts.length > 0 ? parseCertificate(sodCerts[0]!) : null;
+  if (!dscParsed?.tbsBytes || !dscParsed.signatureBytes || !dscParsed.sigAlgOid) {
+    return { valid: false, dscModulusHex: dscHex, cscaModulusHex: null, cscaName: null, cscaSource: 'not_found', error: 'Could not parse DSC cert fields' };
+  }
+
+  // Map signature algorithm OID to Web Crypto algorithm
+  const sigAlg = oidToHashAlgo(dscParsed.sigAlgOid);
+  if (!sigAlg) {
+    return { valid: false, dscModulusHex: dscHex, cscaModulusHex: null, cscaName: null, cscaSource: 'not_found', error: `Unsupported DSC sig alg: ${dscParsed.sigAlgOid}` };
+  }
+
+  // Step 3: Extract country code from DSC issuer DN and filter CSCAs
+  const countryCode = dscParsed.issuer ? extractCountryCodeFromDN(dscParsed.issuer) : null;
+  const candidates = countryCode ? (getCscasByCountry().get(countryCode) || []) : [];
+  const toTry = candidates.length > 0 ? candidates : Array.from(getCscaByModulus().values());
+
+  console.log(`[CHAIN] DSC issuer country: ${countryCode || 'unknown'}, candidates: ${toTry.length}`);
+
+  // Step 4: Try verifying DSC signature against each candidate CSCA
+  const sig = dscParsed.signatureBytes.buffer.slice(
+    dscParsed.signatureBytes.byteOffset,
+    dscParsed.signatureBytes.byteOffset + dscParsed.signatureBytes.byteLength,
+  ) as ArrayBuffer;
+  const tbs = dscParsed.tbsBytes.buffer.slice(
+    dscParsed.tbsBytes.byteOffset,
+    dscParsed.tbsBytes.byteOffset + dscParsed.tbsBytes.byteLength,
+  ) as ArrayBuffer;
+
+  for (const entry of toTry) {
+    try {
+      const spki = buildSPKIForRSA(hexToBytes(entry.modulus_hex), entry.exponent);
+      const cryptoKey = await crypto.subtle.importKey(
+        'spki', spki, { name: 'RSASSA-PKCS1-v1_5', hash: sigAlg }, false, ['verify'],
+      );
+      const valid = await crypto.subtle.verify(
+        'RSASSA-PKCS1-v1_5', cryptoKey, sig, tbs,
+      );
+      if (valid) {
+        console.log('[CHAIN] DSC signature verified with CSCA:', entry.common_name);
+        return { valid: true, dscModulusHex: dscHex, cscaModulusHex: entry.modulus_hex, cscaName: entry.common_name, cscaSource: 'issuer_dn_match', error: null };
+      }
+    } catch { /* not this CSCA */ }
+  }
+
+  console.log('[CHAIN] No CSCA verified DSC signature. DSC:', dscHex.slice(0, 16), '...');
+  return { valid: false, dscModulusHex: dscHex, cscaModulusHex: null, cscaName: null, cscaSource: 'not_found', error: 'DSC signature not verified by any known CSCA' };
+}
+
+/**
+ * Map a DER-encoded OID hex to a Web Crypto hash algorithm name.
+ */
+function oidToHashAlgo(oidHex: string): string | null {
+  // sha256WithRSAEncryption: 1.2.840.113549.1.1.11
+  if (oidHex === '2a864886f70d01010b') return 'SHA-256';
+  // sha384WithRSAEncryption: 1.2.840.113549.1.1.12
+  if (oidHex === '2a864886f70d01010c') return 'SHA-384';
+  // sha512WithRSAEncryption: 1.2.840.113549.1.1.13
+  if (oidHex === '2a864886f70d01010d') return 'SHA-512';
+  // sha1WithRSAEncryption: 1.2.840.113549.1.1.5 (deprecated but still used)
+  if (oidHex === '2a864886f70d010105') return 'SHA-1';
+  return null;
 }

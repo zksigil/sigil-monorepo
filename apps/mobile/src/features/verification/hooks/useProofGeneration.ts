@@ -3,6 +3,7 @@ import {
   generateBaseProof,
   generatePrimaryProof,
   generateStubProof,
+  CSCA_MERKLE_ROOT,
   type ProofInput,
   type BaseProofOutput,
   type PrimaryProofOutput,
@@ -83,9 +84,11 @@ export function useProofGeneration(): UseProofGenerationResult {
                 nextCommitment,
                 hashedAddress: stub.zkProof.publicSignals[1].toString(),
                 passportExpiry: (input.passportExpiryUnix ?? 0).toString(),
+                cscaMerkleRoot: CSCA_MERKLE_ROOT,
               },
               nullifier: stubNullifier,
               nextCommitment,
+              cscaMerkleRoot: CSCA_MERKLE_ROOT,
             } satisfies PrimaryProofOutput;
           } else {
             proofOutput = {
@@ -96,8 +99,10 @@ export function useProofGeneration(): UseProofGenerationResult {
                 epochNullifier: stub.passportNullifierHex,
                 hashedAddress: stub.zkProof.publicSignals[1].toString(),
                 passportExpiry: (input.passportExpiryUnix ?? 0).toString(),
+                cscaMerkleRoot: CSCA_MERKLE_ROOT,
               },
               epochNullifier: stub.passportNullifierHex,
+              cscaMerkleRoot: CSCA_MERKLE_ROOT,
             } satisfies BaseProofOutput;
           }
         } else {

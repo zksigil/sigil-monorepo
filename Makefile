@@ -30,6 +30,7 @@ circuits: ## Compile Noir circuits and copy to app assets
 	mkdir -p $(APP_ASSETS)
 	cp -f $(CIRCUITS_TARGET)/passport_base.json $(APP_ASSETS)/
 	cp -f $(CIRCUITS_TARGET)/passport_primary.json $(APP_ASSETS)/
+	cp -f certs/tree-data.json $(APP_ASSETS)/
 	@echo "✅ Circuits built and copied to $(APP_ASSETS)/"
 
 # ─── Mopro iOS Framework ──────────────────────────────────────────────

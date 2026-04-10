@@ -137,12 +137,17 @@ function main() {
   const treeData = {
     root: `0x${root.toString(16)}`,
     depth: TREE_DEPTH,
-    certs: certs.map((cert, i) => ({
-      index: i,
-      country: cert.country,
-      common_name: cert.common_name,
-      leaf: `0x${leaves[i].toString(16)}`,
-    })),
+    certs: certs.map((cert, i) => {
+      const proof = getProof(tree, i);
+      return {
+        index: i,
+        modulus_hex: cert.modulus_hex,
+        country: cert.country,
+        common_name: cert.common_name,
+        leaf: `0x${leaves[i].toString(16)}`,
+        proof: proof.map((s) => s.toString(10)), // Precomputed siblings as decimal strings
+      };
+    }),
   };
   writeFileSync(
     join(__dirname, "tree-data.json"),

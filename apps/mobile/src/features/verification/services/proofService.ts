@@ -7,19 +7,22 @@
  * Passport data NEVER leaves the device. All hashing and proving is done
  * on-device in native Rust code.
  *
- * Circuit inputs:
- *   Base tier:    private=[dg1_hash, sod_hash, epoch_day]  public=[epoch_nullifier, hashed_address, passport_expiry]
- *   Primary tier: private=[dg1_hash, sod_hash, nonce]      public=[nullifier, next_commitment, hashed_address, passport_expiry]
+ * Circuit inputs (Phase 3c):
+ *   Base tier:    private=[dg1_hash, sod_hash, epoch_day, ..., exponent, csca_merkle_siblings[12], csca_leaf_index]
+ *                 public=[epoch_nullifier, hashed_address, passport_expiry, csca_merkle_root]
+ *   Primary tier: private=[dg1_hash, sod_hash, nonce, ..., exponent, csca_merkle_siblings[12], csca_leaf_index]
+ *                 public=[nullifier, next_commitment, hashed_address, passport_expiry, csca_merkle_root]
  *
  * Requires `mopro build --platforms ios` (or android) to have been run so that
- * apps/mobile/modules/mopro is populated. Until then, generateStubProof can be
- * used for development without the native module.
+ * apps/mobile/modules/mopro is populated.
  */
 
 import { sha256 } from '@noble/hashes/sha2';
 import { keccak256, encodePacked, type Hex } from 'viem';
 import type { BaseZKProof, PrimaryZKProof, ZKProof } from '../../../shared/types/verification';
-import { parseSod } from '../../../infrastructure/sod/parseSod';
+import { parseSod, verifyDSCChain } from '../../../infrastructure/sod/parseSod';
+import { findCSCAMerkleProof, CSCA_MERKLE_ROOT } from './cscaMerkleProof';
+export { CSCA_MERKLE_ROOT };
 
 // ---------------------------------------------------------------------------
 // Circuit constants
@@ -28,6 +31,10 @@ const BN254_PRIME = 218882428718392752222464057452572750885483644004160343436982
 
 /** Must match SIGNED_ATTRS_MAX_LEN in the Noir circuits. */
 const SIGNED_ATTRS_MAX_LEN = 512;
+
+/** Phase 3c: 1289 (Phase 3b) + 12 Merkle siblings + 1 leaf index = 1302. */
+const EXPECTED_BASE_INPUTS = 1302;
+const EXPECTED_PRIMARY_INPUTS = 1303;
 
 // ---------------------------------------------------------------------------
 // Public interface
@@ -47,6 +54,7 @@ export interface BaseProofOutput {
   type: 'base';
   zkProof: BaseZKProof;
   epochNullifier: string;
+  cscaMerkleRoot: `0x${string}`;
 }
 
 export interface PrimaryProofOutput {
@@ -54,6 +62,7 @@ export interface PrimaryProofOutput {
   zkProof: PrimaryZKProof;
   nullifier: string;
   nextCommitment: string;
+  cscaMerkleRoot: `0x${string}`;
 }
 
 export type ProofOutput = BaseProofOutput | PrimaryProofOutput;
@@ -135,12 +144,37 @@ export async function generateBaseProof(input: ProofInput): Promise<BaseProofOut
     console.log('[PROOF-DBG] PKCS#1 padding:', jsRsaResult.paddingInfo);
   }
 
+  // Off-circuit certificate chain verification
+  // Verifies that the DSC cert was issued by a known CSCA
+  console.log('[PROOF] Verifying DSC→CSCA certificate chain...');
+  const chainResult = await verifyDSCChain(pubkey, sod.exponent, sod.certificates);
+  console.log('[PROOF-DBG] Chain verification:', chainResult.valid ? '✅ VALID' : '❌ INVALID',
+    chainResult.cscaSource ? `(${chainResult.cscaSource})` : '');
+  if (chainResult.cscaName) {
+    console.log('[PROOF-DBG] CSCA:', chainResult.cscaName);
+  }
+
   console.log('[PROOF] Computing redc_param (Barrett reduction)...');
   const redcParam = await Mopro.computeRedcParam(pubkey.buffer as ArrayBuffer);
   console.log('[PROOF-DBG] redcParam byteLength:', redcParam.byteLength);
   console.log('[PROOF-DBG] First 10 bytes of signature:', Array.from(new Uint8Array(signature.buffer)).slice(0, 10));
   console.log('[PROOF-DBG] First 10 bytes of pubkey:', Array.from(new Uint8Array(pubkey.buffer)).slice(0, 10));
   console.log('[PROOF-DBG] First 10 bytes of redcParam:', Array.from(new Uint8Array(redcParam)).slice(0, 10));
+
+  console.log('[PROOF] Finding CSCA Merkle proof...');
+  let cscaMerkleProof = findCSCAMerkleProof(pubkey, sod.exponent);
+  if (!cscaMerkleProof) {
+    // Dev fallback: use placeholder Merkle proof.
+    // This works because MockProofVerifier accepts any proof.
+    // In production (real verifier), this path would throw.
+    console.warn('[PROOF-DBG] DSC pubkey not in CSCA tree — using dev fallback (placeholder Merkle proof)');
+    cscaMerkleProof = {
+      siblings: new Array(12).fill('0'),
+      leafIndex: 0,
+      root: '0x0000000000000000000000000000000000000000000000000000000000000000' as `0x${string}`,
+    };
+  }
+  console.log('[PROOF-DBG] CSCA Merkle proof: leafIndex=', cscaMerkleProof.leafIndex, 'root=', cscaMerkleProof.root);
 
   console.log('[PROOF] Computing base inputs (native Poseidon2)...');
   const baseInputs = await Mopro.computeBaseInputs(
@@ -153,17 +187,23 @@ export async function generateBaseProof(input: ProofInput): Promise<BaseProofOut
     pubkey.buffer as ArrayBuffer,
     redcParam,
     sod.exponent,
+    cscaMerkleProof.siblings,
+    cscaMerkleProof.leafIndex,
     hashedAddr,
     passportExpiry,
+    cscaMerkleProof.root,
   );
 
-  console.log('[PROOF-DBG] baseInputs count:', baseInputs.inputs.length, '(expected 1289)');
+  console.log('[PROOF-DBG] baseInputs count:', baseInputs.inputs.length, `(expected ${EXPECTED_BASE_INPUTS})`);
   console.log('[PROOF-DBG] epochNullifier:', baseInputs.epochNullifier);
   console.log('[PROOF-DBG] first 5 inputs (dg1,sod,day,sa[0],sa[1]):', baseInputs.inputs.slice(0, 5));
   console.log('[PROOF-DBG] inputs[3..11] (signedAttrs[0..7]):', baseInputs.inputs.slice(3, 11));
   console.log('[PROOF-DBG] last 5 inputs:', baseInputs.inputs.slice(-5));
   console.log('[PROOF-DBG] input[515] (signed_attrs_len):', baseInputs.inputs[515]);
   console.log('[PROOF-DBG] input[1285] (exponent):', baseInputs.inputs[1285]);
+  console.log('[PROOF-DBG] input[1286..1297] (csca_merkle_siblings[0..1]):', baseInputs.inputs[1286], baseInputs.inputs[1287]);
+  console.log('[PROOF-DBG] input[1298] (csca_leaf_index):', baseInputs.inputs[1298]);
+  console.log('[PROOF-DBG] input[1301] (csca_merkle_root):', baseInputs.inputs[1301]);
 
   console.log('[PROOF] Getting base VK...');
   const vkBuf = await Mopro.getNoirVerificationKey(
@@ -197,8 +237,10 @@ export async function generateBaseProof(input: ProofInput): Promise<BaseProofOut
         epochNullifier: baseInputs.epochNullifier,
         hashedAddress: hashedAddr,
         passportExpiry,
+        cscaMerkleRoot: cscaMerkleProof.root,
       },
       epochNullifier: baseInputs.epochNullifier,
+      cscaMerkleRoot: cscaMerkleProof.root,
     };
   } catch (error) {
     console.error('[PROOF] Generation error:', error);
@@ -240,6 +282,17 @@ export async function generatePrimaryProof(input: ProofInput): Promise<PrimaryPr
   console.log('[PROOF] Computing redc_param (Barrett reduction)...');
   const redcParam = await Mopro.computeRedcParam(pubkey.buffer as ArrayBuffer);
 
+  console.log('[PROOF] Finding CSCA Merkle proof...');
+  let cscaMerkleProof = findCSCAMerkleProof(pubkey, sod.exponent);
+  if (!cscaMerkleProof) {
+    console.warn('[PROOF-DBG] DSC pubkey not in CSCA tree — using dev fallback (placeholder Merkle proof)');
+    cscaMerkleProof = {
+      siblings: new Array(12).fill('0'),
+      leafIndex: 0,
+      root: '0x0000000000000000000000000000000000000000000000000000000000000000' as `0x${string}`,
+    };
+  }
+
   console.log('[PROOF] Computing primary inputs (native Poseidon2)...');
   const primaryInputs = await Mopro.computePrimaryInputs(
     dg1Hash,
@@ -251,8 +304,11 @@ export async function generatePrimaryProof(input: ProofInput): Promise<PrimaryPr
     pubkey.buffer as ArrayBuffer,
     redcParam,
     sod.exponent,
+    cscaMerkleProof.siblings,
+    cscaMerkleProof.leafIndex,
     hashedAddr,
     passportExpiry,
+    cscaMerkleProof.root,
   );
 
   console.log('[PROOF] Getting primary VK...');
@@ -287,9 +343,11 @@ export async function generatePrimaryProof(input: ProofInput): Promise<PrimaryPr
       nextCommitment: primaryInputs.nextCommitment,
       hashedAddress: hashedAddr,
       passportExpiry,
+      cscaMerkleRoot: cscaMerkleProof.root,
     },
     nullifier: primaryInputs.nullifier,
     nextCommitment: primaryInputs.nextCommitment,
+    cscaMerkleRoot: cscaMerkleProof.root,
   };
 }
 
@@ -623,8 +681,11 @@ interface MoproInterface {
     pubkey: ArrayBuffer,
     redcParam: ArrayBuffer,
     exponent: number,
+    cscaMerkleSiblings: string[],
+    cscaLeafIndex: number,
     hashedAddress: string,
     passportExpiry: string,
+    cscaMerkleRoot: string,
   ): Promise<BaseInputsResult> | BaseInputsResult;
 
   computePrimaryInputs(
@@ -637,8 +698,11 @@ interface MoproInterface {
     pubkey: ArrayBuffer,
     redcParam: ArrayBuffer,
     exponent: number,
+    cscaMerkleSiblings: string[],
+    cscaLeafIndex: number,
     hashedAddress: string,
     passportExpiry: string,
+    cscaMerkleRoot: string,
   ): Promise<PrimaryInputsResult> | PrimaryInputsResult;
 
   computeRedcParam(

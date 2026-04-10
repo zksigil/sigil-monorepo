@@ -26,6 +26,7 @@ ios/DerivedData/
 # Foundry
 packages/contracts/cache/
 packages/contracts/out/
+packages/contracts/broadcast/
 
 # Rust (mopro-circuits)
 packages/mopro-circuits/target/
