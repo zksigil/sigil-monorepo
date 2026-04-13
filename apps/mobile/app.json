@@ -6,7 +6,9 @@
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "scheme": "sigil",
-    "assetBundlePatterns": ["assets/**/*"],
+    "assetBundlePatterns": [
+      "assets/**/*"
+    ],
     "userInterfaceStyle": "dark",
     "splash": {
       "image": "./assets/splash.png",
@@ -64,7 +66,8 @@
             "newArchEnabled": true
           }
         }
-      ]
+      ],
+      "expo-asset"
     ],
     "extra": {
       "eas": {

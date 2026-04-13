@@ -49,7 +49,7 @@ import {
   variantOrdinalSymbol } from "uniffi-bindgen-react-native";
 
 // Get converters from the other files, if any.
-const uniffiCaller = new UniffiRustCaller(() => ({ code: 0 }));
+const uniffiCaller = new UniffiRustCaller();
 
 const uniffiIsDebug =
   // @ts-ignore -- The process global might not be defined
@@ -65,13 +65,16 @@ const uniffiIsDebug =
  * Returns `BaseInputs` containing the full ordered flat array (private then public)
  * ready to pass to `generate_noir_proof`, plus the computed `epoch_nullifier`.
  *
- * Input order in circuit ABI (Phase 3b with RSA):
+ * Input order in circuit ABI (Phase 3c with full CSCA->DSC chain verification):
  * private: dg1_hash, sod_hash, epoch_day,
  * signed_attrs[512], signed_attrs_len, signature[256],
- * pubkey[256], redc_param[257], exponent
- * public:  epoch_nullifier, hashed_address, passport_expiry
+ * pubkey[256], redc_param[257], exponent,
+ * dsc_tbs[1536], dsc_tbs_len, dsc_pubkey_offset,
+ * csca_pubkey[512], csca_redc_param[513], csca_exponent, csca_signature[512],
+ * csca_merkle_siblings[12], csca_leaf_index
+ * public:  epoch_nullifier, hashed_address, passport_expiry, csca_merkle_root
  */
-export function computeBaseInputs(dg1Hash: string, sodHash: string, epochDay: string, signedAttrs: ArrayBuffer, signedAttrsLen: /*u32*/number, signature: ArrayBuffer, pubkey: ArrayBuffer, redcParam: ArrayBuffer, exponent: /*u32*/number, hashedAddress: string, passportExpiry: string): BaseInputs /*throws*/ {
+export function computeBaseInputs(dg1Hash: string, sodHash: string, epochDay: string, signedAttrs: ArrayBuffer, signedAttrsLen: /*u32*/number, signature: ArrayBuffer, pubkey: ArrayBuffer, redcParam: ArrayBuffer, exponent: /*u32*/number, dscTbs: ArrayBuffer, dscTbsLen: /*u32*/number, dscPubkeyOffset: /*u32*/number, cscaPubkey: ArrayBuffer, cscaRedcParam: ArrayBuffer, cscaExponent: /*u32*/number, cscaSignature: ArrayBuffer, cscaMerkleSiblings: Array<string>, cscaLeafIndex: /*u32*/number, hashedAddress: string, passportExpiry: string, cscaMerkleRoot: string): BaseInputs /*throws*/ {
     return FfiConverterTypeBaseInputs.lift(
         uniffiCaller.rustCallWithError(
             /*liftError:*/ FfiConverterTypeMoproError.lift.bind(FfiConverterTypeMoproError),
@@ -86,8 +89,18 @@ export function computeBaseInputs(dg1Hash: string, sodHash: string, epochDay: st
         FfiConverterArrayBuffer.lower(pubkey),
         FfiConverterArrayBuffer.lower(redcParam),
         FfiConverterUInt32.lower(exponent),
+        FfiConverterArrayBuffer.lower(dscTbs),
+        FfiConverterUInt32.lower(dscTbsLen),
+        FfiConverterUInt32.lower(dscPubkeyOffset),
+        FfiConverterArrayBuffer.lower(cscaPubkey),
+        FfiConverterArrayBuffer.lower(cscaRedcParam),
+        FfiConverterUInt32.lower(cscaExponent),
+        FfiConverterArrayBuffer.lower(cscaSignature),
+        FfiConverterArrayString.lower(cscaMerkleSiblings),
+        FfiConverterUInt32.lower(cscaLeafIndex),
         FfiConverterString.lower(hashedAddress),
         FfiConverterString.lower(passportExpiry),
+        FfiConverterString.lower(cscaMerkleRoot),
                 callStatus);
             },
             /*liftString:*/ FfiConverterString.lift,
@@ -120,13 +133,16 @@ export function computeNullifier(dg1Hash: string, sodHash: string, nonce: string
  * Returns `PrimaryInputs` with the full ordered flat array plus `nullifier` and
  * `next_commitment` as decimal strings for on-chain use.
  *
- * Input order in circuit ABI (Phase 3b with RSA):
+ * Input order in circuit ABI (Phase 3c with full CSCA->DSC chain verification):
  * private: dg1_hash, sod_hash, nonce,
  * signed_attrs[512], signed_attrs_len, signature[256],
- * pubkey[256], redc_param[257], exponent
- * public:  nullifier, next_commitment, hashed_address, passport_expiry
+ * pubkey[256], redc_param[257], exponent,
+ * dsc_tbs[1536], dsc_tbs_len, dsc_pubkey_offset,
+ * csca_pubkey[512], csca_redc_param[513], csca_exponent, csca_signature[512],
+ * csca_merkle_siblings[12], csca_leaf_index
+ * public:  nullifier, next_commitment, hashed_address, passport_expiry, csca_merkle_root
  */
-export function computePrimaryInputs(dg1Hash: string, sodHash: string, nonce: string, signedAttrs: ArrayBuffer, signedAttrsLen: /*u32*/number, signature: ArrayBuffer, pubkey: ArrayBuffer, redcParam: ArrayBuffer, exponent: /*u32*/number, hashedAddress: string, passportExpiry: string): PrimaryInputs /*throws*/ {
+export function computePrimaryInputs(dg1Hash: string, sodHash: string, nonce: string, signedAttrs: ArrayBuffer, signedAttrsLen: /*u32*/number, signature: ArrayBuffer, pubkey: ArrayBuffer, redcParam: ArrayBuffer, exponent: /*u32*/number, dscTbs: ArrayBuffer, dscTbsLen: /*u32*/number, dscPubkeyOffset: /*u32*/number, cscaPubkey: ArrayBuffer, cscaRedcParam: ArrayBuffer, cscaExponent: /*u32*/number, cscaSignature: ArrayBuffer, cscaMerkleSiblings: Array<string>, cscaLeafIndex: /*u32*/number, hashedAddress: string, passportExpiry: string, cscaMerkleRoot: string): PrimaryInputs /*throws*/ {
     return FfiConverterTypePrimaryInputs.lift(
         uniffiCaller.rustCallWithError(
             /*liftError:*/ FfiConverterTypeMoproError.lift.bind(FfiConverterTypeMoproError),
@@ -141,20 +157,31 @@ export function computePrimaryInputs(dg1Hash: string, sodHash: string, nonce: st
         FfiConverterArrayBuffer.lower(pubkey),
         FfiConverterArrayBuffer.lower(redcParam),
         FfiConverterUInt32.lower(exponent),
+        FfiConverterArrayBuffer.lower(dscTbs),
+        FfiConverterUInt32.lower(dscTbsLen),
+        FfiConverterUInt32.lower(dscPubkeyOffset),
+        FfiConverterArrayBuffer.lower(cscaPubkey),
+        FfiConverterArrayBuffer.lower(cscaRedcParam),
+        FfiConverterUInt32.lower(cscaExponent),
+        FfiConverterArrayBuffer.lower(cscaSignature),
+        FfiConverterArrayString.lower(cscaMerkleSiblings),
+        FfiConverterUInt32.lower(cscaLeafIndex),
         FfiConverterString.lower(hashedAddress),
         FfiConverterString.lower(passportExpiry),
+        FfiConverterString.lower(cscaMerkleRoot),
                 callStatus);
             },
             /*liftString:*/ FfiConverterString.lift,
     ));
     }
 /**
- * Compute the Barrett reduction parameter for RSA-2048.
+ * Compute the Barrett reduction parameter for an RSA modulus.
  *
- * `redc_param = floor(2^(2*2048+6) / modulus)`
+ * Supports both RSA-2048 (256 bytes) and RSA-4096 (512 bytes).
  *
- * This is needed by noir-bignum for modular arithmetic inside the circuit.
- * Returns 257 bytes (big-endian).
+ * `redc_param = floor(2^(2*bits + 4) / modulus)`
+ *
+ * Returns N+1 bytes (big-endian): 257 bytes for 2048-bit, 513 bytes for 4096-bit.
  */
 export function computeRedcParam(modulusBytes: ArrayBuffer): ArrayBuffer /*throws*/ {
     return FfiConverterArrayBuffer.lift(
@@ -524,39 +551,21 @@ const FfiConverterArrayString = new FfiConverterArray(FfiConverterString);
 function uniffiEnsureInitialized() {
     // Get the bindings contract version from our ComponentInterface
     const bindingsContractVersion = 29;
-    // DEBUG: dump native module state
-    const nm = nativeModule();
-    console.log('[UNIFFI-DEBUG] nativeModule() type:', typeof nm);
-    console.log('[UNIFFI-DEBUG] nativeModule() value:', nm);
-    if (nm) {
-        try {
-            const cv = nm.ubrn_ffi_zkpassport_circuits_uniffi_contract_version;
-            console.log('[UNIFFI-DEBUG] contract_version prop type:', typeof cv);
-            const cvResult = typeof cv === 'function' ? cv() : cv;
-            console.log('[UNIFFI-DEBUG] contract_version result:', cvResult);
-        } catch (e) { console.error('[UNIFFI-DEBUG] contract_version error:', e); }
-        try {
-            const cs = nm.ubrn_uniffi_zkpassport_circuits_checksum_func_compute_base_inputs;
-            console.log('[UNIFFI-DEBUG] checksum prop type:', typeof cs);
-            const csResult = typeof cs === 'function' ? cs() : cs;
-            console.log('[UNIFFI-DEBUG] checksum result:', csResult, 'expected:', 58122, 'match:', csResult === 58122);
-        } catch (e) { console.error('[UNIFFI-DEBUG] checksum call error:', e); }
-    }
     // Get the scaffolding contract version by calling the into the dylib
     const scaffoldingContractVersion = nativeModule().ubrn_ffi_zkpassport_circuits_uniffi_contract_version();
     if (bindingsContractVersion !== scaffoldingContractVersion) {
         throw new UniffiInternalError.ContractVersionMismatch(scaffoldingContractVersion, bindingsContractVersion);
     }
-    if (nativeModule().ubrn_uniffi_zkpassport_circuits_checksum_func_compute_base_inputs() !== 58122) {
+    if (nativeModule().ubrn_uniffi_zkpassport_circuits_checksum_func_compute_base_inputs() !== 50350) {
         throw new UniffiInternalError.ApiChecksumMismatch("uniffi_zkpassport_circuits_checksum_func_compute_base_inputs");
     }
     if (nativeModule().ubrn_uniffi_zkpassport_circuits_checksum_func_compute_nullifier() !== 14563) {
         throw new UniffiInternalError.ApiChecksumMismatch("uniffi_zkpassport_circuits_checksum_func_compute_nullifier");
     }
-    if (nativeModule().ubrn_uniffi_zkpassport_circuits_checksum_func_compute_primary_inputs() !== 62726) {
+    if (nativeModule().ubrn_uniffi_zkpassport_circuits_checksum_func_compute_primary_inputs() !== 15914) {
         throw new UniffiInternalError.ApiChecksumMismatch("uniffi_zkpassport_circuits_checksum_func_compute_primary_inputs");
     }
-    if (nativeModule().ubrn_uniffi_zkpassport_circuits_checksum_func_compute_redc_param() !== 52334) {
+    if (nativeModule().ubrn_uniffi_zkpassport_circuits_checksum_func_compute_redc_param() !== 62253) {
         throw new UniffiInternalError.ApiChecksumMismatch("uniffi_zkpassport_circuits_checksum_func_compute_redc_param");
     }
     if (nativeModule().ubrn_uniffi_zkpassport_circuits_checksum_func_generate_noir_proof() !== 9753) {
@@ -576,6 +585,5 @@ export default Object.freeze({
   converters: {
     FfiConverterTypeBaseInputs,
     FfiConverterTypePrimaryInputs,
-    FfiConverterTypeMoproError,
   }
 });

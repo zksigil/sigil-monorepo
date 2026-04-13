@@ -17,11 +17,9 @@
  *       }
  *     }
  *   }
- *
- * Key gotcha (RFC 5652 Section 5.4): signedAttrs in the original encoding
- * uses IMPLICIT [0] tag (0xA0). For signature verification, this must be
- * re-encoded with EXPLICIT SET tag (0x31) before hashing.
  */
+
+import { sha256 } from '@noble/hashes/sha256';
 
 // ---------------------------------------------------------------------------
 // Public types
@@ -58,6 +56,15 @@ const SIGNED_DATA_OID = [0x2a, 0x86, 0x48, 0x86, 0xf7, 0x0d, 0x01, 0x07, 0x02];
 
 // OID for rsaEncryption: 1.2.840.113549.1.1.1
 const RSA_ENCRYPTION_OID = [0x2a, 0x86, 0x48, 0x86, 0xf7, 0x0d, 0x01, 0x01, 0x01];
+
+// OID for Authority Key Identifier: 2.5.29.35
+const AKI_OID = [0x55, 0x1d, 0x23];
+
+// OID for Subject Key Identifier: 2.5.29.14
+const SKI_OID = [0x55, 0x1d, 0x0e];
+
+// Tag for extensions wrapper in TBSCertificate
+const TAG_CONTEXT_3 = 0xa3;
 
 // ---------------------------------------------------------------------------
 // Main parser
@@ -507,14 +514,19 @@ export interface ParsedCert {
   exponent: number | null;
   subject: Uint8Array | null;
   issuer: Uint8Array | null;
+  /** Authority Key Identifier (from AKI extension, OID 2.5.29.35). */
+  authorityKeyId: string | null;
+  /** Subject Key Identifier (from SKI extension, OID 2.5.29.14). */
+  subjectKeyId: string | null;
 }
 
 export interface ChainVerificationResult {
   valid: boolean;
   dscModulusHex: string;
   cscaModulusHex: string | null;
+  cscaExponent: number | null;
   cscaName: string | null;
-  cscaSource: 'in_sod_chain' | 'issuer_dn_match' | 'not_found';
+  cscaSource: 'aki_ski_match' | 'country_trial_verify' | 'not_found';
   error: string | null;
 }
 
@@ -525,6 +537,8 @@ function parseCertificate(derBytes: Uint8Array): ParsedCert | null {
     const tbs = readTagLength(derBytes, cert.contentStart);
     if (tbs.tag !== TAG_SEQUENCE) return null;
     let c = tbs.contentStart;
+
+    // version [0] EXPLICIT (optional)
     if (derBytes[c]! === TAG_CONTEXT_0) { const v = readTagLength(derBytes, c); c = v.end; }
     const serial = readTagLength(derBytes, c); c = serial.end;
     const sigAlg = readTagLength(derBytes, c);
@@ -550,25 +564,115 @@ function parseCertificate(derBytes: Uint8Array): ParsedCert | null {
       exponent = pubkey.exponent;
     } catch { /* not RSA */ }
 
-    // Extract the signature value from after the SPKI
-    const sigTlv = readTagLength(derBytes, c);
+    // Parse optional fields after SPKI within TBS:
+    //   issuerUniqueID  [1] IMPLICIT (optional)
+    //   subjectUniqueID [2] IMPLICIT (optional)
+    //   extensions      [3] EXPLICIT (optional)
+    let authorityKeyId: string | null = null;
+    let subjectKeyId: string | null = null;
+
+    while (c < tbs.end) {
+      const field = readTagLength(derBytes, c);
+      if (field.tag === TAG_CONTEXT_3) {
+        // extensions [3] EXPLICIT { SEQUENCE OF Extension }
+        const exts = parseExtensions(derBytes, field);
+        authorityKeyId = exts.authorityKeyId;
+        subjectKeyId = exts.subjectKeyId;
+      }
+      c = field.end;
+    }
+
+    // Signature is at the cert level, after TBS ends
+    // cert SEQUENCE { TBS, signatureAlgorithm, signatureValue }
+    let certC = tbs.end;
+    const certSigAlg = readTagLength(derBytes, certC); certC = certSigAlg.end; // skip signatureAlgorithm
+    const sigTlv = readTagLength(derBytes, certC);
     const signatureBytes = sigTlv.tag === TAG_BIT_STRING
       ? derBytes.slice(sigTlv.contentStart + 1, sigTlv.end) // skip unused-bits byte
       : derBytes.slice(sigTlv.contentStart, sigTlv.end);
 
     return {
       raw: derBytes,
-      tbsBytes: derBytes.slice(tbs.contentStart, tbs.end),
+      // Full DER-encoded TBS including SEQUENCE tag + length (this is what the CSCA signs)
+      tbsBytes: derBytes.slice(cert.contentStart, tbs.end),
       signatureBytes,
       sigAlgOid: sigAlgOidHex,
       modulus,
       exponent,
       subject: subjectBytes,
       issuer: issuerBytes,
+      authorityKeyId,
+      subjectKeyId,
     };
   } catch {
     return null;
   }
+}
+
+/**
+ * Parse X.509v3 extensions from a [3] EXPLICIT wrapper.
+ * Extracts AKI (2.5.29.35) and SKI (2.5.29.14).
+ */
+function parseExtensions(
+  data: Uint8Array,
+  ctx3: TLV,
+): { authorityKeyId: string | null; subjectKeyId: string | null } {
+  let authorityKeyId: string | null = null;
+  let subjectKeyId: string | null = null;
+
+  // [3] EXPLICIT wraps a SEQUENCE of Extension
+  const extSeq = readTagLength(data, ctx3.contentStart);
+  if (extSeq.tag !== TAG_SEQUENCE) return { authorityKeyId, subjectKeyId };
+
+  let c = extSeq.contentStart;
+  while (c < extSeq.end) {
+    // Each Extension is SEQUENCE { OID, BOOLEAN (optional critical), OCTET STRING (value) }
+    const ext = readTagLength(data, c);
+    if (ext.tag !== TAG_SEQUENCE) { c = ext.end; continue; }
+
+    const oid = readTagLength(data, ext.contentStart);
+    if (oid.tag !== TAG_OID) { c = ext.end; continue; }
+    const oidBytes = data.slice(oid.contentStart, oid.contentStart + oid.length);
+
+    // Find the OCTET STRING value (skip optional BOOLEAN critical flag)
+    let vc = oid.end;
+    if (vc < ext.end && data[vc]! === 0x01) {
+      // BOOLEAN critical — skip it
+      const boolTlv = readTagLength(data, vc); vc = boolTlv.end;
+    }
+    if (vc >= ext.end) { c = ext.end; continue; }
+    const valueTlv = readTagLength(data, vc);
+    if (valueTlv.tag !== TAG_OCTET_STRING) { c = ext.end; continue; }
+
+    if (arraysEqual(Array.from(oidBytes), SKI_OID)) {
+      // SKI value is OCTET STRING { OCTET STRING { keyIdentifier } }
+      // The outer OCTET STRING is the extension value wrapper.
+      // Inside is another OCTET STRING containing the raw key ID bytes.
+      const inner = readTagLength(data, valueTlv.contentStart);
+      if (inner.tag === TAG_OCTET_STRING) {
+        subjectKeyId = bytesToHex(data.slice(inner.contentStart, inner.contentStart + inner.length));
+      }
+    } else if (arraysEqual(Array.from(oidBytes), AKI_OID)) {
+      // AKI value is OCTET STRING { SEQUENCE { [0] IMPLICIT keyIdentifier } }
+      const inner = readTagLength(data, valueTlv.contentStart);
+      if (inner.tag === TAG_SEQUENCE) {
+        // Look for [0] IMPLICIT (tag 0x80) — the keyIdentifier field
+        let ac = inner.contentStart;
+        while (ac < inner.end) {
+          const field = readTagLength(data, ac);
+          if (field.tag === 0x80) {
+            authorityKeyId = bytesToHex(data.slice(field.contentStart, field.contentStart + field.length));
+            break;
+          }
+          ac = field.end;
+        }
+      }
+    }
+
+    c = ext.end;
+  }
+
+  return { authorityKeyId, subjectKeyId };
 }
 
 interface CSCAEntry {
@@ -576,16 +680,24 @@ interface CSCAEntry {
   exponent: number;
   common_name: string | null;
   country: string | null;
+  ski: string | null;
 }
 
 let _cscaByModulus: Map<string, CSCAEntry> | null = null;
+let _cscaBySKI: Map<string, CSCAEntry> | null = null;
 let _cscasByCountry: Map<string, CSCAEntry[]> | null = null;
+let _cachedCscaEntries: CSCAEntry[] | null = null;
+
+function loadCscaEntries(): CSCAEntry[] {
+  if (_cachedCscaEntries) return _cachedCscaEntries;
+  _cachedCscaEntries = require('../../../assets/certs/cscas.json') as CSCAEntry[];
+  return _cachedCscaEntries;
+}
 
 function getCscaByModulus(): Map<string, CSCAEntry> {
   if (!_cscaByModulus) {
     _cscaByModulus = new Map();
-    const raw = require('../../../../../certs/cscas.json');
-    for (const e of (raw as CSCAEntry[])) {
+    for (const e of loadCscaEntries()) {
       _cscaByModulus!.set(e.modulus_hex.toLowerCase(), e);
     }
   }
@@ -593,14 +705,30 @@ function getCscaByModulus(): Map<string, CSCAEntry> {
 }
 
 /**
- * Get CSCAs grouped by country code. Used to filter candidates
- * when verifying DSC signatures (much faster than trying all 269).
+ * Get CSCAs indexed by Subject Key Identifier (SKI).
+ * Used for O(1) lookup when matching DSC's AKI to CSCA's SKI.
+ */
+function getCscaBySKI(): Map<string, CSCAEntry> {
+  if (!_cscaBySKI) {
+    _cscaBySKI = new Map();
+    for (const e of loadCscaEntries()) {
+      if (e.ski) {
+        _cscaBySKI!.set(e.ski.toLowerCase(), e);
+      }
+    }
+    console.log(`[CHAIN] Indexed ${_cscaBySKI.size} CSCAs by SKI`);
+  }
+  return _cscaBySKI;
+}
+
+/**
+ * Get CSCAs grouped by country code. Used as fallback when AKI/SKI
+ * matching fails (much faster than trying all 269).
  */
 function getCscasByCountry(): Map<string, CSCAEntry[]> {
   if (!_cscasByCountry) {
     _cscasByCountry = new Map();
-    const raw = require('../../../../../certs/cscas.json');
-    for (const e of (raw as CSCAEntry[])) {
+    for (const e of loadCscaEntries()) {
       const cc = e.country || '??';
       if (!_cscasByCountry!.has(cc)) _cscasByCountry!.set(cc, []);
       _cscasByCountry!.get(cc)!.push(e);
@@ -641,32 +769,42 @@ function extractCountryCodeFromDN(derBytes: Uint8Array): string | null {
  * Build a DER-encoded SubjectPublicKeyInfo for an RSA public key.
  * Needed to import the key into Web Crypto for signature verification.
  */
+/** Encode a DER length (handles lengths > 127 with multi-byte encoding). */
+function derEncodeLength(length: number): Uint8Array {
+  if (length < 0x80) return new Uint8Array([length]);
+  if (length < 0x100) return new Uint8Array([0x81, length]);
+  return new Uint8Array([0x82, (length >> 8) & 0xff, length & 0xff]);
+}
+
+/** Wrap content bytes in a DER TLV (tag + length + content). */
+function derWrap(tag: number, content: Uint8Array): Uint8Array {
+  const len = derEncodeLength(content.length);
+  return concatUint8Arrays([new Uint8Array([tag]), len, content]);
+}
+
 function buildSPKIForRSA(modulus: Uint8Array, exponent: number): ArrayBuffer {
   // OID: 1.2.840.113549.1.1.1 (rsaEncryption)
   const rsaOid = new Uint8Array([0x06, 0x09, 0x2a, 0x86, 0x48, 0x86, 0xf7, 0x0d, 0x01, 0x01, 0x01]);
   const nullParam = new Uint8Array([0x05, 0x00]);
-  const algId = concatUint8Arrays([rsaOid, nullParam]);
-  const algIdTlv = new Uint8Array([TAG_SEQUENCE, algId.length, ...algId]);
+  const algIdTlv = derWrap(TAG_SEQUENCE, concatUint8Arrays([rsaOid, nullParam]));
 
   // RSAPublicKey SEQUENCE: SEQUENCE { INTEGER modulus, INTEGER exponent }
   let modBytes = modulus;
   if (modBytes[0]! >= 0x80) modBytes = concatUint8Arrays([new Uint8Array([0x00]), modBytes]);
-  const modInt = new Uint8Array([TAG_INTEGER, modBytes.length, ...modBytes]);
+  const modInt = derWrap(TAG_INTEGER, modBytes);
 
   let expVal = exponent;
   const expBytesArr: number[] = [];
   do { expBytesArr.unshift(expVal & 0xff); expVal = expVal >> 8; } while (expVal > 0);
   if (expBytesArr[0]! >= 0x80) expBytesArr.unshift(0);
-  const expInt = new Uint8Array([TAG_INTEGER, expBytesArr.length, ...expBytesArr]);
+  const expInt = derWrap(TAG_INTEGER, new Uint8Array(expBytesArr));
 
-  const rsaPubKey = concatUint8Arrays([modInt, expInt]);
-  const rsaPubKeyTlv = new Uint8Array([TAG_SEQUENCE, rsaPubKey.length, ...rsaPubKey]);
+  const rsaPubKeyTlv = derWrap(TAG_SEQUENCE, concatUint8Arrays([modInt, expInt]));
 
-  // BIT STRING wrapping the RSAPublicKey
-  const bitString = new Uint8Array([TAG_BIT_STRING, rsaPubKeyTlv.length + 1, 0x00, ...rsaPubKeyTlv]);
+  // BIT STRING wrapping the RSAPublicKey (0x00 unused-bits prefix)
+  const bitString = derWrap(TAG_BIT_STRING, concatUint8Arrays([new Uint8Array([0x00]), rsaPubKeyTlv]));
 
-  const spkiBytes = concatUint8Arrays([algIdTlv, bitString]);
-  const spkiTlv = new Uint8Array([TAG_SEQUENCE, spkiBytes.length, ...spkiBytes]);
+  const spkiTlv = derWrap(TAG_SEQUENCE, concatUint8Arrays([algIdTlv, bitString]));
   return spkiTlv.buffer as ArrayBuffer;
 }
 
@@ -679,13 +817,12 @@ function concatUint8Arrays(arrays: Uint8Array[]): Uint8Array {
 }
 
 /**
- * Verify the DSC cert chains to a known CSCA using actual RSA signature verification.
+ * Verify the DSC cert chains to a known CSCA.
  *
- * 1. Check all certs in SOD chain — is any a known CSCA (exact pubkey match)?
- * 2. Parse DSC issuer DN to extract country code
- * 3. Filter CSCAs by country (usually 1-10 candidates instead of 269)
- * 4. Verify DSC signature against each candidate CSCA pubkey
- * 5. The one that verifies is the correct issuing CSCA
+ * 1. Parse DSC cert and extract its Authority Key Identifier (AKI)
+ * 2. Look up the CSCA by matching AKI to Subject Key Identifier (SKI) — O(1)
+ * 3. Verify the DSC signature against the matched CSCA (confirmation, not search)
+ * 4. Fallback: if AKI/SKI not available, filter by country code and trial-verify
  */
 export async function verifyDSCChain(
   dscPubkeyModulus: Uint8Array,
@@ -694,66 +831,233 @@ export async function verifyDSCChain(
 ): Promise<ChainVerificationResult> {
   const dscHex = bytesToHex(dscPubkeyModulus);
 
-  // Step 1: Check all certs in SOD chain — is any a known CSCA (exact pubkey match)?
-  for (const certDer of sodCerts) {
-    const parsed = parseCertificate(certDer);
-    if (parsed?.modulus) {
-      const modHex = bytesToHex(parsed.modulus);
-      const entry = getCscaByModulus().get(modHex);
-      if (entry) {
-        console.log('[CHAIN] Found CSCA in SOD chain:', entry.common_name);
-        return { valid: true, dscModulusHex: dscHex, cscaModulusHex: modHex, cscaName: entry.common_name, cscaSource: 'in_sod_chain', error: null };
-      }
-    }
-  }
-
-  // Step 2: Parse DSC cert and verify its signature against candidate CSCAs
+  // Step 1: Parse the DSC certificate
   const dscParsed = sodCerts.length > 0 ? parseCertificate(sodCerts[0]!) : null;
   if (!dscParsed?.tbsBytes || !dscParsed.signatureBytes || !dscParsed.sigAlgOid) {
-    return { valid: false, dscModulusHex: dscHex, cscaModulusHex: null, cscaName: null, cscaSource: 'not_found', error: 'Could not parse DSC cert fields' };
+    return { valid: false, dscModulusHex: dscHex, cscaModulusHex: null, cscaExponent: null, cscaName: null, cscaSource: 'not_found', error: 'Could not parse DSC cert fields' };
   }
 
-  // Map signature algorithm OID to Web Crypto algorithm
   const sigAlg = oidToHashAlgo(dscParsed.sigAlgOid);
   if (!sigAlg) {
-    return { valid: false, dscModulusHex: dscHex, cscaModulusHex: null, cscaName: null, cscaSource: 'not_found', error: `Unsupported DSC sig alg: ${dscParsed.sigAlgOid}` };
+    return { valid: false, dscModulusHex: dscHex, cscaModulusHex: null, cscaExponent: null, cscaName: null, cscaSource: 'not_found', error: `Unsupported DSC sig alg: ${dscParsed.sigAlgOid}` };
   }
 
-  // Step 3: Extract country code from DSC issuer DN and filter CSCAs
+  const sig = toArrayBuffer(dscParsed.signatureBytes);
+  const tbs = toArrayBuffer(dscParsed.tbsBytes);
+
+  // Step 2: AKI -> SKI lookup (primary path, O(1))
+  if (dscParsed.authorityKeyId) {
+    console.log(`[CHAIN-DBG] DSC AKI: ${dscParsed.authorityKeyId}`);
+    console.log(`[CHAIN-DBG] sigAlg: ${sigAlg}`);
+    const entry = getCscaBySKI().get(dscParsed.authorityKeyId.toLowerCase());
+    if (entry) {
+      console.log(`[CHAIN] AKI->SKI match: ${entry.common_name || '(null)'}`);
+      console.log(`[CHAIN-DBG] CSCA modulus_hex (first 16): ${entry.modulus_hex.slice(0, 16)}`);
+      console.log(`[CHAIN-DBG] CSCA exponent: ${entry.exponent}`);
+      // Step 3: Confirm with RSA signature verification
+      const verified = await verifyDSCSignatureWithCSCA(sig, tbs, sigAlg, entry);
+      if (verified) {
+        console.log('[CHAIN] DSC signature verified with AKI-matched CSCA');
+        return { valid: true, dscModulusHex: dscHex, cscaModulusHex: entry.modulus_hex, cscaExponent: entry.exponent, cscaName: entry.common_name, cscaSource: 'aki_ski_match', error: null };
+      }
+      console.warn('[CHAIN-DBG] AKI->SKI matched but signature verification FAILED');
+      console.warn('[CHAIN] AKI->SKI matched but signature verification failed — falling back to trial verify');
+    } else {
+      console.log(`[CHAIN] DSC AKI ${dscParsed.authorityKeyId.slice(0, 16)}... not found in CSCA SKI index`);
+    }
+  } else {
+    console.log('[CHAIN] DSC has no AKI extension — falling back to country-based trial verify');
+  }
+
+  // Step 4: Fallback — filter by country code and trial-verify
   const countryCode = dscParsed.issuer ? extractCountryCodeFromDN(dscParsed.issuer) : null;
   const candidates = countryCode ? (getCscasByCountry().get(countryCode) || []) : [];
   const toTry = candidates.length > 0 ? candidates : Array.from(getCscaByModulus().values());
 
-  console.log(`[CHAIN] DSC issuer country: ${countryCode || 'unknown'}, candidates: ${toTry.length}`);
-
-  // Step 4: Try verifying DSC signature against each candidate CSCA
-  const sig = dscParsed.signatureBytes.buffer.slice(
-    dscParsed.signatureBytes.byteOffset,
-    dscParsed.signatureBytes.byteOffset + dscParsed.signatureBytes.byteLength,
-  ) as ArrayBuffer;
-  const tbs = dscParsed.tbsBytes.buffer.slice(
-    dscParsed.tbsBytes.byteOffset,
-    dscParsed.tbsBytes.byteOffset + dscParsed.tbsBytes.byteLength,
-  ) as ArrayBuffer;
+  console.log(`[CHAIN] Fallback: DSC issuer country: ${countryCode || 'unknown'}, candidates: ${toTry.length}`);
 
   for (const entry of toTry) {
-    try {
-      const spki = buildSPKIForRSA(hexToBytes(entry.modulus_hex), entry.exponent);
-      const cryptoKey = await crypto.subtle.importKey(
-        'spki', spki, { name: 'RSASSA-PKCS1-v1_5', hash: sigAlg }, false, ['verify'],
-      );
-      const valid = await crypto.subtle.verify(
-        'RSASSA-PKCS1-v1_5', cryptoKey, sig, tbs,
-      );
-      if (valid) {
-        console.log('[CHAIN] DSC signature verified with CSCA:', entry.common_name);
-        return { valid: true, dscModulusHex: dscHex, cscaModulusHex: entry.modulus_hex, cscaName: entry.common_name, cscaSource: 'issuer_dn_match', error: null };
-      }
-    } catch { /* not this CSCA */ }
+    const verified = await verifyDSCSignatureWithCSCA(sig, tbs, sigAlg, entry);
+    if (verified) {
+      console.log('[CHAIN] DSC signature verified with CSCA (trial):', entry.common_name);
+      return { valid: true, dscModulusHex: dscHex, cscaModulusHex: entry.modulus_hex, cscaExponent: entry.exponent, cscaName: entry.common_name, cscaSource: 'country_trial_verify', error: null };
+    }
   }
 
   console.log('[CHAIN] No CSCA verified DSC signature. DSC:', dscHex.slice(0, 16), '...');
-  return { valid: false, dscModulusHex: dscHex, cscaModulusHex: null, cscaName: null, cscaSource: 'not_found', error: 'DSC signature not verified by any known CSCA' };
+  return { valid: false, dscModulusHex: dscHex, cscaModulusHex: null, cscaExponent: null, cscaName: null, cscaSource: 'not_found', error: 'DSC signature not verified by any known CSCA' };
+}
+
+/** Verify a DSC's signature against a single CSCA candidate using BigInt RSA. */
+async function verifyDSCSignatureWithCSCA(
+  sig: ArrayBuffer,
+  tbs: ArrayBuffer,
+  hashAlg: string,
+  csca: CSCAEntry,
+): Promise<boolean> {
+  try {
+    if (hashAlg !== 'SHA-256') {
+      console.warn(`[CHAIN-DBG] Unsupported hash alg: ${hashAlg}`);
+      return false;
+    }
+    // Compute SHA-256 of TBS
+    const tbsHash = sha256(new Uint8Array(tbs));
+    const tbsHashHex = Array.from(tbsHash).map(b => b.toString(16).padStart(2, '0')).join('');
+    console.log(`[CHAIN-DBG] TBS SHA-256: ${tbsHashHex}`);
+
+    // RSA verify: sig^exponent mod modulus
+    const sigHex = Array.from(new Uint8Array(sig)).map(b => b.toString(16).padStart(2, '0')).join('');
+    const sigBigInt = BigInt('0x' + sigHex);
+    const modulusBigInt = BigInt('0x' + csca.modulus_hex);
+    const exponentBigInt = BigInt(csca.exponent);
+    const decryptedBigInt = modPowBigInt(sigBigInt, exponentBigInt, modulusBigInt);
+    const decryptedHex = bigIntToHex(decryptedBigInt, 256);
+    console.log(`[CHAIN-DBG] Decrypted sig (first 32): ${decryptedHex.slice(0, 32)}`);
+
+    // Parse PKCS#1 v1.5 DigestInfo
+    const digestInfoPrefix = '3031300d060960864801650304020105000420';
+    const digestInfoIndex = decryptedHex.indexOf(digestInfoPrefix);
+    if (digestInfoIndex === -1) {
+      console.warn(`[CHAIN-DBG] No PKCS#1 DigestInfo found in decrypted sig`);
+      return false;
+    }
+    const hashStart = digestInfoIndex + digestInfoPrefix.length;
+    const recoveredHash = decryptedHex.slice(hashStart, hashStart + 64);
+    console.log(`[CHAIN-DBG] Recovered hash: ${recoveredHash}`);
+    console.log(`[CHAIN-DBG] Match: ${recoveredHash === tbsHashHex ? 'YES' : 'NO'}`);
+    return recoveredHash === tbsHashHex;
+  } catch (e) {
+    console.warn(`[CHAIN-DBG] verifyDSCSignatureWithCSCA error: ${e instanceof Error ? e.message : String(e)}`);
+    return false;
+  }
+}
+
+/** Modular exponentiation: base^exp mod mod */
+function modPowBigInt(base: bigint, exp: bigint, mod: bigint): bigint {
+  let result = 1n;
+  base = base % mod;
+  while (exp > 0n) {
+    if (exp % 2n === 1n) {
+      result = (result * base) % mod;
+    }
+    exp = exp / 2n;
+    base = (base * base) % mod;
+  }
+  return result;
+}
+
+/** Convert a bigint to big-endian hex string of specified byte length */
+function bigIntToHex(value: bigint, length: number): string {
+  const hex = value.toString(16).padStart(length * 2, '0');
+  return hex.slice(-length * 2);
+}
+
+/** Convert a Uint8Array slice to a standalone ArrayBuffer. */
+function toArrayBuffer(bytes: Uint8Array): ArrayBuffer {
+  return bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer;
+}
+
+// ---------------------------------------------------------------------------
+// DSC chain data extraction (for ZK circuit inputs)
+// ---------------------------------------------------------------------------
+
+/**
+ * Data needed by the ZK circuit for CSCA->DSC chain verification.
+ */
+export interface DSCChainData {
+  /** Full DER-encoded TBSCertificate (including SEQUENCE tag + length). */
+  dscTbs: Uint8Array;
+  /** CSCA's RSA signature over the DSC TBS (raw bytes, no BIT STRING wrapper). */
+  dscSignature: Uint8Array;
+  /** Byte offset of the DSC RSA modulus within dscTbs. */
+  dscPubkeyOffset: number;
+  /** CSCA RSA modulus (up to 512 bytes for RSA-4096). */
+  cscaPubkey: Uint8Array;
+  /** CSCA RSA exponent. */
+  cscaExponent: number;
+}
+
+/**
+ * Extract the raw certificate chain data needed for the ZK circuit's
+ * in-circuit CSCA->DSC verification.
+ *
+ * @param dscCertDer Full DER-encoded DSC certificate bytes.
+ * @param cscaModulusHex CSCA RSA modulus as hex string (from verifyDSCChain result).
+ * @param cscaExponent CSCA RSA exponent.
+ * @returns DSCChainData or null if parsing fails.
+ */
+export function extractDSCChainData(
+  dscCertDer: Uint8Array,
+  cscaModulusHex: string,
+  cscaExponent: number,
+): DSCChainData | null {
+  try {
+    const cert = readTagLength(dscCertDer, 0);
+    if (cert.tag !== TAG_SEQUENCE) return null;
+
+    // TBS is the first element inside the cert SEQUENCE
+    const tbsTagOffset = cert.contentStart;
+    const tbs = readTagLength(dscCertDer, tbsTagOffset);
+    if (tbs.tag !== TAG_SEQUENCE) return null;
+
+    // Full TBS DER encoding = from the SEQUENCE tag to end of content
+    const dscTbs = dscCertDer.slice(tbsTagOffset, tbs.end);
+
+    // Navigate through TBS fields to find SubjectPublicKeyInfo
+    let c = tbs.contentStart;
+    // version [0] EXPLICIT (optional)
+    if (dscCertDer[c] === TAG_CONTEXT_0) { const v = readTagLength(dscCertDer, c); c = v.end; }
+    const serial = readTagLength(dscCertDer, c); c = serial.end;   // serialNumber
+    const sigAlgInner = readTagLength(dscCertDer, c); c = sigAlgInner.end; // signature
+    const issuer = readTagLength(dscCertDer, c); c = issuer.end;   // issuer
+    const validity = readTagLength(dscCertDer, c); c = validity.end; // validity
+    const subject = readTagLength(dscCertDer, c); c = subject.end; // subject
+    const spki = readTagLength(dscCertDer, c);                     // subjectPublicKeyInfo
+
+    // Drill into SPKI to find the modulus byte offset
+    const algId = readTagLength(dscCertDer, spki.contentStart);
+    const bitString = readTagLength(dscCertDer, algId.end);
+    if (bitString.tag !== TAG_BIT_STRING) return null;
+    // BIT STRING: skip unused-bits byte (0x00)
+    const rsaPubKeyStart = bitString.contentStart + 1;
+    const rsaPubKey = readTagLength(dscCertDer, rsaPubKeyStart);
+    const modInt = readTagLength(dscCertDer, rsaPubKey.contentStart);
+    if (modInt.tag !== TAG_INTEGER) return null;
+
+    // Modulus INTEGER may have a leading zero byte (DER encoding for positive numbers)
+    let modulusStart = modInt.contentStart;
+    if (dscCertDer[modulusStart] === 0x00 && modInt.length > 1) {
+      modulusStart += 1;
+    }
+
+    // Offset relative to start of TBS DER
+    const dscPubkeyOffset = modulusStart - tbsTagOffset;
+
+    // Extract the cert's signature (= CSCA's signature over this TBS)
+    // After TBS comes: signatureAlgorithm SEQUENCE, then signatureValue BIT STRING
+    const sigAlgAfterTbs = readTagLength(dscCertDer, tbs.end);
+    const sigValue = readTagLength(dscCertDer, sigAlgAfterTbs.end);
+    let dscSignature: Uint8Array;
+    if (sigValue.tag === TAG_BIT_STRING) {
+      // Skip the unused-bits byte
+      dscSignature = dscCertDer.slice(sigValue.contentStart + 1, sigValue.end);
+    } else {
+      dscSignature = dscCertDer.slice(sigValue.contentStart, sigValue.end);
+    }
+
+    const cscaPubkey = hexToBytes(cscaModulusHex);
+
+    return {
+      dscTbs,
+      dscSignature,
+      dscPubkeyOffset,
+      cscaPubkey,
+      cscaExponent,
+    };
+  } catch (e) {
+    console.error('[CHAIN] extractDSCChainData failed:', e);
+    return null;
+  }
 }
 
 /**

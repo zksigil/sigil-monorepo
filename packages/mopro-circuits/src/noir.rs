@@ -124,10 +124,12 @@ pub fn verify_noir_proof(
 /// Returns `BaseInputs` containing the full ordered flat array (private then public)
 /// ready to pass to `generate_noir_proof`, plus the computed `epoch_nullifier`.
 ///
-/// Input order in circuit ABI (Phase 3c with RSA + CSCA Merkle tree):
+/// Input order in circuit ABI (Phase 3c with full CSCA->DSC chain verification):
 ///   private: dg1_hash, sod_hash, epoch_day,
 ///            signed_attrs[512], signed_attrs_len, signature[256],
 ///            pubkey[256], redc_param[257], exponent,
+///            dsc_tbs[1536], dsc_tbs_len, dsc_pubkey_offset,
+///            csca_pubkey[512], csca_redc_param[513], csca_exponent, csca_signature[512],
 ///            csca_merkle_siblings[12], csca_leaf_index
 ///   public:  epoch_nullifier, hashed_address, passport_expiry, csca_merkle_root
 #[uniffi::export]
@@ -141,6 +143,13 @@ pub fn compute_base_inputs(
     pubkey: Vec<u8>,
     redc_param: Vec<u8>,
     exponent: u32,
+    dsc_tbs: Vec<u8>,
+    dsc_tbs_len: u32,
+    dsc_pubkey_offset: u32,
+    csca_pubkey: Vec<u8>,
+    csca_redc_param: Vec<u8>,
+    csca_exponent: u32,
+    csca_signature: Vec<u8>,
     csca_merkle_siblings: Vec<String>,
     csca_leaf_index: u32,
     hashed_address: String,
@@ -163,13 +172,22 @@ pub fn compute_base_inputs(
     inputs.push(sod_hash);
     inputs.push(epoch_day);
 
-    // RSA byte arrays (each byte becomes a decimal string)
+    // SOD RSA-2048 verification inputs
     for &b in &signed_attrs { inputs.push(b.to_string()); }
     inputs.push(signed_attrs_len.to_string());
     for &b in &signature { inputs.push(b.to_string()); }
     for &b in &pubkey { inputs.push(b.to_string()); }
     for &b in &redc_param { inputs.push(b.to_string()); }
     inputs.push(exponent.to_string());
+
+    // CSCA->DSC chain verification inputs (RSA-4096)
+    for &b in &dsc_tbs { inputs.push(b.to_string()); }
+    inputs.push(dsc_tbs_len.to_string());
+    inputs.push(dsc_pubkey_offset.to_string());
+    for &b in &csca_pubkey { inputs.push(b.to_string()); }
+    for &b in &csca_redc_param { inputs.push(b.to_string()); }
+    inputs.push(csca_exponent.to_string());
+    for &b in &csca_signature { inputs.push(b.to_string()); }
 
     // CSCA Merkle proof (12 siblings + leaf index)
     for sibling in &csca_merkle_siblings { inputs.push(sibling.clone()); }
@@ -189,10 +207,12 @@ pub fn compute_base_inputs(
 /// Returns `PrimaryInputs` with the full ordered flat array plus `nullifier` and
 /// `next_commitment` as decimal strings for on-chain use.
 ///
-/// Input order in circuit ABI (Phase 3c with RSA + CSCA Merkle tree):
+/// Input order in circuit ABI (Phase 3c with full CSCA->DSC chain verification):
 ///   private: dg1_hash, sod_hash, nonce,
 ///            signed_attrs[512], signed_attrs_len, signature[256],
 ///            pubkey[256], redc_param[257], exponent,
+///            dsc_tbs[1536], dsc_tbs_len, dsc_pubkey_offset,
+///            csca_pubkey[512], csca_redc_param[513], csca_exponent, csca_signature[512],
 ///            csca_merkle_siblings[12], csca_leaf_index
 ///   public:  nullifier, next_commitment, hashed_address, passport_expiry, csca_merkle_root
 #[uniffi::export]
@@ -206,6 +226,13 @@ pub fn compute_primary_inputs(
     pubkey: Vec<u8>,
     redc_param: Vec<u8>,
     exponent: u32,
+    dsc_tbs: Vec<u8>,
+    dsc_tbs_len: u32,
+    dsc_pubkey_offset: u32,
+    csca_pubkey: Vec<u8>,
+    csca_redc_param: Vec<u8>,
+    csca_exponent: u32,
+    csca_signature: Vec<u8>,
     csca_merkle_siblings: Vec<String>,
     csca_leaf_index: u32,
     hashed_address: String,
@@ -236,13 +263,22 @@ pub fn compute_primary_inputs(
     inputs.push(sod_hash);
     inputs.push(nonce);
 
-    // RSA byte arrays
+    // SOD RSA-2048 verification inputs
     for &b in &signed_attrs { inputs.push(b.to_string()); }
     inputs.push(signed_attrs_len.to_string());
     for &b in &signature { inputs.push(b.to_string()); }
     for &b in &pubkey { inputs.push(b.to_string()); }
     for &b in &redc_param { inputs.push(b.to_string()); }
     inputs.push(exponent.to_string());
+
+    // CSCA->DSC chain verification inputs (RSA-4096)
+    for &b in &dsc_tbs { inputs.push(b.to_string()); }
+    inputs.push(dsc_tbs_len.to_string());
+    inputs.push(dsc_pubkey_offset.to_string());
+    for &b in &csca_pubkey { inputs.push(b.to_string()); }
+    for &b in &csca_redc_param { inputs.push(b.to_string()); }
+    inputs.push(csca_exponent.to_string());
+    for &b in &csca_signature { inputs.push(b.to_string()); }
 
     // CSCA Merkle proof (12 siblings + leaf index)
     for sibling in &csca_merkle_siblings { inputs.push(sibling.clone()); }
@@ -282,41 +318,42 @@ pub fn compute_nullifier(
     Ok(field_to_decimal(nullifier))
 }
 
-/// Compute the Barrett reduction parameter for RSA-2048.
+/// Compute the Barrett reduction parameter for an RSA modulus.
 ///
-/// `redc_param = floor(2^(2*2048+6) / modulus)`
+/// Supports both RSA-2048 (256 bytes) and RSA-4096 (512 bytes).
 ///
-/// This is needed by noir-bignum for modular arithmetic inside the circuit.
-/// Returns 257 bytes (big-endian).
+/// `redc_param = floor(2^(2*bits + 4) / modulus)`
+///
+/// Returns N+1 bytes (big-endian): 257 bytes for 2048-bit, 513 bytes for 4096-bit.
 #[uniffi::export]
 pub fn compute_redc_param(modulus_bytes: Vec<u8>) -> Result<Vec<u8>, MoproError> {
-    if modulus_bytes.len() != 256 {
-        return Err(MoproError::NoirError(format!(
-            "Expected 256-byte RSA-2048 modulus, got {} bytes",
-            modulus_bytes.len()
-        )));
-    }
+    let (bits, out_len) = match modulus_bytes.len() {
+        256 => (2048u32, 257usize),
+        512 => (4096u32, 513usize),
+        n => return Err(MoproError::NoirError(format!(
+            "Expected 256-byte (RSA-2048) or 512-byte (RSA-4096) modulus, got {n} bytes",
+        ))),
+    };
 
     let modulus = BigUint::from_bytes_be(&modulus_bytes);
     if modulus.bits() == 0 {
         return Err(MoproError::NoirError("Modulus is zero".into()));
     }
 
-    // 2^(2*2048 + 4) = 2^4100  (Barrett reduction parameter for 2048-bit modulus)
-    let numerator = BigUint::from(1u32) << 4100u32;
+    // Barrett reduction: 2^(2*bits + 4) / modulus
+    let numerator = BigUint::from(1u32) << (2 * bits + 4);
     let redc = &numerator / &modulus;
 
-    // Convert to 257-byte big-endian, zero-padded on the left
     let bytes = redc.to_bytes_be();
-    if bytes.len() > 257 {
+    if bytes.len() > out_len {
         return Err(MoproError::NoirError(format!(
-            "redc_param is {} bytes, expected <= 257",
+            "redc_param is {} bytes, expected <= {out_len}",
             bytes.len()
         )));
     }
 
-    let mut result = vec![0u8; 257];
-    let offset = 257 - bytes.len();
+    let mut result = vec![0u8; out_len];
+    let offset = out_len - bytes.len();
     result[offset..].copy_from_slice(&bytes);
     Ok(result)
 }

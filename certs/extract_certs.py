@@ -14,6 +14,7 @@ from pathlib import Path
 
 from cryptography import x509
 from cryptography.hazmat.primitives.serialization import Encoding
+from cryptography.x509.oid import ExtensionOID
 
 
 def extract_csca_certs(ml_path: str, output_dir: str):
@@ -64,6 +65,16 @@ def extract_csca_certs(ml_path: str, output_dir: str):
             x509.oid.NameOID.COMMON_NAME
         )
 
+        # Extract Subject Key Identifier if present
+        ski_hex = None
+        try:
+            ski_ext = cert.extensions.get_extension_for_oid(
+                ExtensionOID.SUBJECT_KEY_IDENTIFIER
+            )
+            ski_hex = ski_ext.value.digest.hex()
+        except x509.ExtensionNotFound:
+            pass
+
         cert_info = {
             "subject": cert.subject.rfc4514_string(),
             "country": country_attrs[0].value if country_attrs else None,
@@ -74,6 +85,7 @@ def extract_csca_certs(ml_path: str, output_dir: str):
             "key_size": numbers.n.bit_length(),
             "exponent": numbers.e,
             "modulus_hex": format(numbers.n, "x"),
+            "ski": ski_hex,
         }
         certificates.append(cert_info)
         pem_bytes += cert.public_bytes(Encoding.PEM)

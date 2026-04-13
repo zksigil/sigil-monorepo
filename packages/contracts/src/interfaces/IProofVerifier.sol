@@ -13,8 +13,8 @@ pragma solidity ^0.8.28;
 ///      Current stub implementation accepts all proofs. The real implementation will verify
 ///      a Noir UltraHonk proof with the following public inputs per tier:
 ///
-///      Base:    [hashedAddress, passportExpiry, epochNullifier, cscaMerkleRoot]
-///      Primary: [hashedAddress, passportExpiry, nullifier, nextCommitment, cscaMerkleRoot]
+///      Base:    [epochNullifier, hashedAddress, passportExpiry, cscaMerkleRoot]
+///      Primary: [nullifier, nextCommitment, hashedAddress, passportExpiry, cscaMerkleRoot]
 interface IProofVerifier {
     /// @notice Verify a base-tier registration or renewal proof.
     /// @param hashedAddress keccak256(abi.encodePacked(wallet)) — binds proof to registering wallet.

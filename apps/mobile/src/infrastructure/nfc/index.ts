@@ -689,6 +689,10 @@ function wrapSelectFileAPDU(
 ): { command: number[]; newSSC: number[] } {
   const ssc = incrementSSC(session.ssc);
 
+  // CLA byte for SM: try 0x0C (standard), but passport might expect 0x84 or 0x8C
+  // 0x0C = bit 3 set (secure messaging)
+  // 0x84 = bit 7 + bit 2 set (command chaining + secure messaging)  
+  // 0x8C = bit 7 + bit 3 set (command chaining + secure messaging)
   const claForSM = 0x0c; // Standard ICAO 9303-11
   const cmdHeader = [claForSM, 0xa4, 0x02, 0x0c];
 
@@ -721,7 +725,7 @@ function wrapSelectFileAPDU(
   ];
   console.log('[NFC-SM] MAC input:', toHex(macInput));
 
-  let mac = retailMAC(macInput, session.ksMac);
+  const mac = retailMAC(macInput, session.ksMac);
   console.log('[NFC-SM] MAC:', toHex(mac));
 
   // Build DO'8E' object: [0x8E] [0x08] [mac]
@@ -730,7 +734,7 @@ function wrapSelectFileAPDU(
   // Build final command: [CLA INS P1 P2] [Lc] [DO'87'] [DO'8E'] [Le]
   const data = [...do87, ...do8E];
   const command = [claForSM, 0xa4, 0x02, 0x0c, data.length, ...data, 0x00];
-  
+
   console.log('[NFC-SM] Full SM SELECT command:', toHex(command));
 
   return { command, newSSC: ssc };

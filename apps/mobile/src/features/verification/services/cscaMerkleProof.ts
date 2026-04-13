@@ -1,12 +1,12 @@
 /**
- * CSCA Merkle proof generation — runs on-device in JavaScript.
+ * CSCA Merkle proof generation -- runs on-device in JavaScript.
  *
- * Takes the DSC pubkey + exponent from the SOD, looks up the matching cert
- * in tree-data.json by comparing pubkey hex, and returns the precomputed
+ * Takes the CSCA pubkey modulus (from verifyDSCChain), looks up the matching
+ * cert in tree-data.json by comparing modulus hex, and returns the precomputed
  * 12 Merkle siblings. No Poseidon2 or native modules needed.
  *
  * tree-data.json is prebuilt by certs/build-tree.ts which computes all
- * proofs ahead of time (269 certs × 12 siblings = 3,228 bigints).
+ * proofs ahead of time (269 certs x 12 siblings = 3,228 bigints).
  */
 
 import treeData from "../../../../assets/circuits/tree-data.json";
@@ -61,26 +61,30 @@ function getLookupCache(): Map<string, { index: number; proof: string[] }> {
 // ---------------------------------------------------------------------------
 
 /**
- * Find a CSCA Merkle proof for a given DSC public key.
+ * Find a CSCA Merkle proof for a given CSCA public key.
  *
- * @param pubkeyModulus - 256-byte RSA-2048 modulus (big-endian).
- * @param _exponent - RSA public exponent (not used for lookup — matched by modulus).
- * @returns Merkle proof (siblings + leaf index) or null if pubkey not found.
+ * Accepts either raw bytes (Uint8Array) or hex string for the modulus.
+ *
+ * @param cscaModulus - CSCA RSA modulus (big-endian bytes or hex string).
+ * @returns Merkle proof (siblings + leaf index) or null if CSCA not found.
  */
 export function findCSCAMerkleProof(
-  pubkeyModulus: Uint8Array,
-  _exponent: number,
+  cscaModulus: Uint8Array | string,
 ): CSCAMerkleProof | null {
-  // Convert pubkey to hex (no 0x prefix, lowercase)
-  const pubkeyHex = Array.from(pubkeyModulus)
-    .map((b) => b.toString(16).padStart(2, "0"))
-    .join("")
-    .toLowerCase();
+  let modulusHex: string;
+  if (typeof cscaModulus === "string") {
+    modulusHex = cscaModulus.toLowerCase().replace(/^0x/, "");
+  } else {
+    modulusHex = Array.from(cscaModulus)
+      .map((b) => b.toString(16).padStart(2, "0"))
+      .join("")
+      .toLowerCase();
+  }
 
-  const entry = getLookupCache().get(pubkeyHex);
+  const entry = getLookupCache().get(modulusHex);
   if (!entry) {
     console.warn(
-      `[CSCA] DSC pubkey not found in CSCA Merkle tree — cert may not be from ICAO ML`,
+      `[CSCA] CSCA pubkey not found in Merkle tree -- cert may not be from ICAO ML`,
     );
     return null;
   }

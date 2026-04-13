@@ -36,11 +36,14 @@ circuits: ## Compile Noir circuits and copy to app assets
 # ─── Mopro iOS Framework ──────────────────────────────────────────────
 ios: ## Build Mopro Rust FFI for iOS and copy to app modules
 	@echo "━━━ Building Mopro iOS xcframework ━━━"
-	cd $(MOPRO_SRC) && uniffi-bindgen-react-native build ios --config ubrn.config.yaml --release
+	cd $(MOPRO_SRC) && uniffi-bindgen-react-native build ios --config ubrn.config.yaml --release --and-generate
 	@echo "━━━ Copying xcframework to app modules ━━━"
 	rm -rf $(APP_MODULES)/MoproFfiFramework.xcframework
 	cp -R $(MOPRO_XCFRAMEWORK) $(APP_MODULES)/
-	@echo "✅ iOS framework built and copied to $(APP_MODULES)/"
+	@echo "━━━ Copying generated TS + C++ bindings to app modules ━━━"
+	cp -R $(MOPRO_SRC)/src/generated/* $(APP_MODULES)/src/generated/
+	cp -R $(MOPRO_SRC)/cpp/generated/* $(APP_MODULES)/cpp/generated/
+	@echo "✅ iOS framework + bindings copied to $(APP_MODULES)/"
 
 # ─── Mopro Android (stub — adjust if you have Android set up) ─────────
 android: ## Build Mopro Rust FFI for Android
@@ -52,19 +55,26 @@ android: ## Build Mopro Rust FFI for Android
 # bb is the Barretenberg CLI tool. Install via: curl -sSfL https://raw.githubusercontent.com/AztecProtocol/aztec-packages/master/barretenberg/bbup/install | bash
 BB_FLAGS = --oracle_hash keccak
 
-bb-vk: ## Generate verification keys for both circuits
+bb-vk: circuits ## Generate verification keys from compiled circuits
 	@echo "━━━ Writing base VK ━━━"
-	bb write_vk $(BB_FLAGS) -b $(CIRCUITS_TARGET)/passport_base.json -o $(CIRCUITS_TARGET)/
+	bb write_vk -s ultra_honk $(BB_FLAGS) -b $(CIRCUITS_TARGET)/passport_base.json -o $(CIRCUITS_TARGET)/vk_base
 	@echo "━━━ Writing primary VK ━━━"
-	bb write_vk $(BB_FLAGS) -b $(CIRCUITS_TARGET)/passport_primary.json -o $(CIRCUITS_TARGET)/
-	@echo "✅ VKs written to $(CIRCUITS_TARGET)/"
+	bb write_vk -s ultra_honk $(BB_FLAGS) -b $(CIRCUITS_TARGET)/passport_primary.json -o $(CIRCUITS_TARGET)/vk_primary
+	@echo "✅ VKs written to $(CIRCUITS_TARGET)/vk_base and vk_primary"
 
-bb-verifier: circuits ## Generate Solidity verifier contracts from compiled circuits
+bb-verifier: bb-vk ## Generate Solidity verifier contracts from VKs and copy to contracts
 	@echo "━━━ Generating base Solidity verifier ━━━"
-	bb contract $(BB_FLAGS) -b $(CIRCUITS_TARGET)/passport_base.json -o $(CIRCUITS_TARGET)/verifiers/
+	bb write_solidity_verifier -s ultra_honk --zk -k $(CIRCUITS_TARGET)/vk_base/vk -o $(CIRCUITS_TARGET)/BaseUltraHonkVerifier.sol
+	@echo "━━━ Renaming base contract: HonkVerifier → BaseUltraHonkVerifier ━━━"
+	sed -i '' 's/contract HonkVerifier/contract BaseUltraHonkVerifier/' $(CIRCUITS_TARGET)/BaseUltraHonkVerifier.sol
 	@echo "━━━ Generating primary Solidity verifier ━━━"
-	bb contract $(BB_FLAGS) -b $(CIRCUITS_TARGET)/passport_primary.json -o $(CIRCUITS_TARGET)/verifiers/
-	@echo "✅ Solidity verifiers written to $(CIRCUITS_TARGET)/verifiers/"
+	bb write_solidity_verifier -s ultra_honk --zk -k $(CIRCUITS_TARGET)/vk_primary/vk -o $(CIRCUITS_TARGET)/PrimaryUltraHonkVerifier.sol
+	@echo "━━━ Renaming primary contract: HonkVerifier → PrimaryUltraHonkVerifier ━━━"
+	sed -i '' 's/contract HonkVerifier/contract PrimaryUltraHonkVerifier/' $(CIRCUITS_TARGET)/PrimaryUltraHonkVerifier.sol
+	@echo "━━━ Copying verifiers to contracts ━━━"
+	cp -f $(CIRCUITS_TARGET)/BaseUltraHonkVerifier.sol $(CONTRACTS)/src/verifiers/BaseUltraHonkVerifier.sol
+	cp -f $(CIRCUITS_TARGET)/PrimaryUltraHonkVerifier.sol $(CONTRACTS)/src/verifiers/PrimaryUltraHonkVerifier.sol
+	@echo "✅ Solidity verifiers generated and copied to $(CONTRACTS)/src/verifiers/"
 
 bb-prove-base: circuits ## Generate a base proof locally (requires witness file)
 	@echo "━━━ Generating base proof with bb ━━━"
@@ -137,6 +147,30 @@ typecheck: ## Run TypeScript type checks
 # ─── Full Build Pipeline ──────────────────────────────────────────────
 build-all: circuits ios contracts test-all typecheck ## Full rebuild: circuits + iOS + contracts + tests + typecheck
 	@echo "✅ Full build pipeline complete"
+
+# ─── Anvil Dev Environment ─────────────────────────────────────────────
+anvil-env: ## Auto-detect LAN IP and update .env files for anvil testing
+	@IP=$$(ipconfig getifaddr en0) && \
+	echo "━━━ Detected LAN IP: $$IP ━━━" && \
+	sed -i '' "s|EXPO_PUBLIC_ANVIL_RPC_URL=.*|EXPO_PUBLIC_ANVIL_RPC_URL=http://$$IP:8545|" .env apps/mobile/.env && \
+	echo "✅ Updated EXPO_PUBLIC_ANVIL_RPC_URL in .env and apps/mobile/.env"
+
+ANVIL_KEY := 0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80
+ANVIL_DEPLOYER := 0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266
+
+anvil-deploy: anvil-env contracts ## Deploy with MockProofVerifier to local anvil
+	@echo "━━━ Deploying (mock verifier) to anvil ━━━"
+	cd $(CONTRACTS) && forge script script/DeployDev.s.sol:DeployDev \
+		--rpc-url http://127.0.0.1:8545 --broadcast \
+		--private-key $(ANVIL_KEY) -vvv
+	@echo "━━━ Update .env with deployed address (check output above) ━━━"
+
+anvil-deploy-real: anvil-env bb-verifier contracts ## Deploy with real UltraHonk verifiers to local anvil
+	@echo "━━━ Deploying (real verifier) to anvil ━━━"
+	cd $(CONTRACTS) && DEPLOYER_ADDRESS=$(ANVIL_DEPLOYER) forge script script/Deploy.s.sol:Deploy \
+		--rpc-url http://127.0.0.1:8545 --broadcast \
+		--private-key $(ANVIL_KEY) -vvv
+	@echo "━━━ Update .env with deployed address (check output above) ━━━"
 
 # ─── Dev Server ────────────────────────────────────────────────────────
 dev: ## Start Expo dev server
