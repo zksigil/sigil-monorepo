@@ -19,7 +19,6 @@ contract MockProofVerifier is IProofVerifier {
 
     function verifyBaseProof(
         bytes32,
-        uint48,
         bytes32,
         bytes32,
         bytes calldata
@@ -30,7 +29,6 @@ contract MockProofVerifier is IProofVerifier {
 
     function verifyPrimaryProof(
         bytes32,
-        uint48,
         bytes32,
         bytes32,
         bytes32,

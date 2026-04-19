@@ -10,7 +10,7 @@ export interface BaseZKProof {
   epochNullifier: string;
   /** keccak256(wallet) mod BN254 as decimal — public input to the proof. */
   hashedAddress: string;
-  /** Passport expiry as a unix epoch day (public input). */
+  /** Passport expiry as a unix epoch day — submitted separately to the contract. */
   passportExpiry: string;
   /** CSCA Merkle root (hex) — binds proof to current ICAO Master List. */
   cscaMerkleRoot: `0x${string}`;
@@ -28,7 +28,7 @@ export interface PrimaryZKProof {
   nextCommitment: string;
   /** keccak256(wallet) mod BN254 as decimal (public input). */
   hashedAddress: string;
-  /** Passport expiry as a unix epoch day (public input). */
+  /** Passport expiry as a unix epoch day — submitted separately to the contract. */
   passportExpiry: string;
   /** CSCA Merkle root (hex) — binds proof to current ICAO Master List. */
   cscaMerkleRoot: `0x${string}`;

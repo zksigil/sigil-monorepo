@@ -147,7 +147,7 @@ contract VerificationRegistry is IVerificationRegistry, ReentrancyGuard, Pausabl
         uint8 count = s_epochCounts[epochNullifier];
         if (count >= s_config.maxDailyRegistrations()) revert VerificationRegistry__RateLimitExceeded();
 
-        if (!s_verifier.verifyBaseProof(hashedAddress, passportExpiry, epochNullifier, s_cscaMerkleTree.getRoot(), proof)) {
+        if (!s_verifier.verifyBaseProof(hashedAddress, epochNullifier, s_cscaMerkleTree.getRoot(), proof)) {
             revert VerificationRegistry__InvalidProof();
         }
 
@@ -180,7 +180,7 @@ contract VerificationRegistry is IVerificationRegistry, ReentrancyGuard, Pausabl
         if (block.timestamp >= passportExpiry) revert VerificationRegistry__PassportExpired();
 
         // epochNullifier is zero for renewals — rate limiting only applies to new registrations
-        if (!s_verifier.verifyBaseProof(hashedAddress, passportExpiry, bytes32(0), s_cscaMerkleTree.getRoot(), proof)) {
+        if (!s_verifier.verifyBaseProof(hashedAddress, bytes32(0), s_cscaMerkleTree.getRoot(), proof)) {
             revert VerificationRegistry__InvalidProof();
         }
 
@@ -209,7 +209,7 @@ contract VerificationRegistry is IVerificationRegistry, ReentrancyGuard, Pausabl
 
         if (s_primaryRegistrations[hashedAddress].expiresAt > block.timestamp) revert VerificationRegistry__AlreadyRegistered();
 
-        if (!s_verifier.verifyPrimaryProof(hashedAddress, passportExpiry, nullifier, nextCommitment, s_cscaMerkleTree.getRoot(), proof)) {
+        if (!s_verifier.verifyPrimaryProof(hashedAddress, nullifier, nextCommitment, s_cscaMerkleTree.getRoot(), proof)) {
             revert VerificationRegistry__InvalidProof();
         }
 
@@ -237,7 +237,7 @@ contract VerificationRegistry is IVerificationRegistry, ReentrancyGuard, Pausabl
         if (slot.hashedAddress == bytes32(0)) revert VerificationRegistry__NotRegistered();
         if (slot.hashedAddress != hashedAddress) revert VerificationRegistry__NotAuthorized();
 
-        if (!s_verifier.verifyPrimaryProof(hashedAddress, passportExpiry, nullifier, slot.nextCommitment, s_cscaMerkleTree.getRoot(), proof)) {
+        if (!s_verifier.verifyPrimaryProof(hashedAddress, nullifier, slot.nextCommitment, s_cscaMerkleTree.getRoot(), proof)) {
             revert VerificationRegistry__InvalidProof();
         }
 
@@ -271,7 +271,7 @@ contract VerificationRegistry is IVerificationRegistry, ReentrancyGuard, Pausabl
         // Verify proof: proves caller knows s, hash(s,n+1) == revealedNextNullifier, new address
         if (
             !s_verifier.verifyPrimaryProof(
-                newHashedAddress, passportExpiry, revealedNextNullifier, newNextCommitment, s_cscaMerkleTree.getRoot(), proof
+                newHashedAddress, revealedNextNullifier, newNextCommitment, s_cscaMerkleTree.getRoot(), proof
             )
         ) {
             revert VerificationRegistry__InvalidProof();

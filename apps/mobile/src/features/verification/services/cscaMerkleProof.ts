@@ -3,10 +3,10 @@
  *
  * Takes the CSCA pubkey modulus (from verifyDSCChain), looks up the matching
  * cert in tree-data.json by comparing modulus hex, and returns the precomputed
- * 12 Merkle siblings. No Poseidon2 or native modules needed.
+ * 9 Merkle siblings. No Poseidon2 or native modules needed.
  *
  * tree-data.json is prebuilt by certs/build-tree.ts which computes all
- * proofs ahead of time (269 certs x 12 siblings = 3,228 bigints).
+ * proofs ahead of time (269 certs x 9 siblings = 2,421 bigints).
  */
 
 import treeData from "../../../../assets/circuits/tree-data.json";
@@ -22,7 +22,7 @@ export const CSCA_MERKLE_ROOT = treeData.root as `0x${string}`;
 // ---------------------------------------------------------------------------
 
 export interface CSCAMerkleProof {
-  /** 12 sibling field elements as decimal strings (matching the Noir circuit). */
+  /** 9 sibling field elements as decimal strings (matching the Noir circuit). */
   siblings: string[];
   /** Leaf index in the tree (0-based). */
   leafIndex: number;

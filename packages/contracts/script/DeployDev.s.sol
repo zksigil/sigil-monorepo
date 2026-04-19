@@ -16,8 +16,8 @@ import {MockProofVerifier} from "../test/mocks/MockProofVerifier.sol";
 ///     --rpc-url http://127.0.0.1:8545 --broadcast \
 ///     --private-key 0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80
 contract DeployDev is Script {
-    // Mock CSCA Merkle root (will be replaced when circuits are recompiled with real proofs)
-    bytes32 public constant CSCA_MERKLE_ROOT = 0x06db36480878d971e22b324a7b7d941ed6f986f484059e8ae9ef3c508fa993de;
+    // CSCA Merkle root — must match certs/tree-root.ts (built by certs/build-tree.ts)
+    bytes32 public constant CSCA_MERKLE_ROOT = 0x2d656797b947d09105dcde4480bde0e03e9b7e6b02984c40d6391a91835580ef;
 
     function run() public returns (
         ProtocolConfig config,

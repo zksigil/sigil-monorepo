@@ -32,6 +32,7 @@ jest.mock('../../services/proofService', () => ({
   // Simulate Mopro native module not being available (expected in dev/CI)
   generateBaseProof: jest.fn().mockRejectedValue(new Error('Mopro native module not available')),
   generateStubProof: jest.fn().mockImplementation(() => mockStubOutput),
+  CSCA_MERKLE_ROOT: require('../../services/cscaMerkleProof').CSCA_MERKLE_ROOT,
 }));
 
 // Silence expected error logs from the hook during error-path tests

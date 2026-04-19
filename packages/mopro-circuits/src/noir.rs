@@ -124,14 +124,14 @@ pub fn verify_noir_proof(
 /// Returns `BaseInputs` containing the full ordered flat array (private then public)
 /// ready to pass to `generate_noir_proof`, plus the computed `epoch_nullifier`.
 ///
-/// Input order in circuit ABI (Phase 3c with full CSCA->DSC chain verification):
+/// Input order in circuit ABI:
 ///   private: dg1_hash, sod_hash, epoch_day,
 ///            signed_attrs[512], signed_attrs_len, signature[256],
 ///            pubkey[256], redc_param[257], exponent,
 ///            dsc_tbs[1536], dsc_tbs_len, dsc_pubkey_offset,
 ///            csca_pubkey[512], csca_redc_param[513], csca_exponent, csca_signature[512],
-///            csca_merkle_siblings[12], csca_leaf_index
-///   public:  epoch_nullifier, hashed_address, passport_expiry, csca_merkle_root
+///            csca_merkle_siblings[9], csca_leaf_index
+///   public:  epoch_nullifier, hashed_address, csca_merkle_root
 #[uniffi::export]
 pub fn compute_base_inputs(
     dg1_hash: String,
@@ -153,7 +153,6 @@ pub fn compute_base_inputs(
     csca_merkle_siblings: Vec<String>,
     csca_leaf_index: u32,
     hashed_address: String,
-    passport_expiry: String,
     csca_merkle_root: String,
 ) -> Result<BaseInputs, MoproError> {
     let dg1 = parse_field(&dg1_hash)?;
@@ -189,14 +188,13 @@ pub fn compute_base_inputs(
     inputs.push(csca_exponent.to_string());
     for &b in &csca_signature { inputs.push(b.to_string()); }
 
-    // CSCA Merkle proof (12 siblings + leaf index)
+    // CSCA Merkle proof (9 siblings + leaf index)
     for sibling in &csca_merkle_siblings { inputs.push(sibling.clone()); }
     inputs.push(csca_leaf_index.to_string());
 
     // Public inputs
     inputs.push(epoch_nullifier_str.clone());
     inputs.push(hashed_address);
-    inputs.push(passport_expiry);
     inputs.push(csca_merkle_root);
 
     Ok(BaseInputs { inputs, epoch_nullifier: epoch_nullifier_str })
@@ -207,14 +205,14 @@ pub fn compute_base_inputs(
 /// Returns `PrimaryInputs` with the full ordered flat array plus `nullifier` and
 /// `next_commitment` as decimal strings for on-chain use.
 ///
-/// Input order in circuit ABI (Phase 3c with full CSCA->DSC chain verification):
+/// Input order in circuit ABI:
 ///   private: dg1_hash, sod_hash, nonce,
 ///            signed_attrs[512], signed_attrs_len, signature[256],
 ///            pubkey[256], redc_param[257], exponent,
 ///            dsc_tbs[1536], dsc_tbs_len, dsc_pubkey_offset,
 ///            csca_pubkey[512], csca_redc_param[513], csca_exponent, csca_signature[512],
-///            csca_merkle_siblings[12], csca_leaf_index
-///   public:  nullifier, next_commitment, hashed_address, passport_expiry, csca_merkle_root
+///            csca_merkle_siblings[9], csca_leaf_index
+///   public:  nullifier, next_commitment, hashed_address, csca_merkle_root
 #[uniffi::export]
 pub fn compute_primary_inputs(
     dg1_hash: String,
@@ -236,7 +234,6 @@ pub fn compute_primary_inputs(
     csca_merkle_siblings: Vec<String>,
     csca_leaf_index: u32,
     hashed_address: String,
-    passport_expiry: String,
     csca_merkle_root: String,
 ) -> Result<PrimaryInputs, MoproError> {
     let dg1 = parse_field(&dg1_hash)?;
@@ -280,7 +277,7 @@ pub fn compute_primary_inputs(
     inputs.push(csca_exponent.to_string());
     for &b in &csca_signature { inputs.push(b.to_string()); }
 
-    // CSCA Merkle proof (12 siblings + leaf index)
+    // CSCA Merkle proof (9 siblings + leaf index)
     for sibling in &csca_merkle_siblings { inputs.push(sibling.clone()); }
     inputs.push(csca_leaf_index.to_string());
 
@@ -288,7 +285,6 @@ pub fn compute_primary_inputs(
     inputs.push(nullifier_str.clone());
     inputs.push(next_commitment_str.clone());
     inputs.push(hashed_address);
-    inputs.push(passport_expiry);
     inputs.push(csca_merkle_root);
 
     Ok(PrimaryInputs {

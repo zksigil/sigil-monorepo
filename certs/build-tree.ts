@@ -5,9 +5,9 @@
  * Uses @zkpassport/poseidon2 which matches the Noir poseidon::poseidon2
  * implementation used in our circuits.
  *
- * Leaf = poseidon2Hash([modulus, exponent])
+ * Leaf = poseidon2Hash([sha256(modulus_bytes), exponent])
  * Empty leaf = poseidon2Hash([0, 0])
- * Tree depth = 12 (4096 leaves)
+ * Tree depth = 9 (512 leaves)
  *
  * Outputs:
  *   - tree-root.ts: exports the Merkle root as a bigint
@@ -17,6 +17,7 @@
 import { readFileSync, writeFileSync } from "fs";
 import { join, dirname } from "path";
 import { fileURLToPath } from "url";
+import { createHash } from "crypto";
 import { poseidon2Hash } from "@zkpassport/poseidon2";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -25,8 +26,8 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 // Constants
 // ---------------------------------------------------------------------------
 
-const TREE_DEPTH = 12;
-const NUM_LEAVES = 1 << TREE_DEPTH; // 4096
+const TREE_DEPTH = 9;
+const NUM_LEAVES = 1 << TREE_DEPTH; // 512
 
 // BigInt field modulus for BN254
 const P = 21888242871839275222246405745257275088548364400416034343698204186575808495617n;
@@ -105,9 +106,15 @@ function main() {
   const leaves: bigint[] = new Array(NUM_LEAVES).fill(EMPTY_LEAF);
 
   for (let i = 0; i < certs.length; i++) {
-    const mod = BigInt("0x" + certs[i].modulus_hex);
+    // SHA-256 hash of the 512-byte CSCA pubkey (matches circuit's sha256::sha256_var(csca_pubkey, 512))
+    const pubkeyBytes = Buffer.from(certs[i].modulus_hex, "hex");
+    const pubkeyHash = createHash("sha256").update(pubkeyBytes).digest();
+    // Convert hash bytes to Field element with modular reduction (matches bytes_to_field in Noir)
+    const pubkeyAsBigInt = BigInt("0x" + pubkeyHash.toString("hex"));
+    const pubkeyField = pubkeyAsBigInt % P;
+
     const exp = BigInt(certs[i].exponent);
-    leaves[i] = poseidon2Hash([mod, exp]);
+    leaves[i] = poseidon2Hash([pubkeyField, exp]);
   }
 
   // Build tree

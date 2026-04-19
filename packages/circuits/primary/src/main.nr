@@ -9,7 +9,8 @@ global SIGNED_ATTRS_MAX_LEN: u32 = 512;
 global DSC_TBS_MAX_LEN: u32 = 1536;
 
 /// Merkle tree depth for CSCA certificate inclusion proof.
-global MERKLE_DEPTH: u32 = 12;
+/// Reduced from 12 to 9 (512 leaves) - sufficient for 269 CSCA certs with headroom.
+global MERKLE_DEPTH: u32 = 9;
 
 /// Phase 3c: Primary-tier registration circuit with full certificate chain verification.
 ///
@@ -25,8 +26,7 @@ global MERKLE_DEPTH: u32 = 12;
 /// Public inputs:
 ///   nullifier          -- stored on-chain as the primary slot key
 ///   next_commitment    -- stored alongside the slot
-///   hashed_address     -- keccak256(wallet) as a Field
-///   passport_expiry    -- expiry timestamp from DG1
+///   hashed_address     -- keccak256(wallet) as a Field (prevents proof replay)
 ///   csca_merkle_root   -- current CSCA Merkle root from on-chain contract
 fn main(
     // Private inputs (witness)
@@ -55,7 +55,6 @@ fn main(
     nullifier: pub Field,
     next_commitment: pub Field,
     hashed_address: pub Field,
-    passport_expiry: pub Field,
     csca_merkle_root: pub Field,
 ) {
     // ---------------------------------------------------------------
@@ -102,8 +101,11 @@ fn main(
     // ---------------------------------------------------------------
     // 4. CSCA Merkle tree: CSCA pubkey is in the ICAO Master List
     // ---------------------------------------------------------------
+    // Hash pubkey first to reduce bytes->Field conversion from 512 to 32 multiplies.
+    // SHA-256 is already used in-circuit for RSA verification, so this adds no new trust assumptions.
 
-    let csca_pubkey_as_field = bytes_to_field::<512>(csca_pubkey);
+    let csca_pubkey_hash: [u8; 32] = sha256::sha256_var(csca_pubkey, 512);
+    let csca_pubkey_as_field = bytes_to_field::<32>(csca_pubkey_hash);
     let csca_exponent_as_field: Field = csca_exponent as Field;
     let leaf = Poseidon2::hash([csca_pubkey_as_field, csca_exponent_as_field], 2);
 
@@ -123,8 +125,8 @@ fn main(
     let computed_next_commitment = Poseidon2::hash([next_nullifier], 1);
     assert(computed_next_commitment == next_commitment);
 
+    // hashed_address binds this proof to a specific wallet - enforced on-chain via msg.sender.
     let _ = hashed_address;
-    let _ = passport_expiry;
 }
 
 /// Verify a Merkle inclusion proof. Returns the computed root.

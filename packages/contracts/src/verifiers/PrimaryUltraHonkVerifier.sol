@@ -4,125 +4,9 @@ pragma solidity >=0.8.21;
 
 uint256 constant N = 524288;
 uint256 constant LOG_N = 19;
-uint256 constant NUMBER_OF_PUBLIC_INPUTS = 21;
-library HonkVerificationKey {
-    function loadVerificationKey() internal pure returns (Honk.VerificationKey memory) {
-        Honk.VerificationKey memory vk = Honk.VerificationKey({
-            circuitSize: uint256(524288),
-            logCircuitSize: uint256(19),
-            publicInputsSize: uint256(21),
-            ql: Honk.G1Point({ 
-               x: uint256(0x0237456d95fa360e6e3552e1d65d92f5330f782c6cda6f38fcde573ba00b943d),
-               y: uint256(0x0c25bbe03e87462b3ac1e0629bb08d681dac5743b334ef49023abd012c58eee0)
-            }),
-            qr: Honk.G1Point({ 
-               x: uint256(0x14aa61eaf85b47c69f8c6a42f746df87886184da4314e930f037f5dfb9b365d4),
-               y: uint256(0x20ce49c3bf0b53af600b8f879ddd3b722257c53af33fea82547ad82d0611729a)
-            }),
-            qo: Honk.G1Point({ 
-               x: uint256(0x302a8fbb6e4408f1c2b52a19be8c7bee19fc1bae86e7591d49774e4633d62859),
-               y: uint256(0x19d8a7f081947769e939649dd38d40d7f26c3c73c56480c2a1af4da3c6525ecd)
-            }),
-            q4: Honk.G1Point({ 
-               x: uint256(0x058b1d39382f9ad68ca8205198924ecfc55db4e0e7d19c3471ad2efbfd316250),
-               y: uint256(0x0ccf7657fab997b2e0c891801c704b17c99ddafc02f573cdcb94347d3225210e)
-            }),
-            qm: Honk.G1Point({ 
-               x: uint256(0x2405819a6ebb6bb253053d9e597c33fee540804cb0701e1449a84eb5b344db78),
-               y: uint256(0x00d25bd224f35df16256ead63f5454a56a318fd91d6607b350e77a4d6c1da4b0)
-            }),
-            qc: Honk.G1Point({ 
-               x: uint256(0x2197367d1186d2a7ce5ccfa29c5686a773c423a2b3ccf2cd38c2f12d4ee390aa),
-               y: uint256(0x02edb2b84230a6f32ef4bc7ab5c28ac6c29f9cf026c8848ddd4197744354a808)
-            }),
-            qArith: Honk.G1Point({ 
-               x: uint256(0x2e7c906ac4c765a39ad4fe351aa3d0b897da76949e05b23fb30ef0992ab1ee65),
-               y: uint256(0x24beb46f2306baa557814b269c55d033754cabbf680cd1fbebe4a5f22caab9ca)
-            }),
-            qDeltaRange: Honk.G1Point({ 
-               x: uint256(0x1f8bdfa81a10ce251ed790ecd5d745b34f09f040f7a4119d33b1275a8ae8366f),
-               y: uint256(0x24b3bfd73c97807e9bde0f51dcc8afefb9ad26d54cab58bf42df4d34d6e1db69)
-            }),
-            qElliptic: Honk.G1Point({ 
-               x: uint256(0x11a48c1437d004dd4b6e5dfd13b78fa9a8c735a94b83c03e65081c6292ba0934),
-               y: uint256(0x1a419044d545d2435248022abb34437c24530e24561c5677db7b52fc097345d9)
-            }),
-            qAux: Honk.G1Point({ 
-               x: uint256(0x2b98232b70e989858ec9c16af338b7215c73780c567545b7d71295ec8020b1c3),
-               y: uint256(0x2bcb4d21f6d0794fcc9d1cd9d2f88a4f8c6736504ee25ef8ee17efecde08c79b)
-            }),
-            qLookup: Honk.G1Point({ 
-               x: uint256(0x2769d74ba2501972a256b5e7ef7b6fb1ac257b06c90a4bc6ed21b0134beb39e5),
-               y: uint256(0x0e94f599e641b9e34e0be31982fd35046d9274e3384f1311a2bd73b240c83184)
-            }),
-            qPoseidon2External: Honk.G1Point({ 
-               x: uint256(0x2516996e57af02681ee5cc5dcbe12b7bd8a9cae9f66d2b8387c07696d781a360),
-               y: uint256(0x1e6345855a65c17558d9ccf2333b477845d5a60170013a2a3f1d9b24fbc6fa82)
-            }),
-            qPoseidon2Internal: Honk.G1Point({ 
-               x: uint256(0x2db3d4d525abe9bfb857a5bf267ee5c19df87636499295c116c308bab798c910),
-               y: uint256(0x1db3f0eb5ee35275ce1e7af3ef109c59e0835470d046437b7c4b656e4638234a)
-            }),
-            s1: Honk.G1Point({ 
-               x: uint256(0x2b4543179021181619eeff0c5e3ba7eed8676673e43a19583fbaf6982a3824c9),
-               y: uint256(0x08d01422b21d543c45e17ea9bd619dbddbf7fbc8a0437e147ecbd8d5d94cf7d8)
-            }),
-            s2: Honk.G1Point({ 
-               x: uint256(0x1652ac1b2382e04cb83b31dcc8d9e45ed55502089eabbe80fa33dc5dc74bad2a),
-               y: uint256(0x2990834c7386f975a81b63e9755d67d3b6295041dc0e3f785ee33b56725c325d)
-            }),
-            s3: Honk.G1Point({ 
-               x: uint256(0x0924cab5d6aa1ccf299c171cb5e71aa56f7fedf7ce707c10f14befd303a05342),
-               y: uint256(0x004286e379768fa10175735bca7a2bac009357e3391bd5a533471b227c69ff69)
-            }),
-            s4: Honk.G1Point({ 
-               x: uint256(0x2b672210adb2a3d6bfa218cf8c747766c951a0426c35b3d108e643368471cb83),
-               y: uint256(0x1141c02be908327660dd1e15d7285469f122e771c56b278aeff8b08b4e592415)
-            }),
-            t1: Honk.G1Point({ 
-               x: uint256(0x1f982e84b88be0b9e9ac0e9378e3178831d441408b6d09534b632772adcdcc11),
-               y: uint256(0x255420131e54726f648abcfe25ff87caade0bddc97a9aa8197252162e8d4ec23)
-            }),
-            t2: Honk.G1Point({ 
-               x: uint256(0x05b79850945401fedc1dbec0074894fc1569e39c9ef32809c864def78d66b2b3),
-               y: uint256(0x15ec3ad877303eb492809606e1048b6b87c39b45a922ba3801148686440b9087)
-            }),
-            t3: Honk.G1Point({ 
-               x: uint256(0x020edfb3b4b5553545de0d3b2efdc8dbae89d155292938cc9a25d070fb119127),
-               y: uint256(0x2c688e47e180d016d54ae0fc5e970342398f199fcfadb11073ad1b53d3de176c)
-            }),
-            t4: Honk.G1Point({ 
-               x: uint256(0x069cad9474612a17f07152192325ce57ee4f6fb1f46475e8741bb1c9961b76bd),
-               y: uint256(0x074cd809dd22d859138f45aa28bcb62d86501e082e70abd39a69d78205f51854)
-            }),
-            id1: Honk.G1Point({ 
-               x: uint256(0x08f584bd02997a6617f0c38910a4cbd0ce901a9935a18e7942a14bebd2025f4f),
-               y: uint256(0x1d6f6cd7a975fe95270f645483cdf2480aa18c3f1ac0d076f0e8f7c3692a01d9)
-            }),
-            id2: Honk.G1Point({ 
-               x: uint256(0x2225b2da28ba106e211364ffd9a7d8538ca1f7e75ffd72e3381f95cab948bc3e),
-               y: uint256(0x02d2cbe538b52d1b036c677525263e9770c2922c76053a165364779366892e64)
-            }),
-            id3: Honk.G1Point({ 
-               x: uint256(0x237ab88ad390813dd5b37ffc6179f56c207b56a346ee6212047c54ea086b98c6),
-               y: uint256(0x277f6e46e1ac269468d873b639336719dccfda81ab47b8466a35a18a4b9fa3b5)
-            }),
-            id4: Honk.G1Point({ 
-               x: uint256(0x00281d6ac0a866945ff5798f038c38298a55b885192804c9ab51be37491c714b),
-               y: uint256(0x0d02adb5c6528f142f386ac4e250a108d88425485288ddd673297c249d323263)
-            }),
-            lagrangeFirst: Honk.G1Point({ 
-               x: uint256(0x0000000000000000000000000000000000000000000000000000000000000001),
-               y: uint256(0x0000000000000000000000000000000000000000000000000000000000000002)
-            }),
-            lagrangeLast: Honk.G1Point({ 
-               x: uint256(0x07730b9f79791a2edbad6bf22ca263681e6b49df4a3956fcd7a2d34ae256f776),
-               y: uint256(0x09cbbdf6294f551e34937fa80f27c138e6196870e632db47e04c20e4b8ba23ae)
-            })
-        });
-        return vk;
-    }
-}
+uint256 constant NUMBER_OF_PUBLIC_INPUTS = 20;
+// VK data is stored externally in PrimaryVerificationKey.sol (SSTORE2 pattern)
+// to keep this contract under the 24,576-byte Spurious Dragon size limit.
 
 
 pragma solidity ^0.8.27;
@@ -1621,8 +1505,21 @@ interface IVerifier {
  contract PrimaryUltraHonkVerifier is IVerifier {
     using FrLib for Fr;
 
-     function loadVerificationKey() internal pure returns (Honk.VerificationKey memory vk) {
-      vk = HonkVerificationKey.loadVerificationKey();
+    /// @notice Address of the SSTORE2 data contract containing the ABI-encoded VK.
+    address public immutable vkDataContract;
+
+    constructor(address _vkDataContract) {
+        vkDataContract = _vkDataContract;
+    }
+
+    /// @dev Loads verification key from external data contract via EXTCODECOPY.
+    ///      The data contract's bytecode is the raw VK struct data — a direct copy works
+    ///      because the struct contains only fixed-size types (uint256 and G1Point).
+    function loadVerificationKey() internal view returns (Honk.VerificationKey memory vk) {
+        address _vkAddr = vkDataContract;
+        assembly {
+            extcodecopy(_vkAddr, vk, 0, extcodesize(_vkAddr))
+        }
     }
 
 

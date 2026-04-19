@@ -55,5 +55,4 @@ exponent = 65537
 # Public inputs - using simple test value
 epoch_nullifier = "10169623654123766754031260866998371876549336851110854689992825661941566564438"
 hashed_address = "0"
-passport_expiry = "0"
 `);

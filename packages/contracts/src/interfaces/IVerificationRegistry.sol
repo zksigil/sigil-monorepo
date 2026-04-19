@@ -52,7 +52,7 @@ interface IVerificationRegistry {
 
     /// @notice Register the caller's wallet as a verified human (base tier).
     /// @param epochNullifier Rate-limiting nullifier derived from passport + current day.
-    /// @param passportExpiry Passport expiry timestamp, asserted in the ZK proof.
+    /// @param passportExpiry Passport expiry timestamp, submitted separately to the contract.
     /// @param proof ZK proof bytes.
     function registerBase(bytes32 epochNullifier, uint48 passportExpiry, bytes calldata proof) external;
 

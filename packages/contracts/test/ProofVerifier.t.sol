@@ -2,7 +2,9 @@
 pragma solidity ^0.8.28;
 
 import {Test} from "forge-std/Test.sol";
+import {BaseVerificationKey} from "../src/verifiers/BaseVerificationKey.sol";
 import {BaseUltraHonkVerifier} from "../src/verifiers/BaseUltraHonkVerifier.sol";
+import {PrimaryVerificationKey} from "../src/verifiers/PrimaryVerificationKey.sol";
 import {PrimaryUltraHonkVerifier} from "../src/verifiers/PrimaryUltraHonkVerifier.sol";
 import {ProofVerifier} from "../src/ProofVerifier.sol";
 
@@ -32,8 +34,10 @@ contract ProofVerifierTest is Test {
         bytes32(uint256(19202002815431368995739791825713219422746529042231652773447201800946151423106));
 
     function setUp() public {
-        baseHonk = new BaseUltraHonkVerifier();
-        primaryHonk = new PrimaryUltraHonkVerifier();
+        BaseVerificationKey baseVK = new BaseVerificationKey();
+        baseHonk = new BaseUltraHonkVerifier(address(baseVK));
+        PrimaryVerificationKey primaryVK = new PrimaryVerificationKey();
+        primaryHonk = new PrimaryUltraHonkVerifier(address(primaryVK));
         verifier = new ProofVerifier(
             address(baseHonk),
             address(primaryHonk),

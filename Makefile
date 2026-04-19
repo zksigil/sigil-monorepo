@@ -62,7 +62,7 @@ bb-vk: circuits ## Generate verification keys from compiled circuits
 	bb write_vk -s ultra_honk $(BB_FLAGS) -b $(CIRCUITS_TARGET)/passport_primary.json -o $(CIRCUITS_TARGET)/vk_primary
 	@echo "✅ VKs written to $(CIRCUITS_TARGET)/vk_base and vk_primary"
 
-bb-verifier: bb-vk ## Generate Solidity verifier contracts from VKs and copy to contracts
+bb-verifier: bb-vk ## Generate Solidity verifier contracts from VKs, extract VK, and copy to contracts
 	@echo "━━━ Generating base Solidity verifier ━━━"
 	bb write_solidity_verifier -s ultra_honk --zk -k $(CIRCUITS_TARGET)/vk_base/vk -o $(CIRCUITS_TARGET)/BaseUltraHonkVerifier.sol
 	@echo "━━━ Renaming base contract: HonkVerifier → BaseUltraHonkVerifier ━━━"
@@ -71,10 +71,10 @@ bb-verifier: bb-vk ## Generate Solidity verifier contracts from VKs and copy to 
 	bb write_solidity_verifier -s ultra_honk --zk -k $(CIRCUITS_TARGET)/vk_primary/vk -o $(CIRCUITS_TARGET)/PrimaryUltraHonkVerifier.sol
 	@echo "━━━ Renaming primary contract: HonkVerifier → PrimaryUltraHonkVerifier ━━━"
 	sed -i '' 's/contract HonkVerifier/contract PrimaryUltraHonkVerifier/' $(CIRCUITS_TARGET)/PrimaryUltraHonkVerifier.sol
-	@echo "━━━ Copying verifiers to contracts ━━━"
-	cp -f $(CIRCUITS_TARGET)/BaseUltraHonkVerifier.sol $(CONTRACTS)/src/verifiers/BaseUltraHonkVerifier.sol
-	cp -f $(CIRCUITS_TARGET)/PrimaryUltraHonkVerifier.sol $(CONTRACTS)/src/verifiers/PrimaryUltraHonkVerifier.sol
-	@echo "✅ Solidity verifiers generated and copied to $(CONTRACTS)/src/verifiers/"
+	@echo "━━━ Extracting VKs into SSTORE2 data contracts (24KB size fix) ━━━"
+	node scripts/extract-vk.mjs $(CIRCUITS_TARGET)/BaseUltraHonkVerifier.sol BaseUltraHonkVerifier BaseVerificationKey $(CONTRACTS)/src/verifiers
+	node scripts/extract-vk.mjs $(CIRCUITS_TARGET)/PrimaryUltraHonkVerifier.sol PrimaryUltraHonkVerifier PrimaryVerificationKey $(CONTRACTS)/src/verifiers
+	@echo "✅ Solidity verifiers + VK data contracts generated in $(CONTRACTS)/src/verifiers/"
 
 bb-prove-base: circuits ## Generate a base proof locally (requires witness file)
 	@echo "━━━ Generating base proof with bb ━━━"
@@ -145,7 +145,7 @@ typecheck: ## Run TypeScript type checks
 	@echo "✅ Type check passed"
 
 # ─── Full Build Pipeline ──────────────────────────────────────────────
-build-all: circuits ios contracts test-all typecheck ## Full rebuild: circuits + iOS + contracts + tests + typecheck
+build-all: circuits bb-verifier ios contracts test-all typecheck ## Full rebuild: circuits + verifiers + iOS + contracts + tests + typecheck
 	@echo "✅ Full build pipeline complete"
 
 # ─── Anvil Dev Environment ─────────────────────────────────────────────

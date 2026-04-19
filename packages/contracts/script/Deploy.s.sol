@@ -6,7 +6,9 @@ import {ProtocolConfig} from "../src/ProtocolConfig.sol";
 import {ProofVerifier} from "../src/ProofVerifier.sol";
 import {VerificationRegistry} from "../src/VerificationRegistry.sol";
 import {CSCAMerkleTree} from "../src/CSCAMerkleTree.sol";
+import {BaseVerificationKey} from "../src/verifiers/BaseVerificationKey.sol";
 import {BaseUltraHonkVerifier} from "../src/verifiers/BaseUltraHonkVerifier.sol";
+import {PrimaryVerificationKey} from "../src/verifiers/PrimaryVerificationKey.sol";
 import {PrimaryUltraHonkVerifier} from "../src/verifiers/PrimaryUltraHonkVerifier.sol";
 
 /// @notice Full deployment script for Sigil contracts on Sepolia / Ethereum Mainnet.
@@ -24,8 +26,8 @@ import {PrimaryUltraHonkVerifier} from "../src/verifiers/PrimaryUltraHonkVerifie
 /// After deployment:
 ///   Update EXPO_PUBLIC_VERIFICATION_REGISTRY_ADDRESS in apps/mobile/.env
 contract Deploy is Script {
-    // CSCA Merkle root from certs/tree-root.ts (269 certs, depth 12)
-    bytes32 public constant CSCA_MERKLE_ROOT = 0x06db36480878d971e22b324a7b7d941ed6f986f484059e8ae9ef3c508fa993de;
+    // CSCA Merkle root from certs/tree-root.ts (269 certs, depth 9)
+    bytes32 public constant CSCA_MERKLE_ROOT = 0x2d656797b947d09105dcde4480bde0e03e9b7e6b02984c40d6391a91835580ef;
 
     function run()
         public
@@ -56,11 +58,15 @@ contract Deploy is Script {
         console2.log("CSCAMerkleTree:       ", address(cscaTree));
         console2.logBytes32(CSCA_MERKLE_ROOT);
 
-        // 3. UltraHonk verifiers (generated from Noir circuits)
-        BaseUltraHonkVerifier baseHonk = new BaseUltraHonkVerifier();
+        // 3. UltraHonk verifiers — VK data deployed separately (SSTORE2 pattern)
+        BaseVerificationKey baseVK = new BaseVerificationKey();
+        console2.log("BaseVerificationKey:  ", address(baseVK));
+        BaseUltraHonkVerifier baseHonk = new BaseUltraHonkVerifier(address(baseVK));
         console2.log("BaseUltraHonkVerifier:", address(baseHonk));
 
-        PrimaryUltraHonkVerifier primaryHonk = new PrimaryUltraHonkVerifier();
+        PrimaryVerificationKey primaryVK = new PrimaryVerificationKey();
+        console2.log("PrimaryVerificationKey:", address(primaryVK));
+        PrimaryUltraHonkVerifier primaryHonk = new PrimaryUltraHonkVerifier(address(primaryVK));
         console2.log("PrimaryUltraHonkVerifier:", address(primaryHonk));
 
         // 4. ProofVerifier — marshals typed inputs and delegates to UltraHonk verifiers

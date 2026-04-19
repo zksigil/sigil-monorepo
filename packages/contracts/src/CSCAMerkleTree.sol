@@ -11,7 +11,7 @@ import {Ownable2Step, Ownable} from "@openzeppelin/contracts/access/Ownable2Step
 ///      registrations require a valid proof with the current root.
 ///
 ///      Tree parameters:
-///      - Depth: 12 (4096 leaves)
+///      - Depth: 9 (512 leaves)
 ///      - Leaf hash: poseidon2Hash(modulus, exponent)
 ///      - Internal node: poseidon2Hash(left, right)
 ///      - Empty leaf: poseidon2Hash(0, 0)

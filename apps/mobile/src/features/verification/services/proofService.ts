@@ -7,15 +7,15 @@
  * Passport data NEVER leaves the device. All hashing and proving is done
  * on-device in native Rust code.
  *
- * Circuit inputs (Phase 3c — in-circuit CSCA->DSC chain verification):
+ * Circuit inputs:
  *   Base tier:    private=[dg1_hash, sod_hash, epoch_day,
  *                          signed_attrs[512], signed_attrs_len, signature[256], pubkey[256], redc_param[257], exponent,
  *                          dsc_tbs[1536], dsc_tbs_len, dsc_pubkey_offset,
  *                          csca_pubkey[512], csca_redc_param[513], csca_exponent, csca_signature[512],
- *                          csca_merkle_siblings[12], csca_leaf_index]
- *                 public=[epoch_nullifier, hashed_address, passport_expiry, csca_merkle_root]
+ *                          csca_merkle_siblings[9], csca_leaf_index]
+ *                 public=[epoch_nullifier, hashed_address, csca_merkle_root]
  *   Primary tier: same private layout (nonce instead of epoch_day)
- *                 public=[nullifier, next_commitment, hashed_address, passport_expiry, csca_merkle_root]
+ *                 public=[nullifier, next_commitment, hashed_address, csca_merkle_root]
  *
  * Requires `mopro build --platforms ios` (or android) to have been run so that
  * apps/mobile/modules/mopro is populated.
@@ -46,11 +46,11 @@ const CSCA_SIGNATURE_LEN = 512;
 
 /**
  * Phase 3c expected input counts:
- *   Base:    3 + 512+1+256+256+257+1 + 1536+1+1+512+513+1+512 + 12+1 + 4 = 4379
- *   Primary: 3 + 512+1+256+256+257+1 + 1536+1+1+512+513+1+512 + 12+1 + 5 = 4380
+ *   Base:    3 + 512+1+256+256+257+1 + 1536+1+1+512+513+1+512 + 9+1 + 3 = 4370
+ *   Primary: 3 + 512+1+256+256+257+1 + 1536+1+1+512+513+1+512 + 9+1 + 4 = 4371
  */
-const EXPECTED_BASE_INPUTS = 4379;
-const EXPECTED_PRIMARY_INPUTS = 4380;
+const EXPECTED_BASE_INPUTS = 4370;
+const EXPECTED_PRIMARY_INPUTS = 4371;
 
 // ---------------------------------------------------------------------------
 // Public interface
@@ -224,7 +224,7 @@ export async function generateBaseProof(input: ProofInput): Promise<BaseProofOut
     // In production (real verifier), this path would throw.
     console.warn('[PROOF-DBG] CSCA pubkey not in Merkle tree — using dev fallback (placeholder Merkle proof)');
     cscaMerkleProof = {
-      siblings: new Array(12).fill('0'),
+      siblings: new Array(9).fill('0'),
       leafIndex: 0,
       root: '0x0000000000000000000000000000000000000000000000000000000000000000' as `0x${string}`,
     };
@@ -252,7 +252,6 @@ export async function generateBaseProof(input: ProofInput): Promise<BaseProofOut
     cscaMerkleProof.siblings,
     cscaMerkleProof.leafIndex,
     hashedAddr,
-    passportExpiry,
     cscaMerkleProof.root,
   );
 
@@ -319,14 +318,14 @@ export async function generateBaseProof(input: ProofInput): Promise<BaseProofOut
     }
 
     // Log the public input values that will be passed to the contract
-    // These must EXACTLY match what the prover embedded in elements 0-3
+    // These must EXACTLY match what the prover embedded in elements 0-2
     console.log('[PROOF-PUB] epochNullifier (prover):', baseInputs.epochNullifier);
     console.log('[PROOF-PUB] hashedAddress (app):', hashedAddr);
-    console.log('[PROOF-PUB] passportExpiry (app):', passportExpiry);
     console.log('[PROOF-PUB] cscaMerkleRoot (app):', cscaMerkleProof.root);
+    console.log('[PROOF-PARAM] passportExpiry (contract arg):', passportExpiry);
 
     // Strip the public inputs from the raw Noir proof and keep the verifier-ready proof body.
-    const proofForContract = stripProofPublicInputs(proofBuf, 4);
+    const proofForContract = stripProofPublicInputs(proofBuf, 3);
     console.log('[PROOF] Stripped proof size:', proofForContract.byteLength, 'bytes =',
       proofForContract.byteLength / 32, 'elements');
     const proofHex = arrayBufferToHex(proofForContract);
@@ -423,7 +422,7 @@ export async function generatePrimaryProof(input: ProofInput): Promise<PrimaryPr
   if (!cscaMerkleProof) {
     console.warn('[PROOF-DBG] CSCA pubkey not in Merkle tree — using dev fallback (placeholder Merkle proof)');
     cscaMerkleProof = {
-      siblings: new Array(12).fill('0'),
+      siblings: new Array(9).fill('0'),
       leafIndex: 0,
       root: '0x0000000000000000000000000000000000000000000000000000000000000000' as `0x${string}`,
     };
@@ -450,7 +449,6 @@ export async function generatePrimaryProof(input: ProofInput): Promise<PrimaryPr
     cscaMerkleProof.siblings,
     cscaMerkleProof.leafIndex,
     hashedAddr,
-    passportExpiry,
     cscaMerkleProof.root,
   );
 
@@ -473,7 +471,7 @@ export async function generatePrimaryProof(input: ProofInput): Promise<PrimaryPr
   );
 
   // Strip the public inputs from the raw Noir proof and keep the verifier-ready proof body.
-  const proofForContract = stripProofPublicInputs(proofBuf, 5);
+  const proofForContract = stripProofPublicInputs(proofBuf, 4);
 
   const proofHex = arrayBufferToHex(proofForContract);
   const vkHex = arrayBufferToHex(vkBuf);
@@ -852,7 +850,6 @@ interface MoproInterface {
     cscaMerkleSiblings: string[],
     cscaLeafIndex: number,
     hashedAddress: string,
-    passportExpiry: string,
     cscaMerkleRoot: string,
   ): Promise<BaseInputsResult> | BaseInputsResult;
 
@@ -876,7 +873,6 @@ interface MoproInterface {
     cscaMerkleSiblings: string[],
     cscaLeafIndex: number,
     hashedAddress: string,
-    passportExpiry: string,
     cscaMerkleRoot: string,
   ): Promise<PrimaryInputsResult> | PrimaryInputsResult;
 
