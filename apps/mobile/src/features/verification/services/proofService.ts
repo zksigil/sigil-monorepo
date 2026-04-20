@@ -46,11 +46,11 @@ const CSCA_SIGNATURE_LEN = 512;
 
 /**
  * Phase 3c expected input counts:
- *   Base:    3 + 512+1+256+256+257+1 + 1536+1+1+512+513+1+512 + 9+1 + 3 = 4370
- *   Primary: 3 + 512+1+256+256+257+1 + 1536+1+1+512+513+1+512 + 9+1 + 4 = 4371
+ *   Base:    3 + 512+1+256+256+257+1 + 1536+1+1+512+513+1+512 + 9+1 + 3 = 4375
+ *   Primary: 3 + 512+1+256+256+257+1 + 1536+1+1+512+513+1+512 + 9+1 + 4 = 4376
  */
-const EXPECTED_BASE_INPUTS = 4370;
-const EXPECTED_PRIMARY_INPUTS = 4371;
+const EXPECTED_BASE_INPUTS = 4375;
+const EXPECTED_PRIMARY_INPUTS = 4376;
 
 // ---------------------------------------------------------------------------
 // Public interface
@@ -324,7 +324,30 @@ export async function generateBaseProof(input: ProofInput): Promise<BaseProofOut
     console.log('[PROOF-PUB] cscaMerkleRoot (app):', cscaMerkleProof.root);
     console.log('[PROOF-PARAM] passportExpiry (contract arg):', passportExpiry);
 
-    // Strip the public inputs from the raw Noir proof and keep the verifier-ready proof body.
+    // Debug: Extract and verify the first 4 field elements from the raw proof
+    const elem0 = new Uint8Array(proofBuf, 0, 32);
+    const elem1 = new Uint8Array(proofBuf, 32, 32);
+    const elem2 = new Uint8Array(proofBuf, 64, 32);
+    const elem3 = new Uint8Array(proofBuf, 96, 32);
+    
+    const elem0Hex = '0x' + Array.from(elem0).map(b => b.toString(16).padStart(2, '0')).join('');
+    const elem1Hex = '0x' + Array.from(elem1).map(b => b.toString(16).padStart(2, '0')).join('');
+    const elem2Hex = '0x' + Array.from(elem2).map(b => b.toString(16).padStart(2, '0')).join('');
+    const elem3Hex = '0x' + Array.from(elem3).map(b => b.toString(16).padStart(2, '0')).join('');
+    
+    const elem0Dec = (BigInt(elem0Hex) % BigInt('21888242871839275222246405745257275088548364400416034343698204186575808495617')).toString(10);
+    const elem1Dec = (BigInt(elem1Hex) % BigInt('21888242871839275222246405745257275088548364400416034343698204186575808495617')).toString(10);
+    
+    console.log('[PROOF-RAW-ELEM] [0]:', elem0Hex, '→', elem0Dec);
+    console.log('[PROOF-RAW-ELEM] [1]:', elem1Hex, '→', elem1Dec);
+    console.log('[PROOF-RAW-ELEM] [2]:', elem2Hex);
+    console.log('[PROOF-RAW-ELEM] [3]:', elem3Hex);
+    console.log('[PROOF-RAW-ELEM] expected epochNullifier:', baseInputs.epochNullifier);
+    console.log('[PROOF-RAW-ELEM] expected hashedAddress:', hashedAddr);
+    console.log('[PROOF-RAW-ELEM] expected cscaMerkleRoot:', cscaMerkleProof.root);
+
+    // Base circuit public inputs: [epochNullifier, hashedAddress, cscaMerkleRoot] = 3 elements.
+    // The raw proof also has 1 trailing metadata element (stripped inside helper).
     const proofForContract = stripProofPublicInputs(proofBuf, 3);
     console.log('[PROOF] Stripped proof size:', proofForContract.byteLength, 'bytes =',
       proofForContract.byteLength / 32, 'elements');
@@ -470,7 +493,8 @@ export async function generatePrimaryProof(input: ProofInput): Promise<PrimaryPr
     false,
   );
 
-  // Strip the public inputs from the raw Noir proof and keep the verifier-ready proof body.
+  // Primary circuit public inputs: [nullifier, nextCommitment, hashedAddress, cscaMerkleRoot] = 4.
+  // Helper also trims 1 trailing metadata element, yielding the 507-element proof body.
   const proofForContract = stripProofPublicInputs(proofBuf, 4);
 
   const proofHex = arrayBufferToHex(proofForContract);
@@ -801,17 +825,23 @@ function arrayBufferToHex(buf: ArrayBuffer): `0x${string}` {
 }
 
 /**
- * Strip the public inputs from a raw Noir proof buffer.
+ * Strip the public inputs and trailing metadata from a raw Noir proof buffer.
  *
- * The Noir proof output format is:
- *   [numPubInputs public inputs] [proof body]
+ * Raw BB/Noir proof layout (empirically verified against BaseUltraHonkVerifier):
+ *   [numPubInputs Fr elements — user public inputs]
+ *   [507 Fr elements — Honk.ZKProof body]
+ *   [1 trailing Fr element — BB metadata]
  *
- * The verifier contract expects the proof body only, with public inputs supplied
- * separately in the `publicInputs` argument.
+ * The Solidity verifier takes PROOF_SIZE=507 body elements and public inputs
+ * supplied separately, so both the leading PIs and the trailing metadata slot
+ * must be stripped.
  */
 function stripProofPublicInputs(rawProof: ArrayBuffer, numPubInputs: number): ArrayBuffer {
   const ELEMENT_SIZE = 32;
-  return rawProof.slice(numPubInputs * ELEMENT_SIZE);
+  const TRAILING_METADATA_ELEMENTS = 1;
+  const start = numPubInputs * ELEMENT_SIZE;
+  const end = rawProof.byteLength - TRAILING_METADATA_ELEMENTS * ELEMENT_SIZE;
+  return rawProof.slice(start, end);
 }
 
 // ---------------------------------------------------------------------------

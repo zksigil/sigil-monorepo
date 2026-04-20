@@ -295,6 +295,13 @@ export function ProofGenerationScreen(): React.JSX.Element {
         ] as const,
       };
 
+      console.log('[PROOF SUBMIT] Input args:', {
+        nullifier: decimalOrHexToBytes32(proofResult.nullifier),
+        nextCommitment: decimalOrHexToBytes32(proofResult.nextCommitment),
+        passportExpiry: Number(proofResult.zkProof.passportExpiry),
+        proofLength: proofResult.zkProof.proof.length,
+      });
+
       try {
         console.log('[TX] Simulating registerPrimary to', registryAddress);
         await publicClient.simulateContract({ ...primaryCall, account: address });
