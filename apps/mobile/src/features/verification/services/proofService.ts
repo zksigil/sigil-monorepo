@@ -347,7 +347,6 @@ export async function generateBaseProof(input: ProofInput): Promise<BaseProofOut
     console.log('[PROOF-RAW-ELEM] expected cscaMerkleRoot:', cscaMerkleProof.root);
 
     // Base circuit public inputs: [epochNullifier, hashedAddress, cscaMerkleRoot] = 3 elements.
-    // The raw proof also has 1 trailing metadata element (stripped inside helper).
     const proofForContract = stripProofPublicInputs(proofBuf, 3);
     console.log('[PROOF] Stripped proof size:', proofForContract.byteLength, 'bytes =',
       proofForContract.byteLength / 32, 'elements');
@@ -494,7 +493,6 @@ export async function generatePrimaryProof(input: ProofInput): Promise<PrimaryPr
   );
 
   // Primary circuit public inputs: [nullifier, nextCommitment, hashedAddress, cscaMerkleRoot] = 4.
-  // Helper also trims 1 trailing metadata element, yielding the 507-element proof body.
   const proofForContract = stripProofPublicInputs(proofBuf, 4);
 
   const proofHex = arrayBufferToHex(proofForContract);
@@ -825,23 +823,18 @@ function arrayBufferToHex(buf: ArrayBuffer): `0x${string}` {
 }
 
 /**
- * Strip the public inputs and trailing metadata from a raw Noir proof buffer.
+ * Strip the leading public inputs from a raw Noir proof buffer.
  *
- * Raw BB/Noir proof layout (empirically verified against BaseUltraHonkVerifier):
+ * Raw BB/Noir proof layout (zkmopro/aztec-packages fork, PROOF_SIZE=508):
  *   [numPubInputs Fr elements — user public inputs]
- *   [507 Fr elements — Honk.ZKProof body]
- *   [1 trailing Fr element — BB metadata]
+ *   [508 Fr elements — Honk.ZKProof body]
  *
- * The Solidity verifier takes PROOF_SIZE=507 body elements and public inputs
- * supplied separately, so both the leading PIs and the trailing metadata slot
- * must be stripped.
+ * The Solidity verifier (regenerated from zkmopro's honk_zk_contract.hpp) takes
+ * the body elements and public inputs supplied separately.
  */
 function stripProofPublicInputs(rawProof: ArrayBuffer, numPubInputs: number): ArrayBuffer {
   const ELEMENT_SIZE = 32;
-  const TRAILING_METADATA_ELEMENTS = 1;
-  const start = numPubInputs * ELEMENT_SIZE;
-  const end = rawProof.byteLength - TRAILING_METADATA_ELEMENTS * ELEMENT_SIZE;
-  return rawProof.slice(start, end);
+  return rawProof.slice(numPubInputs * ELEMENT_SIZE);
 }
 
 // ---------------------------------------------------------------------------

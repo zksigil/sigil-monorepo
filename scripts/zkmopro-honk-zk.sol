@@ -1,13 +1,3 @@
-// SPDX-License-Identifier: Apache-2.0
-// Copyright 2022 Aztec
-pragma solidity >=0.8.21;
-
-uint256 constant N = 524288;
-uint256 constant LOG_N = 19;
-uint256 constant NUMBER_OF_PUBLIC_INPUTS = 19;
-// VK data is stored externally in BaseVerificationKey.sol (SSTORE2 pattern)
-// to keep this contract under the 24,576-byte Spurious Dragon size limit.
-
 pragma solidity ^0.8.27;
 
 interface IVerifier {
@@ -1581,7 +1571,7 @@ abstract contract BaseZKHonkVerifier is IVerifier {
     // Number of field elements in a ultra honk zero knowledge proof
     uint256 constant PROOF_SIZE = 508;
 
-    function loadVerificationKey() internal view virtual returns (Honk.VerificationKey memory);
+    function loadVerificationKey() internal pure virtual returns (Honk.VerificationKey memory);
 
     function verify(bytes calldata proof, bytes32[] calldata publicInputs)
         public
@@ -2059,21 +2049,8 @@ abstract contract BaseZKHonkVerifier is IVerifier {
     }
 }
 
-contract BaseUltraHonkVerifier is BaseZKHonkVerifier(N, LOG_N, NUMBER_OF_PUBLIC_INPUTS) {
-    /// @notice Address of the SSTORE2 data contract containing the ABI-encoded VK.
-    address public immutable vkDataContract;
-
-    constructor(address _vkDataContract) {
-        vkDataContract = _vkDataContract;
-    }
-
-    /// @dev Loads verification key from external data contract via EXTCODECOPY.
-    ///      The data contract's bytecode is the raw VK struct data — a direct copy works
-    ///      because the struct contains only fixed-size types (uint256 and G1Point).
-    function loadVerificationKey() internal view override returns (Honk.VerificationKey memory vk) {
-        address _vkAddr = vkDataContract;
-        assembly {
-            extcodecopy(_vkAddr, vk, 0, extcodesize(_vkAddr))
-        }
+contract HonkVerifier is BaseZKHonkVerifier(N, LOG_N, NUMBER_OF_PUBLIC_INPUTS) {
+     function loadVerificationKey() internal pure override returns (Honk.VerificationKey memory) {
+       return HonkVerificationKey.loadVerificationKey();
     }
 }

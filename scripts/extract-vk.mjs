@@ -142,10 +142,42 @@ let patched = src.replace(
   `// VK data is stored externally in ${vkContractName}.sol (SSTORE2 pattern)\n// to keep this contract under the 24,576-byte Spurious Dragon size limit.\n`
 );
 
-// Replace the contract's loadVerificationKey function
-patched = patched.replace(
-  /contract\s+(\w+)\s+is\s+IVerifier\s*\{[\s\S]*?function\s+loadVerificationKey\(\)\s+internal\s+pure\s+returns\s*\(Honk\.VerificationKey\s+memory\s+vk\)\s*\{[^}]+\}/,
-  `contract ${contractName} is IVerifier {
+// Replace the contract's loadVerificationKey function. Handles two templates:
+//   (A) upstream bb:  contract X is IVerifier { ... function loadVerificationKey() internal pure ... }
+//   (B) zkmopro:      contract X is BaseZKHonkVerifier(N, LOG_N, NUMBER_OF_PUBLIC_INPUTS) {
+//                       function loadVerificationKey() internal pure override ... }
+//       — requires the abstract base to declare loadVerificationKey as `view virtual` (splice script patches this).
+const zkmoproConcreteRe =
+  /contract\s+(\w+)\s+is\s+BaseZKHonkVerifier\([^)]*\)\s*\{\s*function\s+loadVerificationKey\(\)\s+internal\s+pure\s+override\s+returns\s*\(Honk\.VerificationKey\s+memory\)\s*\{[\s\S]*?\n\s*\}\s*\n\s*\}/;
+const upstreamConcreteRe =
+  /contract\s+(\w+)\s+is\s+IVerifier\s*\{[\s\S]*?function\s+loadVerificationKey\(\)\s+internal\s+pure\s+returns\s*\(Honk\.VerificationKey\s+memory\s+vk\)\s*\{[^}]+\}/;
+
+if (zkmoproConcreteRe.test(patched)) {
+  patched = patched.replace(
+    zkmoproConcreteRe,
+    `contract ${contractName} is BaseZKHonkVerifier(N, LOG_N, NUMBER_OF_PUBLIC_INPUTS) {
+    /// @notice Address of the SSTORE2 data contract containing the ABI-encoded VK.
+    address public immutable vkDataContract;
+
+    constructor(address _vkDataContract) {
+        vkDataContract = _vkDataContract;
+    }
+
+    /// @dev Loads verification key from external data contract via EXTCODECOPY.
+    ///      The data contract's bytecode is the raw VK struct data — a direct copy works
+    ///      because the struct contains only fixed-size types (uint256 and G1Point).
+    function loadVerificationKey() internal view override returns (Honk.VerificationKey memory vk) {
+        address _vkAddr = vkDataContract;
+        assembly {
+            extcodecopy(_vkAddr, vk, 0, extcodesize(_vkAddr))
+        }
+    }
+}`
+  );
+} else {
+  patched = patched.replace(
+    upstreamConcreteRe,
+    `contract ${contractName} is IVerifier {
     using FrLib for Fr;
 
     /// @notice Address of the SSTORE2 data contract containing the ABI-encoded VK.
@@ -164,7 +196,8 @@ patched = patched.replace(
             extcodecopy(_vkAddr, vk, 0, extcodesize(_vkAddr))
         }
     }`
-);
+  );
+}
 
 writeFileSync(join(outDir, `${contractName}.sol`), patched);
 console.log(`  ✅ ${contractName}.sol written (VK extracted)`);

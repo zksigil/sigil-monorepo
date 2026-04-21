@@ -62,15 +62,14 @@ bb-vk: circuits ## Generate verification keys from compiled circuits
 	bb write_vk -s ultra_honk $(BB_FLAGS) -b $(CIRCUITS_TARGET)/passport_primary.json -o $(CIRCUITS_TARGET)/vk_primary
 	@echo "✅ VKs written to $(CIRCUITS_TARGET)/vk_base and vk_primary"
 
-bb-verifier: bb-vk ## Generate Solidity verifier contracts from VKs, extract VK, and copy to contracts
-	@echo "━━━ Generating base Solidity verifier ━━━"
+bb-verifier: bb-vk ## Generate Solidity verifier contracts from VKs, splice zkmopro body, extract VK
+	@echo "━━━ Generating base Solidity verifier (bb → VK library only; body replaced below) ━━━"
 	bb write_solidity_verifier -s ultra_honk --zk -k $(CIRCUITS_TARGET)/vk_base/vk -o $(CIRCUITS_TARGET)/BaseUltraHonkVerifier.sol
-	@echo "━━━ Renaming base contract: HonkVerifier → BaseUltraHonkVerifier ━━━"
-	sed -i '' 's/contract HonkVerifier/contract BaseUltraHonkVerifier/' $(CIRCUITS_TARGET)/BaseUltraHonkVerifier.sol
+	@echo "━━━ Splicing zkmopro/aztec-packages template body (PROOF_SIZE=508, NUMBER_OF_ENTITIES=41) ━━━"
+	node scripts/splice-zkmopro-verifier.mjs $(CIRCUITS_TARGET)/BaseUltraHonkVerifier.sol BaseUltraHonkVerifier
 	@echo "━━━ Generating primary Solidity verifier ━━━"
 	bb write_solidity_verifier -s ultra_honk --zk -k $(CIRCUITS_TARGET)/vk_primary/vk -o $(CIRCUITS_TARGET)/PrimaryUltraHonkVerifier.sol
-	@echo "━━━ Renaming primary contract: HonkVerifier → PrimaryUltraHonkVerifier ━━━"
-	sed -i '' 's/contract HonkVerifier/contract PrimaryUltraHonkVerifier/' $(CIRCUITS_TARGET)/PrimaryUltraHonkVerifier.sol
+	node scripts/splice-zkmopro-verifier.mjs $(CIRCUITS_TARGET)/PrimaryUltraHonkVerifier.sol PrimaryUltraHonkVerifier
 	@echo "━━━ Extracting VKs into SSTORE2 data contracts (24KB size fix) ━━━"
 	node scripts/extract-vk.mjs $(CIRCUITS_TARGET)/BaseUltraHonkVerifier.sol BaseUltraHonkVerifier BaseVerificationKey $(CONTRACTS)/src/verifiers
 	node scripts/extract-vk.mjs $(CIRCUITS_TARGET)/PrimaryUltraHonkVerifier.sol PrimaryUltraHonkVerifier PrimaryVerificationKey $(CONTRACTS)/src/verifiers
