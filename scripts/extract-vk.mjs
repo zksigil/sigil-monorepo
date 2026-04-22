@@ -54,17 +54,30 @@ while ((m = fieldRegex.exec(initBlock)) !== null) {
   }
 }
 
-// ── 2. Struct declaration order (MUST match Honk.VerificationKey) ─────
+// ── 2. Struct declaration order (MUST match zkmopro Honk.VerificationKey) ──
+//
+// zkmopro's UltraHonk adds qMemory + qNnf selectors (NUMBER_OF_ENTITIES=41)
+// that do not exist in upstream bb's VK output. Upstream bb has qAux instead.
+// For circuits that don't use memory or NNF gates (qMemory = qNnf = zero
+// polynomial), the commitment is the G1 point at infinity = (0, 0).
 const structOrder = [
   'circuitSize', 'logCircuitSize', 'publicInputsSize',
   'qm', 'qc', 'ql', 'qr', 'qo', 'q4',
-  'qLookup', 'qArith', 'qDeltaRange', 'qAux', 'qElliptic',
+  'qLookup', 'qArith', 'qDeltaRange', 'qMemory', 'qNnf', 'qElliptic',
   'qPoseidon2External', 'qPoseidon2Internal',
   's1', 's2', 's3', 's4',
   'id1', 'id2', 'id3', 'id4',
   't1', 't2', 't3', 't4',
   'lagrangeFirst', 'lagrangeLast',
 ];
+
+// qMemory and qNnf don't exist in upstream bb's VK — inject zero-point
+// placeholders (commitment to the zero polynomial = G1 point at infinity).
+for (const name of ['qMemory', 'qNnf']) {
+  if (!fields[name]) {
+    fields[name] = { type: 'point', x: '0x0000000000000000000000000000000000000000000000000000000000000000', y: '0x0000000000000000000000000000000000000000000000000000000000000000' };
+  }
+}
 
 // Validate all fields present
 for (const name of structOrder) {

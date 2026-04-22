@@ -8,6 +8,11 @@ interface IUltraHonkVerifier {
     function verify(bytes calldata proof, bytes32[] calldata publicInputs) external view returns (bool);
 }
 
+// hashed_address in the circuit is a BN254 field element. On-chain, keccak256(msg.sender) is a
+// 256-bit value that exceeds the BN254 prime ~81% of the time. The Mopro prover reduces it mod p,
+// so the verifier must do the same or the Fiat-Shamir transcript will diverge (SumcheckFailed).
+uint256 constant BN254_PRIME = 21888242871839275222246405745257275088548364400416034343698204186575808495617;
+
 /// @title ProofVerifier
 /// @notice Delegates ZK proof verification to generated Noir UltraHonk verifier contracts.
 /// @dev Marshals typed public inputs into the bytes32[] array expected by the generated
@@ -19,6 +24,7 @@ interface IUltraHonkVerifier {
 ///      The CSCA Merkle root is fetched from the on-chain CSCAMerkleTree contract and
 ///      passed as a public input to the circuit. The circuit verifies that the DSC
 ///      public key is included in the ICAO Merkle tree.
+
 contract ProofVerifier is IProofVerifier {
     IUltraHonkVerifier public immutable i_baseVerifier;
     IUltraHonkVerifier public immutable i_primaryVerifier;
@@ -39,7 +45,7 @@ contract ProofVerifier is IProofVerifier {
     ) external view override returns (bool) {
         bytes32[] memory publicInputs = new bytes32[](3);
         publicInputs[0] = epochNullifier;
-        publicInputs[1] = hashedAddress;
+        publicInputs[1] = bytes32(uint256(hashedAddress) % BN254_PRIME);
         publicInputs[2] = cscaMerkleRoot;
         return i_baseVerifier.verify(proof, publicInputs);
     }
@@ -55,7 +61,7 @@ contract ProofVerifier is IProofVerifier {
         bytes32[] memory publicInputs = new bytes32[](4);
         publicInputs[0] = nullifier;
         publicInputs[1] = nextCommitment;
-        publicInputs[2] = hashedAddress;
+        publicInputs[2] = bytes32(uint256(hashedAddress) % BN254_PRIME);
         publicInputs[3] = cscaMerkleRoot;
         return i_primaryVerifier.verify(proof, publicInputs);
     }

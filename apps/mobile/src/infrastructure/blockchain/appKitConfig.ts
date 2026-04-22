@@ -112,4 +112,35 @@ export const appKit = createAppKit({
     onramp: false,
     swaps: false,
   },
+  // customWallets are set synchronously in the AppKit constructor — they appear
+  // immediately when the connect view renders, with no API fetch required.
+  customWallets: [
+    {
+      id: 'c57ca95b47569778a828d19178114f4db188b89b763c899ba0be274e97267d96',
+      name: 'MetaMask',
+      mobile_link: 'metamask://',
+      app_store: 'https://apps.apple.com/us/app/metamask/id1438144202',
+      play_store: 'https://play.google.com/store/apps/details?id=io.metamask',
+    },
+    {
+      id: 'fd20dc426fb37566d803205b19bbc1d4096b248ac04548e3cfb6b3a38bd033aa',
+      name: 'Coinbase Wallet',
+      mobile_link: 'cbwallet://',
+      app_store: 'https://apps.apple.com/us/app/coinbase-wallet/id1278383455',
+      play_store: 'https://play.google.com/store/apps/details?id=org.toshi',
+    },
+    {
+      id: '1ae92b26df02f0abca6304df07debccd18262fdf5fe82daa81593582dac9a369',
+      name: 'Rainbow',
+      mobile_link: 'rainbow://',
+      app_store: 'https://apps.apple.com/us/app/rainbow-ethereum-wallet/id1457119021',
+    },
+    {
+      id: 'ecc4036f814562b41a5268adc86270fba1365471402006302e70169465b7ac18',
+      name: 'Zerion',
+      mobile_link: 'zerion://',
+      app_store: 'https://apps.apple.com/us/app/zerion-crypto-web3-wallet/id1456732565',
+      play_store: 'https://play.google.com/store/apps/details?id=io.zerion.android',
+    },
+  ],
 });
