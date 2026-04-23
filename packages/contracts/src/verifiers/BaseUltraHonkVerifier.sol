@@ -2067,13 +2067,47 @@ contract BaseUltraHonkVerifier is BaseZKHonkVerifier(N, LOG_N, NUMBER_OF_PUBLIC_
         vkDataContract = _vkDataContract;
     }
 
-    /// @dev Loads verification key from external data contract via EXTCODECOPY.
-    ///      The data contract's bytecode is the raw VK struct data — a direct copy works
-    ///      because the struct contains only fixed-size types (uint256 and G1Point).
+    /// @dev Loads verification key from external data contract. The data contract's bytecode
+    ///      is a flat sequence of 59 uint256 words (3 header + 28 × 2 coords). We copy the raw
+    ///      bytes into a scratch buffer, then assign each field by value so Solidity allocates
+    ///      proper memory for the nested G1Point structs (which are stored via pointers, not
+    ///      inline, in memory).
     function loadVerificationKey() internal view override returns (Honk.VerificationKey memory vk) {
         address _vkAddr = vkDataContract;
+        uint256[59] memory raw;
         assembly {
-            extcodecopy(_vkAddr, vk, 0, extcodesize(_vkAddr))
+            extcodecopy(_vkAddr, raw, 0, 0x760) // 59 words = 1888 bytes = 0x760
         }
+        vk.circuitSize = raw[0];
+        vk.logCircuitSize = raw[1];
+        vk.publicInputsSize = raw[2];
+        vk.qm = Honk.G1Point(raw[3], raw[4]);
+        vk.qc = Honk.G1Point(raw[5], raw[6]);
+        vk.ql = Honk.G1Point(raw[7], raw[8]);
+        vk.qr = Honk.G1Point(raw[9], raw[10]);
+        vk.qo = Honk.G1Point(raw[11], raw[12]);
+        vk.q4 = Honk.G1Point(raw[13], raw[14]);
+        vk.qLookup = Honk.G1Point(raw[15], raw[16]);
+        vk.qArith = Honk.G1Point(raw[17], raw[18]);
+        vk.qDeltaRange = Honk.G1Point(raw[19], raw[20]);
+        vk.qMemory = Honk.G1Point(raw[21], raw[22]);
+        vk.qNnf = Honk.G1Point(raw[23], raw[24]);
+        vk.qElliptic = Honk.G1Point(raw[25], raw[26]);
+        vk.qPoseidon2External = Honk.G1Point(raw[27], raw[28]);
+        vk.qPoseidon2Internal = Honk.G1Point(raw[29], raw[30]);
+        vk.s1 = Honk.G1Point(raw[31], raw[32]);
+        vk.s2 = Honk.G1Point(raw[33], raw[34]);
+        vk.s3 = Honk.G1Point(raw[35], raw[36]);
+        vk.s4 = Honk.G1Point(raw[37], raw[38]);
+        vk.id1 = Honk.G1Point(raw[39], raw[40]);
+        vk.id2 = Honk.G1Point(raw[41], raw[42]);
+        vk.id3 = Honk.G1Point(raw[43], raw[44]);
+        vk.id4 = Honk.G1Point(raw[45], raw[46]);
+        vk.t1 = Honk.G1Point(raw[47], raw[48]);
+        vk.t2 = Honk.G1Point(raw[49], raw[50]);
+        vk.t3 = Honk.G1Point(raw[51], raw[52]);
+        vk.t4 = Honk.G1Point(raw[53], raw[54]);
+        vk.lagrangeFirst = Honk.G1Point(raw[55], raw[56]);
+        vk.lagrangeLast = Honk.G1Point(raw[57], raw[58]);
     }
 }

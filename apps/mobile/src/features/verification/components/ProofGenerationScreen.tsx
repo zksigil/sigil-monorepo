@@ -77,10 +77,55 @@ const CONTRACT_ERRORS: { name: string; selector: string; message: string }[] = [
     selector: '0x129696e4',
     message: 'You are not authorized for this action.',
   },
+  // UltraHonk verifier errors (zkmopro-honk-zk template)
+  {
+    name: 'SumcheckFailed',
+    selector: '0x9fc3a218',
+    message: 'UltraHonk: Sumcheck verification failed (likely VK/transcript mismatch).',
+  },
+  {
+    name: 'ShpleminiFailed',
+    selector: '0xa5d82e8a',
+    message: 'UltraHonk: Shplemini pairing check failed.',
+  },
+  {
+    name: 'ProofLengthWrong',
+    selector: '0xed74ac0a',
+    message: 'UltraHonk: Proof length does not match PROOF_SIZE.',
+  },
+  {
+    name: 'PublicInputsLengthWrong',
+    selector: '0xfa066593',
+    message: 'UltraHonk: Public inputs count does not match publicInputsSize.',
+  },
+  {
+    name: 'ConsistencyCheckFailed',
+    selector: '0xa2a2ac83',
+    message: 'UltraHonk: Commitment consistency check failed.',
+  },
+  {
+    name: 'GeminiChallengeInSubgroup',
+    selector: '0x835eb8f7',
+    message: 'UltraHonk: Gemini challenge landed in subgroup (should be negligible).',
+  },
 ];
 
 function parseContractError(err: unknown): string {
   const raw = (err as BaseError)?.shortMessage ?? (err as BaseError)?.message ?? '';
+  // Log the full error shape so we can extract the raw revert data (selector)
+  try {
+    const anyErr = err as any;
+    const cand =
+      anyErr?.cause?.data ??
+      anyErr?.data ??
+      anyErr?.cause?.cause?.data ??
+      anyErr?.cause?.raw ??
+      anyErr?.details;
+    console.log('[TX-ERR] shortMessage:', anyErr?.shortMessage);
+    console.log('[TX-ERR] raw data field:', cand);
+    console.log('[TX-ERR] cause.name:', anyErr?.cause?.name);
+    console.log('[TX-ERR] metaMessages:', anyErr?.metaMessages);
+  } catch {}
   for (const { name, selector, message } of CONTRACT_ERRORS) {
     if (raw.includes(name) || raw.includes(selector)) return message;
   }
@@ -329,6 +374,17 @@ export function ProofGenerationScreen(): React.JSX.Element {
 
       try {
         console.log('[TX] Simulating registerBase to', registryAddress);
+        const proofHex = proofResult.zkProof.proof;
+        console.log('[TX-PROOF] bytes:', (proofHex.length - 2) / 2);
+        console.log('[TX-PROOF-FULL]', proofHex);
+        console.log('[TX-CAST-ARGS]', JSON.stringify({
+          registry: registryAddress,
+          epochNullifier: decimalOrHexToBytes32(proofResult.epochNullifier),
+          passportExpiry: Number(proofResult.zkProof.passportExpiry),
+          hashedAddress: proofResult.zkProof.hashedAddress,
+          cscaMerkleRoot: proofResult.cscaMerkleRoot,
+          sender: address,
+        }));
         await publicClient.simulateContract({ ...baseCall, account: address });
       } catch (simError) {
         console.error('[TX] Simulation failed:', simError);

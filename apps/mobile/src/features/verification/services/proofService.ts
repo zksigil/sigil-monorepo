@@ -268,6 +268,25 @@ export async function generateBaseProof(input: ProofInput): Promise<BaseProofOut
     false,
   );
 
+  // Diagnostic: log Mopro's in-memory VK so we can diff it against the deployed
+  // BaseVerificationKey.sol SSTORE2 data. Deployed layout = 59 words (1888 bytes):
+  //   [0] circuitSize (expect 524288 = 0x80000)
+  //   [1] logCircuitSize (expect 19 = 0x13)
+  //   [2] publicInputsSize (expect 19 = 0x13)
+  //   [3..58] 28 G1Points × 2 words
+  // Compare against: cast code 0xDc64a140Aa3E981100a9becA4E685f962f0cF6C9 --rpc-url http://192.168.45.38:8545
+  {
+    const vkDbgHex = arrayBufferToHex(vkBuf);
+    const vkBytes = vkBuf.byteLength;
+    console.log('[PROOF-VK] bytes:', vkBytes, '(expected 1888 = 59 words)');
+    console.log('[PROOF-VK] words:', vkBytes / 32);
+    for (let i = 0; i < Math.min(6, vkBytes / 32); i++) {
+      const word = vkDbgHex.slice(2 + i * 64, 2 + (i + 1) * 64);
+      console.log(`[PROOF-VK] word[${i}]: 0x${word}`);
+    }
+    console.log('[PROOF-VK] full hex:', vkDbgHex);
+  }
+
   console.log('[PROOF] Generating base proof (5-15s)...');
   try {
     const proofBuf = await Mopro.generateNoirProof(
@@ -481,6 +500,15 @@ export async function generatePrimaryProof(input: ProofInput): Promise<PrimaryPr
     true,
     false,
   );
+
+  // Dump the raw Mopro primary VK so we can regenerate PrimaryVerificationKey.sol
+  // via scripts/mopro-vk-to-solidity.mjs (paste into /tmp/mopro_primary_vk.hex).
+  // Expected: 1816 bytes (24-byte header + 28×64-byte G1 points).
+  {
+    const vkDbgHex = arrayBufferToHex(vkBuf);
+    console.log('[PROOF-VK-PRIMARY] bytes:', vkBuf.byteLength, '(expected 1816)');
+    console.log('[PROOF-VK-PRIMARY] full hex:', vkDbgHex);
+  }
 
   console.log('[PROOF] Generating primary proof (5-15s)...');
   const proofBuf = await Mopro.generateNoirProof(
