@@ -177,7 +177,10 @@ export function computePrimaryInputs(dg1Hash: string, sodHash: string, nonce: st
  *
  * Supports both RSA-2048 (256 bytes) and RSA-4096 (512 bytes).
  *
- * `redc_param = floor(2^(2*bits + 4) / modulus)`
+ * `redc_param = floor(2^(2*bits + BARRETT_REDUCTION_OVERFLOW_BITS) / modulus)`
+ *
+ * `BARRETT_REDUCTION_OVERFLOW_BITS = 6` matches noir-bignum >= v0.9.x.
+ * (v0.7.3 used 4 — bumping noir-bignum changed this constant.)
  *
  * Returns N+1 bytes (big-endian): 257 bytes for 2048-bit, 513 bytes for 4096-bit.
  */
@@ -563,7 +566,7 @@ function uniffiEnsureInitialized() {
     if (nativeModule().ubrn_uniffi_zkpassport_circuits_checksum_func_compute_primary_inputs() !== 5234) {
         throw new UniffiInternalError.ApiChecksumMismatch("uniffi_zkpassport_circuits_checksum_func_compute_primary_inputs");
     }
-    if (nativeModule().ubrn_uniffi_zkpassport_circuits_checksum_func_compute_redc_param() !== 62253) {
+    if (nativeModule().ubrn_uniffi_zkpassport_circuits_checksum_func_compute_redc_param() !== 42320) {
         throw new UniffiInternalError.ApiChecksumMismatch("uniffi_zkpassport_circuits_checksum_func_compute_redc_param");
     }
     if (nativeModule().ubrn_uniffi_zkpassport_circuits_checksum_func_generate_noir_proof() !== 9753) {

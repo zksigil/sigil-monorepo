@@ -59,7 +59,7 @@ fn main(
     // 1. RSA-2048: DSC signed the SOD's signedAttrs
     // ---------------------------------------------------------------
 
-    let signed_attrs_hash: [u8; 32] = sha256::sha256_var(signed_attrs, signed_attrs_len as u64);
+    let signed_attrs_hash: [u8; 32] = sha256::sha256_var(signed_attrs, signed_attrs_len);
 
     let pubkey_limbs = pack_be_bytes::<256, 18>(pubkey);
     let redc_limbs = pack_be_bytes::<257, 18>(redc_param);
@@ -85,7 +85,7 @@ fn main(
     // 3. RSA-4096: CSCA signed the DSC's TBS certificate
     // ---------------------------------------------------------------
 
-    let dsc_tbs_hash: [u8; 32] = sha256::sha256_var(dsc_tbs, dsc_tbs_len as u64);
+    let dsc_tbs_hash: [u8; 32] = sha256::sha256_var(dsc_tbs, dsc_tbs_len);
 
     let csca_pubkey_limbs = pack_be_bytes::<512, 35>(csca_pubkey);
     let csca_redc_limbs = pack_be_bytes::<513, 35>(csca_redc_param);

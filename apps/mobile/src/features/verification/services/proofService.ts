@@ -267,25 +267,7 @@ export async function generateBaseProof(input: ProofInput): Promise<BaseProofOut
     true,
     false,
   );
-
-  // Diagnostic: log Mopro's in-memory VK so we can diff it against the deployed
-  // BaseVerificationKey.sol SSTORE2 data. Deployed layout = 59 words (1888 bytes):
-  //   [0] circuitSize (expect 524288 = 0x80000)
-  //   [1] logCircuitSize (expect 19 = 0x13)
-  //   [2] publicInputsSize (expect 19 = 0x13)
-  //   [3..58] 28 G1Points × 2 words
-  // Compare against: cast code 0xDc64a140Aa3E981100a9becA4E685f962f0cF6C9 --rpc-url http://192.168.45.38:8545
-  {
-    const vkDbgHex = arrayBufferToHex(vkBuf);
-    const vkBytes = vkBuf.byteLength;
-    console.log('[PROOF-VK] bytes:', vkBytes, '(expected 1888 = 59 words)');
-    console.log('[PROOF-VK] words:', vkBytes / 32);
-    for (let i = 0; i < Math.min(6, vkBytes / 32); i++) {
-      const word = vkDbgHex.slice(2 + i * 64, 2 + (i + 1) * 64);
-      console.log(`[PROOF-VK] word[${i}]: 0x${word}`);
-    }
-    console.log('[PROOF-VK] full hex:', vkDbgHex);
-  }
+  console.log('[PROOF-VK] base VK bytes:', vkBuf.byteLength);
 
   console.log('[PROOF] Generating base proof (5-15s)...');
   try {
@@ -298,31 +280,8 @@ export async function generateBaseProof(input: ProofInput): Promise<BaseProofOut
       false,
     );
 
-    console.log('[PROOF] Base proof generated, raw size:', proofBuf.byteLength, 'bytes =',
-      proofBuf.byteLength / 32, 'field elements');
+    console.log('[PROOF] Base proof generated, raw size:', proofBuf.byteLength, 'bytes');
 
-    // Debug: dump elements to find the boundary between metadata and proof body
-    // Check which elements are zero (padding/metadata) vs non-zero (proof data)
-    const proofBytes = new Uint8Array(proofBuf);
-    for (let i = 0; i < Math.min(70, proofBuf.byteLength / 32); i++) {
-      const el = proofBytes.subarray(i * 32, (i + 1) * 32);
-      const isZero = el.every(b => b === 0);
-      const hex = Array.from(el.subarray(0, 8)).map(b => b.toString(16).padStart(2, '0')).join('');
-      const hexTail = Array.from(el.subarray(24, 32)).map(b => b.toString(16).padStart(2, '0')).join('');
-      if (i < 10 || (i >= 50 && i < 60) || isZero) {
-        console.log(`[PROOF-FMT] [${i}] ${hex}...${hexTail}${isZero ? ' (ZERO)' : ''}`);
-      }
-    }
-    // Count consecutive zero elements from the end
-    let trailingZeros = 0;
-    for (let i = proofBuf.byteLength / 32 - 1; i >= 0; i--) {
-      const el = proofBytes.subarray(i * 32, (i + 1) * 32);
-      if (el.every(b => b === 0)) trailingZeros++;
-      else break;
-    }
-    console.log('[PROOF-FMT] trailing zero elements:', trailingZeros);
-
-    // Step 1: Verify proof locally before sending to contract
     try {
       const localValid = await Mopro.verifyNoirProof(
         BASE_CIRCUIT_PATH,
@@ -336,39 +295,10 @@ export async function generateBaseProof(input: ProofInput): Promise<BaseProofOut
       console.error('[PROOF] Local verification error:', verifyErr);
     }
 
-    // Log the public input values that will be passed to the contract
-    // These must EXACTLY match what the prover embedded in elements 0-2
-    console.log('[PROOF-PUB] epochNullifier (prover):', baseInputs.epochNullifier);
-    console.log('[PROOF-PUB] hashedAddress (app):', hashedAddr);
-    console.log('[PROOF-PUB] cscaMerkleRoot (app):', cscaMerkleProof.root);
-    console.log('[PROOF-PARAM] passportExpiry (contract arg):', passportExpiry);
-
-    // Debug: Extract and verify the first 4 field elements from the raw proof
-    const elem0 = new Uint8Array(proofBuf, 0, 32);
-    const elem1 = new Uint8Array(proofBuf, 32, 32);
-    const elem2 = new Uint8Array(proofBuf, 64, 32);
-    const elem3 = new Uint8Array(proofBuf, 96, 32);
-    
-    const elem0Hex = '0x' + Array.from(elem0).map(b => b.toString(16).padStart(2, '0')).join('');
-    const elem1Hex = '0x' + Array.from(elem1).map(b => b.toString(16).padStart(2, '0')).join('');
-    const elem2Hex = '0x' + Array.from(elem2).map(b => b.toString(16).padStart(2, '0')).join('');
-    const elem3Hex = '0x' + Array.from(elem3).map(b => b.toString(16).padStart(2, '0')).join('');
-    
-    const elem0Dec = (BigInt(elem0Hex) % BigInt('21888242871839275222246405745257275088548364400416034343698204186575808495617')).toString(10);
-    const elem1Dec = (BigInt(elem1Hex) % BigInt('21888242871839275222246405745257275088548364400416034343698204186575808495617')).toString(10);
-    
-    console.log('[PROOF-RAW-ELEM] [0]:', elem0Hex, '→', elem0Dec);
-    console.log('[PROOF-RAW-ELEM] [1]:', elem1Hex, '→', elem1Dec);
-    console.log('[PROOF-RAW-ELEM] [2]:', elem2Hex);
-    console.log('[PROOF-RAW-ELEM] [3]:', elem3Hex);
-    console.log('[PROOF-RAW-ELEM] expected epochNullifier:', baseInputs.epochNullifier);
-    console.log('[PROOF-RAW-ELEM] expected hashedAddress:', hashedAddr);
-    console.log('[PROOF-RAW-ELEM] expected cscaMerkleRoot:', cscaMerkleProof.root);
-
-    // Base circuit public inputs: [epochNullifier, hashedAddress, cscaMerkleRoot] = 3 elements.
-    const proofForContract = stripProofPublicInputs(proofBuf, 3);
-    console.log('[PROOF] Stripped proof size:', proofForContract.byteLength, 'bytes =',
-      proofForContract.byteLength / 32, 'elements');
+    // Base circuit user public inputs: [epochNullifier, hashedAddress, cscaMerkleRoot] = 3.
+    const { proof: proofForContract } = reshapeProofForContract(proofBuf, 3);
+    console.log('[PROOF] Reshaped proof size:', proofForContract.byteLength, 'bytes =',
+      proofForContract.byteLength / 32, 'field elements');
     const proofHex = arrayBufferToHex(proofForContract);
     const vkHex = arrayBufferToHex(vkBuf);
 
@@ -500,15 +430,7 @@ export async function generatePrimaryProof(input: ProofInput): Promise<PrimaryPr
     true,
     false,
   );
-
-  // Dump the raw Mopro primary VK so we can regenerate PrimaryVerificationKey.sol
-  // via scripts/mopro-vk-to-solidity.mjs (paste into /tmp/mopro_primary_vk.hex).
-  // Expected: 1816 bytes (24-byte header + 28×64-byte G1 points).
-  {
-    const vkDbgHex = arrayBufferToHex(vkBuf);
-    console.log('[PROOF-VK-PRIMARY] bytes:', vkBuf.byteLength, '(expected 1816)');
-    console.log('[PROOF-VK-PRIMARY] full hex:', vkDbgHex);
-  }
+  console.log('[PROOF-VK] primary VK bytes:', vkBuf.byteLength);
 
   console.log('[PROOF] Generating primary proof (5-15s)...');
   const proofBuf = await Mopro.generateNoirProof(
@@ -520,8 +442,21 @@ export async function generatePrimaryProof(input: ProofInput): Promise<PrimaryPr
     false,
   );
 
-  // Primary circuit public inputs: [nullifier, nextCommitment, hashedAddress, cscaMerkleRoot] = 4.
-  const proofForContract = stripProofPublicInputs(proofBuf, 4);
+  try {
+    const localValid = await Mopro.verifyNoirProof(
+      PRIMARY_CIRCUIT_PATH,
+      proofBuf,
+      true,
+      vkBuf,
+      false,
+    );
+    console.log('[PROOF] Local verification:', localValid ? 'PASSED' : 'FAILED');
+  } catch (verifyErr) {
+    console.error('[PROOF] Local verification error:', verifyErr);
+  }
+
+  // Primary circuit user public inputs: [nullifier, nextCommitment, hashedAddress, cscaMerkleRoot] = 4.
+  const { proof: proofForContract } = reshapeProofForContract(proofBuf, 4);
 
   const proofHex = arrayBufferToHex(proofForContract);
   const vkHex = arrayBufferToHex(vkBuf);
@@ -851,18 +786,35 @@ function arrayBufferToHex(buf: ArrayBuffer): `0x${string}` {
 }
 
 /**
- * Strip the leading public inputs from a raw Noir proof buffer.
+ * Convert a raw noir-rs proof buffer into the byte string the Solidity verifier expects.
  *
- * Raw BB/Noir proof layout (zkmopro/aztec-packages fork, PROOF_SIZE=508):
- *   [numPubInputs Fr elements — user public inputs]
- *   [508 Fr elements — Honk.ZKProof body]
+ * noir-rs (barretenberg-rs 4.2.0-aztecnr-rc.2) returns:
+ *   [4 bytes BE num_pub][num_pub × 32-byte user public inputs][PAIRING_POINTS_SIZE Frs][proof body bytes]
+ * where `num_pub = userPubInputsCount` (pairing points are NOT in the public-inputs section —
+ * they sit at the very start of the proof body, exactly where the Solidity verifier wants them).
+ * PAIRING_POINTS_SIZE is 8 for bb 4.2 (was 16 for bb 4.0).
  *
- * The Solidity verifier (regenerated from zkmopro's honk_zk_contract.hpp) takes
- * the body elements and public inputs supplied separately.
+ * The bb-generated Solidity `verify(bytes proof, bytes32[] publicInputs)` expects:
+ *   - `publicInputs` = the N user public inputs only
+ *   - `proof`        = [PAIRING_POINTS_SIZE Frs][rest of proof body]
  */
-function stripProofPublicInputs(rawProof: ArrayBuffer, numPubInputs: number): ArrayBuffer {
+function reshapeProofForContract(
+  rawProof: ArrayBuffer,
+  userPubInputsCount: number,
+): { proof: ArrayBuffer; publicInputs: ArrayBuffer } {
   const ELEMENT_SIZE = 32;
-  return rawProof.slice(numPubInputs * ELEMENT_SIZE);
+  const PREFIX_SIZE = 4;
+  const view = new DataView(rawProof);
+  const numPub = view.getUint32(0, false);
+  if (numPub !== userPubInputsCount) {
+    throw new Error(
+      `proof prefix says ${numPub} public inputs, expected ${userPubInputsCount}`,
+    );
+  }
+  const userEnd = PREFIX_SIZE + userPubInputsCount * ELEMENT_SIZE;
+  const userInputs = rawProof.slice(PREFIX_SIZE, userEnd);
+  const proof = rawProof.slice(userEnd);
+  return { proof, publicInputs: userInputs };
 }
 
 // ---------------------------------------------------------------------------

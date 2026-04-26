@@ -14,10 +14,9 @@ thiserror = "2.0"
 
 noir_rs = { package = "noir", git = "https://github.com/zkmopro/noir-rs", features = [
     "barretenberg",
-    "android-compat",
-], branch = "v1.0.0-beta.8-3" }
+], rev = "0e4fdc9fc0cb383fcada7d3864dd2424f137316b" }
 
-bn254_blackbox_solver = { git = "https://github.com/noir-lang/noir.git", rev = "b33131574388d836341cea9b6380f3b1a8493eb8" }
+bn254_blackbox_solver = { git = "https://github.com/noir-lang/noir.git", rev = "v1.0.0-beta.19" }
 
 num-bigint = "0.4"
 

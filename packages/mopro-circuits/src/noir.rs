@@ -1,8 +1,9 @@
-use bn254_blackbox_solver::poseidon_hash;
+use bn254_blackbox_solver::poseidon2_permutation;
 use noir_rs::{
     barretenberg::{
         prove::{prove_ultra_honk_keccak},
-        srs::setup_srs_from_bytecode,
+        srs::setup_srs,
+        utils::get_subgroup_size,
         verify::{
             get_ultra_honk_keccak_verification_key,
             verify_ultra_honk_keccak,
@@ -62,7 +63,11 @@ pub fn get_noir_verification_key(
         ));
     }
     let bytecode = read_bytecode(&circuit_path)?;
-    setup_srs_from_bytecode(bytecode.as_str(), srs_path.as_deref(), false)
+    // Use the dyadic subgroup size directly (matches `srs_downloader -c circuit.json`).
+    // setup_srs_from_bytecode applies an 8x multiplier that exceeds what the
+    // downloaded SRS file holds, so call setup_srs with the unscaled subgroup size.
+    let subgroup = get_subgroup_size(bytecode.as_str(), false);
+    setup_srs(subgroup, srs_path.as_deref())
         .map_err(|e| MoproError::NoirError(format!("SRS setup failed: {e}")))?;
     get_ultra_honk_keccak_verification_key(bytecode.as_str(), false, low_memory_mode)
         .map_err(|e| MoproError::NoirError(format!("VK generation failed: {e}")))
@@ -88,7 +93,8 @@ pub fn generate_noir_proof(
         ));
     }
     let bytecode = read_bytecode(&circuit_path)?;
-    setup_srs_from_bytecode(bytecode.as_str(), srs_path.as_deref(), false)
+    let subgroup = get_subgroup_size(bytecode.as_str(), false);
+    setup_srs(subgroup, srs_path.as_deref())
         .map_err(|e| MoproError::NoirError(format!("SRS setup failed: {e}")))?;
     let witness = from_vec_str_to_witness_map(inputs.iter().map(|s| s.as_str()).collect())
         .map_err(|e| MoproError::NoirError(format!("Witness construction failed: {e:?}")))?;
@@ -318,7 +324,10 @@ pub fn compute_nullifier(
 ///
 /// Supports both RSA-2048 (256 bytes) and RSA-4096 (512 bytes).
 ///
-/// `redc_param = floor(2^(2*bits + 4) / modulus)`
+/// `redc_param = floor(2^(2*bits + BARRETT_REDUCTION_OVERFLOW_BITS) / modulus)`
+///
+/// `BARRETT_REDUCTION_OVERFLOW_BITS = 6` matches noir-bignum >= v0.9.x.
+/// (v0.7.3 used 4 — bumping noir-bignum changed this constant.)
 ///
 /// Returns N+1 bytes (big-endian): 257 bytes for 2048-bit, 513 bytes for 4096-bit.
 #[uniffi::export]
@@ -336,8 +345,7 @@ pub fn compute_redc_param(modulus_bytes: Vec<u8>) -> Result<Vec<u8>, MoproError>
         return Err(MoproError::NoirError("Modulus is zero".into()));
     }
 
-    // Barrett reduction: 2^(2*bits + 4) / modulus
-    let numerator = BigUint::from(1u32) << (2 * bits + 4);
+    let numerator = BigUint::from(1u32) << (2 * bits + 6);
     let redc = &numerator / &modulus;
 
     let bytes = redc.to_bytes_be();
@@ -397,11 +405,50 @@ fn bytes_to_decimal(bytes: &[u8]) -> String {
     if result.is_empty() { "0".to_string() } else { result }
 }
 
-/// Thin wrapper around `poseidon_hash` -- fixed-length (is_variable_length = false).
+/// Fixed-length Poseidon2 sponge hash matching Noir stdlib's `Poseidon2::hash(inputs, len)`.
+/// Reimplemented locally since beta.19's bn254_blackbox_solver no longer exposes a high-level
+/// hash function — only the underlying `poseidon2_permutation` primitive.
 fn poseidon2(inputs: impl IntoIterator<Item = FieldElement>) -> Result<FieldElement, MoproError> {
     let v: Vec<FieldElement> = inputs.into_iter().collect();
-    poseidon_hash(&v, false)
-        .map_err(|e| MoproError::NoirError(format!("Poseidon2 failed: {e}")))
+    poseidon2_hash(&v)
+}
+
+fn poseidon2_hash(inputs: &[FieldElement]) -> Result<FieldElement, MoproError> {
+    const RATE: usize = 3;
+    let two_pow_64 = FieldElement::from(1u128 << 64);
+    let iv = FieldElement::from(inputs.len() as u128) * two_pow_64;
+
+    let mut state: Vec<FieldElement> = vec![FieldElement::zero(); RATE + 1];
+    state[RATE] = iv;
+    let mut cache: Vec<FieldElement> = Vec::with_capacity(RATE);
+
+    let permute = |state: &mut Vec<FieldElement>| -> Result<(), MoproError> {
+        let next = poseidon2_permutation(state)
+            .map_err(|e| MoproError::NoirError(format!("Poseidon2 failed: {e}")))?;
+        *state = next;
+        Ok(())
+    };
+
+    for &input in inputs {
+        if cache.len() == RATE {
+            for i in 0..RATE {
+                state[i] = state[i] + cache[i];
+            }
+            permute(&mut state)?;
+            cache.clear();
+        }
+        cache.push(input);
+    }
+
+    // squeeze: zero-pad cache, absorb, permute, output state[0]
+    while cache.len() < RATE {
+        cache.push(FieldElement::zero());
+    }
+    for i in 0..RATE {
+        state[i] = state[i] + cache[i];
+    }
+    permute(&mut state)?;
+    Ok(state[0])
 }
 
 // ---------------------------------------------------------------------------

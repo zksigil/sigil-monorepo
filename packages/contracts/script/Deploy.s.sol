@@ -6,9 +6,7 @@ import {ProtocolConfig} from "../src/ProtocolConfig.sol";
 import {ProofVerifier} from "../src/ProofVerifier.sol";
 import {VerificationRegistry} from "../src/VerificationRegistry.sol";
 import {CSCAMerkleTree} from "../src/CSCAMerkleTree.sol";
-import {BaseVerificationKey} from "../src/verifiers/BaseVerificationKey.sol";
 import {BaseUltraHonkVerifier} from "../src/verifiers/BaseUltraHonkVerifier.sol";
-import {PrimaryVerificationKey} from "../src/verifiers/PrimaryVerificationKey.sol";
 import {PrimaryUltraHonkVerifier} from "../src/verifiers/PrimaryUltraHonkVerifier.sol";
 
 /// @notice Full deployment script for Sigil contracts on Sepolia / Ethereum Mainnet.
@@ -58,15 +56,11 @@ contract Deploy is Script {
         console2.log("CSCAMerkleTree:       ", address(cscaTree));
         console2.logBytes32(CSCA_MERKLE_ROOT);
 
-        // 3. UltraHonk verifiers — VK data deployed separately (SSTORE2 pattern)
-        BaseVerificationKey baseVK = new BaseVerificationKey();
-        console2.log("BaseVerificationKey:  ", address(baseVK));
-        BaseUltraHonkVerifier baseHonk = new BaseUltraHonkVerifier(address(baseVK));
+        // 3. UltraHonk verifiers — VK is embedded directly in each verifier (literal struct return)
+        BaseUltraHonkVerifier baseHonk = new BaseUltraHonkVerifier();
         console2.log("BaseUltraHonkVerifier:", address(baseHonk));
 
-        PrimaryVerificationKey primaryVK = new PrimaryVerificationKey();
-        console2.log("PrimaryVerificationKey:", address(primaryVK));
-        PrimaryUltraHonkVerifier primaryHonk = new PrimaryUltraHonkVerifier(address(primaryVK));
+        PrimaryUltraHonkVerifier primaryHonk = new PrimaryUltraHonkVerifier();
         console2.log("PrimaryUltraHonkVerifier:", address(primaryHonk));
 
         // 4. ProofVerifier — marshals typed inputs and delegates to UltraHonk verifiers

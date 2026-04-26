@@ -52,32 +52,33 @@ android: ## Build Mopro Rust FFI for Android
 	@echo "✅ Android library built"
 
 # ─── Barretenberg (bb) Commands ───────────────────────────────────────
-# bb is the Barretenberg CLI tool. Install via: curl -sSfL https://raw.githubusercontent.com/AztecProtocol/aztec-packages/master/barretenberg/bbup/install | bash
+# bb 4.2 (matches barretenberg-rs 4.2.0-aztecnr-rc.2 used by Mopro). Override via BB=...
+# Download: https://github.com/AztecProtocol/aztec-packages/releases (barretenberg-static-<ARCH>.tar.gz)
+BB ?= /tmp/bb-4.2/bb
 BB_FLAGS = --oracle_hash keccak
 
 bb-vk: circuits ## Generate verification keys from compiled circuits
 	@echo "━━━ Writing base VK ━━━"
-	bb write_vk -s ultra_honk $(BB_FLAGS) -b $(CIRCUITS_TARGET)/passport_base.json -o $(CIRCUITS_TARGET)/vk_base
+	$(BB) write_vk -s ultra_honk $(BB_FLAGS) -b $(CIRCUITS_TARGET)/passport_base.json -o $(CIRCUITS_TARGET)/vk_base
 	@echo "━━━ Writing primary VK ━━━"
-	bb write_vk -s ultra_honk $(BB_FLAGS) -b $(CIRCUITS_TARGET)/passport_primary.json -o $(CIRCUITS_TARGET)/vk_primary
+	$(BB) write_vk -s ultra_honk $(BB_FLAGS) -b $(CIRCUITS_TARGET)/passport_primary.json -o $(CIRCUITS_TARGET)/vk_primary
 	@echo "✅ VKs written to $(CIRCUITS_TARGET)/vk_base and vk_primary"
 
-bb-verifier: bb-vk ## Generate Solidity verifier contracts from VKs, splice zkmopro body, extract VK
-	@echo "━━━ Generating base Solidity verifier (bb → VK library only; body replaced below) ━━━"
-	bb write_solidity_verifier -s ultra_honk --zk -k $(CIRCUITS_TARGET)/vk_base/vk -o $(CIRCUITS_TARGET)/BaseUltraHonkVerifier.sol
-	@echo "━━━ Splicing zkmopro/aztec-packages template body (PROOF_SIZE=508, NUMBER_OF_ENTITIES=41) ━━━"
-	node scripts/splice-zkmopro-verifier.mjs $(CIRCUITS_TARGET)/BaseUltraHonkVerifier.sol BaseUltraHonkVerifier
+bb-verifier: bb-vk ## Generate Solidity verifier contracts from VKs and embed VKs into thin contracts
+	@echo "━━━ Generating base Solidity verifier ━━━"
+	rm -rf /tmp/bb-out-base && mkdir -p /tmp/bb-out-base
+	$(BB) write_solidity_verifier -s ultra_honk -k $(CIRCUITS_TARGET)/vk_base/vk -o /tmp/bb-out-base/Verifier.sol
+	node scripts/gen-verifier.mjs /tmp/bb-out-base BaseUltraHonkVerifier $(CONTRACTS)/src/verifiers/BaseUltraHonkVerifier.sol
 	@echo "━━━ Generating primary Solidity verifier ━━━"
-	bb write_solidity_verifier -s ultra_honk --zk -k $(CIRCUITS_TARGET)/vk_primary/vk -o $(CIRCUITS_TARGET)/PrimaryUltraHonkVerifier.sol
-	node scripts/splice-zkmopro-verifier.mjs $(CIRCUITS_TARGET)/PrimaryUltraHonkVerifier.sol PrimaryUltraHonkVerifier
-	@echo "━━━ Extracting VKs into SSTORE2 data contracts (24KB size fix) ━━━"
-	node scripts/extract-vk.mjs $(CIRCUITS_TARGET)/BaseUltraHonkVerifier.sol BaseUltraHonkVerifier BaseVerificationKey $(CONTRACTS)/src/verifiers
-	node scripts/extract-vk.mjs $(CIRCUITS_TARGET)/PrimaryUltraHonkVerifier.sol PrimaryUltraHonkVerifier PrimaryVerificationKey $(CONTRACTS)/src/verifiers
-	@echo "✅ Solidity verifiers + VK data contracts generated in $(CONTRACTS)/src/verifiers/"
+	rm -rf /tmp/bb-out-primary && mkdir -p /tmp/bb-out-primary
+	$(BB) write_solidity_verifier -s ultra_honk -k $(CIRCUITS_TARGET)/vk_primary/vk -o /tmp/bb-out-primary/Verifier.sol
+	node scripts/gen-verifier.mjs /tmp/bb-out-primary PrimaryUltraHonkVerifier $(CONTRACTS)/src/verifiers/PrimaryUltraHonkVerifier.sol
+	@echo "✅ Verifiers regenerated in $(CONTRACTS)/src/verifiers/"
+	@echo "   (Shared body lives in HonkVerifierShared.sol — only update if bb-output Section B changes.)"
 
 bb-prove-base: circuits ## Generate a base proof locally (requires witness file)
 	@echo "━━━ Generating base proof with bb ━━━"
-	bb prove $(BB_FLAGS) \
+	$(BB) prove $(BB_FLAGS) \
 		-b $(CIRCUITS_TARGET)/passport_base.json \
 		-w $(CIRCUITS_TARGET)/passport_base.gz \
 		-o $(CIRCUITS_TARGET)/proof_base
@@ -85,7 +86,7 @@ bb-prove-base: circuits ## Generate a base proof locally (requires witness file)
 
 bb-prove-primary: circuits ## Generate a primary proof locally (requires witness file)
 	@echo "━━━ Generating primary proof with bb ━━━"
-	bb prove $(BB_FLAGS) \
+	$(BB) prove $(BB_FLAGS) \
 		-b $(CIRCUITS_TARGET)/passport_primary.json \
 		-w $(CIRCUITS_TARGET)/passport_primary.gz \
 		-o $(CIRCUITS_TARGET)/proof_primary
@@ -93,23 +94,23 @@ bb-prove-primary: circuits ## Generate a primary proof locally (requires witness
 
 bb-verify-base: ## Verify a base proof locally
 	@echo "━━━ Verifying base proof ━━━"
-	bb verify $(BB_FLAGS) \
+	$(BB) verify $(BB_FLAGS) \
 		-k $(CIRCUITS_TARGET)/vk_base \
 		-p $(CIRCUITS_TARGET)/proof_base
 	@echo "✅ Base proof verification complete"
 
 bb-verify-primary: ## Verify a primary proof locally
 	@echo "━━━ Verifying primary proof ━━━"
-	bb verify $(BB_FLAGS) \
+	$(BB) verify $(BB_FLAGS) \
 		-k $(CIRCUITS_TARGET)/vk_primary \
 		-p $(CIRCUITS_TARGET)/proof_primary
 	@echo "✅ Primary proof verification complete"
 
 bb-gate-count: circuits ## Print gate counts for both circuits
 	@echo "━━━ Base circuit gate count ━━━"
-	bb gates $(BB_FLAGS) -b $(CIRCUITS_TARGET)/passport_base.json
+	$(BB) gates $(BB_FLAGS) -b $(CIRCUITS_TARGET)/passport_base.json
 	@echo "━━━ Primary circuit gate count ━━━"
-	bb gates $(BB_FLAGS) -b $(CIRCUITS_TARGET)/passport_primary.json
+	$(BB) gates $(BB_FLAGS) -b $(CIRCUITS_TARGET)/passport_primary.json
 	@echo "✅ Gate counts printed"
 
 # ─── Smart Contracts ──────────────────────────────────────────────────
