@@ -34,6 +34,7 @@ export function HomeScreen(): React.JSX.Element {
   }, [disconnect]);
 
   const hasExistingUnique = accounts.some((a) => a.isUniqueVerified);
+  const existingPrimaryAddress = accounts.find((a) => a.isUniqueVerified)?.address ?? null;
 
   // Handle verify: ensure correct wallet is active, then show tier selector
   const handleVerify = useCallback((address: `0x${string}`) => {
@@ -159,6 +160,7 @@ export function HomeScreen(): React.JSX.Element {
         canSelectUnique={canSelectUnique}
         canSelectBase={canSelectBase}
         hasExistingUnique={hasExistingUnique}
+        existingPrimaryAddress={existingPrimaryAddress}
         onSelect={handleTierSelected}
         onClose={() => setTierModalAddress(null)}
       />
@@ -175,6 +177,7 @@ function TierSelectionModal({
   canSelectUnique,
   canSelectBase,
   hasExistingUnique,
+  existingPrimaryAddress,
   onSelect,
   onClose,
 }: {
@@ -182,9 +185,13 @@ function TierSelectionModal({
   canSelectUnique: boolean;
   canSelectBase: boolean;
   hasExistingUnique: boolean;
+  existingPrimaryAddress: `0x${string}` | null;
   onSelect: (tier: VerificationTier) => void;
   onClose: () => void;
 }): React.JSX.Element {
+  const primaryShort = existingPrimaryAddress
+    ? `${existingPrimaryAddress.slice(0, 6)}…${existingPrimaryAddress.slice(-4)}`
+    : null;
   return (
     <Modal
       visible={visible}
@@ -220,9 +227,16 @@ function TierSelectionModal({
               One account per passport. Proves you're a real person and that this is your only address with this status.
             </Text>
             {!canSelectUnique && hasExistingUnique && (
-              <Text className="text-dracula-comment/50 text-xs mt-2 italic">
-                Already assigned to another account.
-              </Text>
+              <View className="mt-3 rounded-xl bg-dracula-yellow/10 border border-dracula-yellow/30 p-3">
+                <Text className="text-dracula-yellow text-xs font-semibold mb-1">
+                  Primary already registered{primaryShort ? ` to ${primaryShort}` : ''}
+                </Text>
+                <Text className="text-dracula-comment text-xs leading-5">
+                  Only one address per passport can be primary. To switch primary to this account,
+                  unregister {primaryShort ?? 'the existing primary address'} on its account row,
+                  wait 7 days for cooldown, then verify this account as Unique.
+                </Text>
+              </View>
             )}
           </Pressable>
 

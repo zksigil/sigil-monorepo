@@ -418,102 +418,6 @@ contract VerificationRegistryTest is Test {
     }
 
     // =========================================================================
-    // Primary Tier — changePrimary
-    // =========================================================================
-
-    function test_ChangePrimary_MovesToNewAddress() public {
-        _registerPrimary(alice, NULL_1A, COMMIT_1A);
-        assertTrue(registry.isPrimaryVerified(alice));
-        assertFalse(registry.isPrimaryVerified(bob));
-
-        // Bob takes over alice's primary slot by revealing nullifier_2a
-        vm.prank(bob);
-        registry.changePrimary(NULL_2A, COMMIT_2A, PASSPORT_EXPIRY, PROOF);
-
-        assertFalse(registry.isPrimaryVerified(alice));
-        assertTrue(registry.isPrimaryVerified(bob));
-    }
-
-    function test_ChangePrimary_OldSlotDeleted() public {
-        _registerPrimary(alice, NULL_1A, COMMIT_1A);
-
-        vm.prank(bob);
-        registry.changePrimary(NULL_2A, COMMIT_2A, PASSPORT_EXPIRY, PROOF);
-
-        // Old slot for NULL_1A should be gone
-        (bytes32 oldAddress,) = registry.s_primarySlots(NULL_1A);
-        assertEq(oldAddress, bytes32(0));
-    }
-
-    function test_ChangePrimary_NewSlotStored() public {
-        _registerPrimary(alice, NULL_1A, COMMIT_1A);
-
-        vm.prank(bob);
-        registry.changePrimary(NULL_2A, COMMIT_2A, PASSPORT_EXPIRY, PROOF);
-
-        // New slot should use NULL_2A as key
-        (bytes32 newAddress, bytes32 newCommitment) = registry.s_primarySlots(NULL_2A);
-        assertEq(newAddress, keccak256(abi.encodePacked(bob)));
-        assertEq(newCommitment, COMMIT_2A);
-    }
-
-    function test_ChangePrimary_CanChainAgain() public {
-        _registerPrimary(alice, NULL_1A, COMMIT_1A);
-
-        vm.prank(bob);
-        registry.changePrimary(NULL_2A, COMMIT_2A, PASSPORT_EXPIRY, PROOF);
-
-        // Can chain again using NULL_3A
-        bytes32 commit3a = keccak256(abi.encodePacked(keccak256("alice_nullifier_4")));
-        vm.prank(carol);
-        registry.changePrimary(NULL_3A, commit3a, PASSPORT_EXPIRY, PROOF);
-
-        assertFalse(registry.isPrimaryVerified(bob));
-        assertTrue(registry.isPrimaryVerified(carol));
-    }
-
-    function test_ChangePrimary_SameAddress() public {
-        // Alice can change to herself (e.g. to rotate nullifier after TTL concern)
-        _registerPrimary(alice, NULL_1A, COMMIT_1A);
-
-        vm.prank(alice);
-        registry.changePrimary(NULL_2A, COMMIT_2A, PASSPORT_EXPIRY, PROOF);
-
-        assertTrue(registry.isPrimaryVerified(alice));
-        (bytes32 newAddress,) = registry.s_primarySlots(NULL_2A);
-        assertEq(newAddress, keccak256(abi.encodePacked(alice)));
-    }
-
-    function test_ChangePrimary_Reverts_InvalidNextNullifier() public {
-        _registerPrimary(alice, NULL_1A, COMMIT_1A);
-
-        // Reveal a nullifier that doesn't match any stored commitment
-        bytes32 wrongNullifier = keccak256("wrong_nullifier");
-        vm.prank(bob);
-        vm.expectRevert(VerificationRegistry.VerificationRegistry__InvalidNextNullifier.selector);
-        registry.changePrimary(wrongNullifier, COMMIT_2A, PASSPORT_EXPIRY, PROOF);
-    }
-
-    function test_ChangePrimary_Reverts_PassportExpired() public {
-        _registerPrimary(alice, NULL_1A, COMMIT_1A);
-        uint48 expired = uint48(block.timestamp - 1);
-
-        vm.prank(bob);
-        vm.expectRevert(VerificationRegistry.VerificationRegistry__PassportExpired.selector);
-        registry.changePrimary(NULL_2A, COMMIT_2A, expired, PROOF);
-    }
-
-    function test_ChangePrimary_EmitsWalletVerified() public {
-        _registerPrimary(alice, NULL_1A, COMMIT_1A);
-
-        vm.expectEmit(true, false, false, false);
-        emit IVerificationRegistry.WalletVerified(bob);
-
-        vm.prank(bob);
-        registry.changePrimary(NULL_2A, COMMIT_2A, PASSPORT_EXPIRY, PROOF);
-    }
-
-    // =========================================================================
     // Primary Tier — unregisterPrimary
     // =========================================================================
 
@@ -577,6 +481,43 @@ contract VerificationRegistryTest is Test {
     }
 
     // =========================================================================
+    // wasNullifierUsed — stateless nonce-recovery probe
+    // =========================================================================
+
+    function test_WasNullifierUsed_FalseInitially() public view {
+        assertFalse(registry.wasNullifierUsed(NULL_1A));
+    }
+
+    function test_WasNullifierUsed_TrueAfterRegister() public {
+        _registerPrimary(alice, NULL_1A, COMMIT_1A);
+        assertTrue(registry.wasNullifierUsed(NULL_1A));
+    }
+
+    function test_WasNullifierUsed_TrueAfterUnregister() public {
+        _registerPrimary(alice, NULL_1A, COMMIT_1A);
+        vm.prank(alice);
+        registry.unregisterPrimary(NULL_1A);
+
+        assertTrue(registry.wasNullifierUsed(NULL_1A));
+    }
+
+    function test_WasNullifierUsed_TrueAfterCooldownElapsed() public {
+        _registerPrimary(alice, NULL_1A, COMMIT_1A);
+        vm.prank(alice);
+        registry.unregisterPrimary(NULL_1A);
+        vm.warp(block.timestamp + config.cooldownPeriod() + 1);
+
+        // Cooldown is over, but the nullifier should still register as "used"
+        // so the app picks a fresh nonce instead of reusing this one.
+        assertTrue(registry.wasNullifierUsed(NULL_1A));
+    }
+
+    function test_WasNullifierUsed_FalseForUnrelatedNullifier() public {
+        _registerPrimary(alice, NULL_1A, COMMIT_1A);
+        assertFalse(registry.wasNullifierUsed(NULL_2A));
+    }
+
+    // =========================================================================
     // Privacy properties
     // =========================================================================
 
@@ -599,17 +540,6 @@ contract VerificationRegistryTest is Test {
         assertTrue(registry.isPrimaryVerified(bob));
         assertFalse(registry.isPrimaryVerified(alice));
         assertFalse(registry.isVerified(bob));
-    }
-
-    function test_Privacy_ChangePrimary_OldNullifierGone() public {
-        _registerPrimary(alice, NULL_1A, COMMIT_1A);
-
-        vm.prank(bob);
-        registry.changePrimary(NULL_2A, COMMIT_2A, PASSPORT_EXPIRY, PROOF);
-
-        // NULL_1A slot is gone — no way to link old and new on-chain
-        (bytes32 storedAddr,) = registry.s_primarySlots(NULL_1A);
-        assertEq(storedAddr, bytes32(0));
     }
 
     // =========================================================================

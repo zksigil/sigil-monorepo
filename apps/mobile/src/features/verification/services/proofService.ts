@@ -486,57 +486,66 @@ export async function generatePrimaryProof(input: ProofInput): Promise<PrimaryPr
 // ---------------------------------------------------------------------------
 
 export interface NonceRecoveryResult {
-  /** The current nonce (the one whose nullifier has an active slot on-chain). */
-  nonce: number;
-  /** The nullifier for the current nonce. */
-  nullifier: string;
-  /** The nextCommitment stored on-chain for this slot. */
-  nextCommitment: string;
+  /** Nonce of the currently-active primary slot (one passport ⇒ at most one), if any. */
+  activeNonce: number | null;
+  /** Nullifier for activeNonce; null if no active slot. */
+  activeNullifier: string | null;
+  /** nextCommitment stored on-chain for the active slot; null if no active slot. */
+  activeNextCommitment: string | null;
+  /** Lowest nonce never used (no active slot, never unregistered). Use this for a new registerPrimary. */
+  nextFreshNonce: number;
 }
 
+const ZERO_BYTES32 = `0x${'00'.repeat(32)}`;
+
 /**
- * Recover the current primary-tier nonce by scanning on-chain primarySlots.
+ * Stateless primary-tier nonce discovery.
  *
- * Iterates nonces 1..maxNonce, computes the nullifier for each using Mopro's
- * native Poseidon2, and checks if `s_primarySlots[nullifier]` exists on-chain.
- * Returns the nonce whose slot is active, or null if no primary registration found.
- *
- * This enables fully stateless recovery after phone loss — the passport + chain
- * data is sufficient to reconstruct all state.
+ * Iterates nonces 1..maxNonce, computes hash(s, n) via Mopro Poseidon2, and probes
+ * on-chain state via two callbacks. Returns the active nonce (if any) and the next
+ * unused nonce. The unused-nonce step preserves unlinkability across unregister/re-register:
+ * an attacker can't tell from the chain whether the new registration is a re-use of the
+ * old passport (because the new nullifier hashes differently from any prior nullifier).
  */
 export async function recoverPrimaryNonce(
   rawDG1Hex: string,
   rawSODHex: string,
   readSlot: (nullifier: string) => Promise<{ hashedAddress: string; nextCommitment: string }>,
+  wasUsed: (nullifier: string) => Promise<boolean>,
   maxNonce = 20,
-): Promise<NonceRecoveryResult | null> {
+): Promise<NonceRecoveryResult> {
   const Mopro = loadMoproModule();
 
   const dg1Hash = sha256ToField(stripHexPrefix(rawDG1Hex));
   const sodHash = sha256ToField(stripHexPrefix(rawSODHex));
 
+  let activeNonce: number | null = null;
+  let activeNullifier: string | null = null;
+  let activeNextCommitment: string | null = null;
+
   for (let n = 1; n <= maxNonce; n++) {
-    const nullifierStr = await Mopro.computeNullifier(
-      dg1Hash,
-      sodHash,
-      n.toString(),
-    );
-
+    const nullifierStr = await Mopro.computeNullifier(dg1Hash, sodHash, n.toString());
     const slot = await readSlot(nullifierStr);
+    const isActive = slot.hashedAddress.toLowerCase() !== ZERO_BYTES32;
 
-    // hashedAddress == bytes32(0) means empty slot
-    if (slot.hashedAddress !== '0x' + '00'.repeat(32)) {
-      console.log(`[RECOVERY] Found active primary slot at nonce ${n}`);
-      return {
-        nonce: n,
-        nullifier: nullifierStr,
-        nextCommitment: slot.nextCommitment,
-      };
+    if (isActive) {
+      console.log(`[RECOVERY] Active primary slot at nonce ${n}`);
+      activeNonce = n;
+      activeNullifier = nullifierStr;
+      activeNextCommitment = slot.nextCommitment;
+      continue;
     }
+
+    // Slot empty. If the nullifier was never used, this nonce is fresh.
+    const used = await wasUsed(nullifierStr);
+    if (!used) {
+      console.log(`[RECOVERY] First fresh nonce: ${n} (active=${activeNonce ?? 'none'})`);
+      return { activeNonce, activeNullifier, activeNextCommitment, nextFreshNonce: n };
+    }
+    console.log(`[RECOVERY] Nonce ${n} previously unregistered — skipping`);
   }
 
-  console.log(`[RECOVERY] No active primary slot found (checked nonces 1..${maxNonce})`);
-  return null;
+  throw new Error(`[RECOVERY] No fresh nonce found in 1..${maxNonce}`);
 }
 
 // ---------------------------------------------------------------------------

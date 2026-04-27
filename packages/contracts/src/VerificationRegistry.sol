@@ -7,8 +7,6 @@ import {IProofVerifier} from "./interfaces/IProofVerifier.sol";
 import {ICSCAMerkleTree} from "./interfaces/ICSCAMerkleTree.sol";
 import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 import {Pausable} from "@openzeppelin/contracts/utils/Pausable.sol";
-import {Poseidon2Lib} from "poseidon2-evm/Poseidon2Lib.sol";
-import {Field} from "poseidon2-evm/Field.sol";
 
 /// @title VerificationRegistry
 /// @notice Two-tier ZK passport identity registry for Sigil.
@@ -23,8 +21,8 @@ import {Field} from "poseidon2-evm/Field.sol";
 ///        - hashedAddress == keccak256(msg.sender) checked on every write
 ///        - No nullifier emitted in any event
 ///        - No address ↔ nullifier mapping queryable externally
-///        - s_nextCommitmentToNullifier allows changePrimary without revealing old nullifier
-///          in calldata (old nullifier is derived server-side from the reverse mapping)
+///        - Switching primary address requires unregister + cooldown + fresh-nonce
+///          register; successive nullifiers are cryptographically unrelated
 contract VerificationRegistry is IVerificationRegistry, ReentrancyGuard, Pausable {
     // =========================================================================
     // Errors
@@ -38,7 +36,6 @@ contract VerificationRegistry is IVerificationRegistry, ReentrancyGuard, Pausabl
     error VerificationRegistry__RateLimitExceeded();
     error VerificationRegistry__InvalidProof();
     error VerificationRegistry__NullifierAlreadyUsed();
-    error VerificationRegistry__InvalidNextNullifier();
     error VerificationRegistry__PrimaryInCooldown();
     error VerificationRegistry__NotAuthorized();
 
@@ -48,19 +45,21 @@ contract VerificationRegistry is IVerificationRegistry, ReentrancyGuard, Pausabl
 
     /// @dev Tracks expiry and registration time for a single registered address (base or primary tier).
     ///      expiresAt is capped at passportExpiry via _cappedExpiry() so passportExpiry need not be stored.
-    ///      registeredAt is set on registerPrimary / changePrimary and NOT updated on renewPrimary —
+    ///      registeredAt is set on registerPrimary and NOT updated on renewPrimary —
     ///      it reflects how long this passport has been committed to this address, which is the value
     ///      protocols care about when enforcing a minimum registration age.
     struct Registration {
         uint48 expiresAt;    // min(block.timestamp + TTL, passportExpiry)
-        uint48 registeredAt; // block.timestamp at registration or changePrimary (not updated on renew)
+        uint48 registeredAt; // block.timestamp at registration (not updated on renew)
     }
 
     /// @dev Stores the active primary slot for a given nullifier.
     ///      The nullifier itself is the mapping key — not stored inside the struct.
+    ///      nextCommitment is retained for ABI/struct stability and verifier public input,
+    ///      but is no longer read by any contract function.
     struct PrimarySlot {
         bytes32 hashedAddress;  // keccak256(abi.encodePacked(registeredWallet))
-        bytes32 nextCommitment; // hash(hash(s, nonce+1)) — used to verify changePrimary
+        bytes32 nextCommitment; // unused on-chain after changePrimary removal
     }
 
     // =========================================================================
@@ -90,11 +89,6 @@ contract VerificationRegistry is IVerificationRegistry, ReentrancyGuard, Pausabl
 
     /// @dev nullifier => active primary slot. Public so the app can scan for recovery.
     mapping(bytes32 => PrimarySlot) public s_primarySlots;
-
-    /// @dev nextCommitment => nullifier that stored it.
-    ///      Enables changePrimary to locate the old slot without the old nullifier
-    ///      appearing in calldata (preserving unlinkability between old and new nullifiers).
-    mapping(bytes32 => bytes32) private s_nextCommitmentToNullifier;
 
     /// @dev keccak256(abi.encodePacked(wallet)) => active primary registration.
     mapping(bytes32 => Registration) private s_primaryRegistrations;
@@ -216,7 +210,6 @@ contract VerificationRegistry is IVerificationRegistry, ReentrancyGuard, Pausabl
         // Effects
         uint48 expiresAt = _cappedExpiry(passportExpiry);
         s_primarySlots[nullifier] = PrimarySlot({hashedAddress: hashedAddress, nextCommitment: nextCommitment});
-        s_nextCommitmentToNullifier[nextCommitment] = nullifier;
         s_primaryRegistrations[hashedAddress] = Registration({expiresAt: expiresAt, registeredAt: uint48(block.timestamp)});
 
         emit WalletVerified(msg.sender);
@@ -247,52 +240,6 @@ contract VerificationRegistry is IVerificationRegistry, ReentrancyGuard, Pausabl
     }
 
     /// @inheritdoc IVerificationRegistry
-    function changePrimary(
-        bytes32 revealedNextNullifier,
-        bytes32 newNextCommitment,
-        uint48 passportExpiry,
-        bytes calldata proof
-    ) external override whenNotPaused nonReentrant {
-        bytes32 newHashedAddress = keccak256(abi.encodePacked(msg.sender));
-
-        // Checks
-        if (block.timestamp >= passportExpiry) revert VerificationRegistry__PassportExpired();
-
-        // Locate old slot: nextCommitment stored by old slot == Poseidon2(revealedNextNullifier)
-        // Must match the circuit: next_commitment = Poseidon2::hash([next_nullifier], 1)
-        bytes32 expectedCommitment =
-            bytes32(Field.Type.unwrap(Poseidon2Lib.hash_1(Field.Type.wrap(uint256(revealedNextNullifier)))));
-        bytes32 oldNullifier = s_nextCommitmentToNullifier[expectedCommitment];
-        if (oldNullifier == bytes32(0)) revert VerificationRegistry__InvalidNextNullifier();
-
-        PrimarySlot memory oldSlot = s_primarySlots[oldNullifier];
-        if (oldSlot.hashedAddress == bytes32(0)) revert VerificationRegistry__InvalidNextNullifier();
-
-        // Verify proof: proves caller knows s, hash(s,n+1) == revealedNextNullifier, new address
-        if (
-            !s_verifier.verifyPrimaryProof(
-                newHashedAddress, revealedNextNullifier, newNextCommitment, s_cscaMerkleTree.getRoot(), proof
-            )
-        ) {
-            revert VerificationRegistry__InvalidProof();
-        }
-
-        // Effects — delete old slot and its commitment pointer
-        delete s_primarySlots[oldNullifier];
-        delete s_nextCommitmentToNullifier[expectedCommitment];
-        delete s_primaryRegistrations[oldSlot.hashedAddress];
-
-        // Create new slot with revealedNextNullifier as the live nullifier
-        uint48 expiresAt = _cappedExpiry(passportExpiry);
-        s_primarySlots[revealedNextNullifier] =
-            PrimarySlot({hashedAddress: newHashedAddress, nextCommitment: newNextCommitment});
-        s_nextCommitmentToNullifier[newNextCommitment] = revealedNextNullifier;
-        s_primaryRegistrations[newHashedAddress] = Registration({expiresAt: expiresAt, registeredAt: uint48(block.timestamp)});
-
-        emit WalletVerified(msg.sender);
-    }
-
-    /// @inheritdoc IVerificationRegistry
     function unregisterPrimary(bytes32 nullifier) external override whenNotPaused nonReentrant {
         bytes32 hashedAddress = keccak256(abi.encodePacked(msg.sender));
 
@@ -303,7 +250,6 @@ contract VerificationRegistry is IVerificationRegistry, ReentrancyGuard, Pausabl
 
         // Effects
         delete s_primarySlots[nullifier];
-        delete s_nextCommitmentToNullifier[slot.nextCommitment];
         delete s_primaryRegistrations[hashedAddress];
         s_primaryUnregisteredAt[nullifier] = block.timestamp + s_config.cooldownPeriod();
 
@@ -343,6 +289,12 @@ contract VerificationRegistry is IVerificationRegistry, ReentrancyGuard, Pausabl
     /// @inheritdoc IVerificationRegistry
     function getPrimaryExpiry(address wallet) external view override returns (uint48) {
         return s_primaryRegistrations[keccak256(abi.encodePacked(wallet))].expiresAt;
+    }
+
+    /// @inheritdoc IVerificationRegistry
+    function wasNullifierUsed(bytes32 nullifier) external view override returns (bool) {
+        return s_primarySlots[nullifier].hashedAddress != bytes32(0)
+            || s_primaryUnregisteredAt[nullifier] != 0;
     }
 
     // =========================================================================

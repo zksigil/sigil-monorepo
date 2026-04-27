@@ -11,8 +11,9 @@ pragma solidity ^0.8.28;
 ///                   data stored on-chain. Rate-limited to maxDailyRegistrations/day.
 ///
 ///      Primary tier — sybil resistance (one address per passport, globally).
-///                     Enforced via a nullifier stored on-chain. Supports unlinkable
-///                     address changes via nullifier chaining.
+///                     Enforced via a nullifier stored on-chain. Switching to a
+///                     different primary address requires unregister + cooldown
+///                     before a fresh registration with the next-nonce nullifier.
 ///
 ///      All registrations expire at min(registrationTTL, passportExpiry). Users must
 ///      re-tap their passport periodically to renew. isVerified / isPrimaryVerified
@@ -21,7 +22,7 @@ pragma solidity ^0.8.28;
 ///      Privacy invariants:
 ///        - No nullifiers in any event
 ///        - No address ↔ nullifier mapping stored or queryable
-///        - Old and new nullifiers after a primary change are cryptographically unrelated
+///        - Successive primary nullifiers from the same passport are cryptographically unrelated
 interface IVerificationRegistry {
     // =========================================================================
     // Events
@@ -72,6 +73,7 @@ interface IVerificationRegistry {
     /// @notice Register the caller's wallet as the unique primary address for a passport.
     /// @param nullifier      Primary nullifier: hash(s, nonce). Stored on-chain.
     /// @param nextCommitment Commitment to the next nullifier: hash(hash(s, nonce+1)).
+    ///                       Currently unused on-chain; kept as a verifier public input.
     /// @param passportExpiry Passport expiry timestamp.
     /// @param proof          ZK proof bytes.
     function registerPrimary(
@@ -87,22 +89,9 @@ interface IVerificationRegistry {
     /// @param proof          ZK proof bytes.
     function renewPrimary(bytes32 nullifier, uint48 passportExpiry, bytes calldata proof) external;
 
-    /// @notice Change the primary address to msg.sender by revealing the next nullifier.
-    /// @dev The caller does NOT need to be the currently registered primary address.
-    ///      Proving knowledge of revealedNextNullifier is sufficient to take ownership.
-    ///      Old and new on-chain nullifiers are cryptographically unrelated.
-    /// @param revealedNextNullifier nullifier_{n+1} = hash(s, nonce+1). Matches hash(nextCommitment_n).
-    /// @param newNextCommitment     Commitment to nullifier_{n+2}: hash(hash(s, nonce+2)).
-    /// @param passportExpiry        Passport expiry timestamp.
-    /// @param proof                 ZK proof bytes.
-    function changePrimary(
-        bytes32 revealedNextNullifier,
-        bytes32 newNextCommitment,
-        uint48 passportExpiry,
-        bytes calldata proof
-    ) external;
-
     /// @notice Remove the caller's primary registration and start the cooldown timer.
+    /// @dev To switch primary to a different address, unregister, wait the cooldown,
+    ///      then call registerPrimary again with a fresh nonce.
     /// @param nullifier The nullifier identifying the caller's primary slot.
     function unregisterPrimary(bytes32 nullifier) external;
 
@@ -126,4 +115,10 @@ interface IVerificationRegistry {
     /// @dev Renewing does not reset this value — it reflects when this address was first (or last) registered/changed.
     ///      Protocols can use this to enforce a minimum registration age, e.g. require(age >= 30 days).
     function getPrimaryRegisteredAt(address wallet) external view returns (uint48);
+
+    /// @notice Returns true if this primary nullifier has ever been used (currently registered OR previously unregistered).
+    /// @dev Used by the app's stateless nonce-recovery walk to skip already-consumed nonces, preserving
+    ///      unlinkability across unregister/re-register. Returning a boolean instead of the cooldown
+    ///      timestamp avoids leaking when the unregister happened.
+    function wasNullifierUsed(bytes32 nullifier) external view returns (bool);
 }

@@ -36,6 +36,8 @@ export interface UseNonceRecoveryResult {
   error: string | null;
 }
 
+const ZERO_BYTES32 = `0x${'00'.repeat(32)}` as `0x${string}`;
+
 /**
  * Hook for stateless primary-tier nonce recovery.
  *
@@ -84,12 +86,22 @@ export function useNonceRecovery(): UseNonceRecoveryResult {
         }) as [`0x${string}`, `0x${string}`];
 
         return {
-          hashedAddress: hashedAddress as string,
-          nextCommitment: nextCommitment as string,
+          hashedAddress: (hashedAddress ?? ZERO_BYTES32) as string,
+          nextCommitment: (nextCommitment ?? ZERO_BYTES32) as string,
         };
       };
 
-      const recovered = await recoverPrimaryNonce(rawDG1Hex, rawSODHex, readSlot);
+      const wasUsed = async (nullifierDecimal: string) => {
+        const nullifierBytes32 = decimalToBytes32(nullifierDecimal);
+        return await client.readContract({
+          address: contractAddress,
+          abi: VERIFICATION_REGISTRY_ABI,
+          functionName: 'wasNullifierUsed',
+          args: [nullifierBytes32],
+        }) as boolean;
+      };
+
+      const recovered = await recoverPrimaryNonce(rawDG1Hex, rawSODHex, readSlot, wasUsed);
       setResult(recovered);
       return recovered;
     } catch (err) {

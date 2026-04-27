@@ -35,34 +35,6 @@ export const VERIFICATION_REGISTRY_ABI = [
   },
   {
     "type": "function",
-    "name": "changePrimary",
-    "inputs": [
-      {
-        "name": "revealedNextNullifier",
-        "type": "bytes32",
-        "internalType": "bytes32"
-      },
-      {
-        "name": "newNextCommitment",
-        "type": "bytes32",
-        "internalType": "bytes32"
-      },
-      {
-        "name": "passportExpiry",
-        "type": "uint48",
-        "internalType": "uint48"
-      },
-      {
-        "name": "proof",
-        "type": "bytes",
-        "internalType": "bytes"
-      }
-    ],
-    "outputs": [],
-    "stateMutability": "nonpayable"
-  },
-  {
-    "type": "function",
     "name": "getBaseExpiry",
     "inputs": [
       {
@@ -450,6 +422,25 @@ export const VERIFICATION_REGISTRY_ABI = [
     "stateMutability": "nonpayable"
   },
   {
+    "type": "function",
+    "name": "wasNullifierUsed",
+    "inputs": [
+      {
+        "name": "nullifier",
+        "type": "bytes32",
+        "internalType": "bytes32"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "",
+        "type": "bool",
+        "internalType": "bool"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
     "type": "event",
     "name": "CSCAMerkleTreeUpdated",
     "inputs": [
@@ -595,11 +586,6 @@ export const VERIFICATION_REGISTRY_ABI = [
   {
     "type": "error",
     "name": "VerificationRegistry__AlreadyRegistered",
-    "inputs": []
-  },
-  {
-    "type": "error",
-    "name": "VerificationRegistry__InvalidNextNullifier",
     "inputs": []
   },
   {
