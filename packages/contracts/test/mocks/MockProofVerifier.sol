@@ -31,7 +31,6 @@ contract MockProofVerifier is IProofVerifier {
         bytes32,
         bytes32,
         bytes32,
-        bytes32,
         bytes calldata
     ) external view override returns (bool) {
         if (shouldRevert) revert("MockProofVerifier: forced revert");

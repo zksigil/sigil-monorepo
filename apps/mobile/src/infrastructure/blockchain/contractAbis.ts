@@ -181,11 +181,6 @@ export const VERIFICATION_REGISTRY_ABI = [
         "internalType": "bytes32"
       },
       {
-        "name": "nextCommitment",
-        "type": "bytes32",
-        "internalType": "bytes32"
-      },
-      {
         "name": "passportExpiry",
         "type": "uint48",
         "internalType": "uint48"
@@ -281,6 +276,25 @@ export const VERIFICATION_REGISTRY_ABI = [
   },
   {
     "type": "function",
+    "name": "s_primaryNullifierByWallet",
+    "inputs": [
+      {
+        "name": "",
+        "type": "bytes32",
+        "internalType": "bytes32"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "",
+        "type": "bytes32",
+        "internalType": "bytes32"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
     "name": "s_primarySlots",
     "inputs": [
       {
@@ -291,12 +305,7 @@ export const VERIFICATION_REGISTRY_ABI = [
     ],
     "outputs": [
       {
-        "name": "hashedAddress",
-        "type": "bytes32",
-        "internalType": "bytes32"
-      },
-      {
-        "name": "nextCommitment",
+        "name": "",
         "type": "bytes32",
         "internalType": "bytes32"
       }
@@ -411,13 +420,7 @@ export const VERIFICATION_REGISTRY_ABI = [
   {
     "type": "function",
     "name": "unregisterPrimary",
-    "inputs": [
-      {
-        "name": "nullifier",
-        "type": "bytes32",
-        "internalType": "bytes32"
-      }
-    ],
+    "inputs": [],
     "outputs": [],
     "stateMutability": "nonpayable"
   },

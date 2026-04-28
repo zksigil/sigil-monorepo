@@ -134,14 +134,13 @@ Mobile app for verifying Ethereum wallets with government-issued passports using
 │  target/passport_primary.json     computePrimaryInputs()                 │
 │                                 generateNoirProof()                      │
 │                                                                          │
-│  packages/contracts/               packages/shared-types/                │
-│  ├── src/                          ├── src/index.ts                       │
-│  │   ├── VerificationRegistry.sol  │   ├── WalletInfo                     │
-│  │   ├── ProofVerifier.sol         │   ├── WalletRecord                   │
-│  │   ├── ProtocolConfig.sol        │   ├── ZKProofInputs                  │
-│  │   └── verifiers/ (generated)    │   ├── VerificationPhase              │
-│  └── test/                         │   └── ChainConfig                    │
-│                                    └── (mirrors contract structs)         │
+│  packages/contracts/                                                      │
+│  ├── src/                                                                 │
+│  │   ├── VerificationRegistry.sol                                         │
+│  │   ├── ProofVerifier.sol                                                │
+│  │   ├── ProtocolConfig.sol                                               │
+│  │   └── verifiers/ (generated)                                           │
+│  └── test/                                                                │
 │                                                                          │
 │  Build commands:                                                          │
 │  ┌──────────────────────────────────────────────────────────────────┐   │

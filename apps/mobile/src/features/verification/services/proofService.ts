@@ -15,7 +15,10 @@
  *                          csca_merkle_siblings[9], csca_leaf_index]
  *                 public=[epoch_nullifier, hashed_address, csca_merkle_root]
  *   Primary tier: same private layout (nonce instead of epoch_day)
- *                 public=[nullifier, next_commitment, hashed_address, csca_merkle_root]
+ *                 public=[nullifier, hashed_address, csca_merkle_root]
+ *
+ *   The primary nullifier is deterministic per passport (Poseidon2(s, "primary"));
+ *   re-registering the same passport reuses the same nullifier value.
  *
  * Requires `mopro build --platforms ios` (or android) to have been run so that
  * apps/mobile/modules/mopro is populated.
@@ -47,10 +50,11 @@ const CSCA_SIGNATURE_LEN = 512;
 /**
  * Phase 3c expected input counts:
  *   Base:    3 + 512+1+256+256+257+1 + 1536+1+1+512+513+1+512 + 9+1 + 3 = 4375
- *   Primary: 3 + 512+1+256+256+257+1 + 1536+1+1+512+513+1+512 + 9+1 + 4 = 4376
+ *   Primary: 3 + 512+1+256+256+257+1 + 1536+1+1+512+513+1+512 + 9+1 + 3 = 4375
+ *   Both circuits emit 3 public inputs: [nullifier|epochNullifier, hashedAddress, cscaMerkleRoot].
  */
 const EXPECTED_BASE_INPUTS = 4375;
-const EXPECTED_PRIMARY_INPUTS = 4376;
+const EXPECTED_PRIMARY_INPUTS = 4375;
 
 // ---------------------------------------------------------------------------
 // Public interface
@@ -60,8 +64,6 @@ export interface ProofInput {
   rawDG1Hex: string;               // hex-encoded DG1 bytes from NFC
   rawSODHex: string;               // hex-encoded SOD signature bytes from NFC
   walletAddress: `0x${string}`;
-  /** nonce for primary-tier proofs. Defaults to 1 (first registration). */
-  nonce?: number;
   /** Passport expiry as unix epoch seconds (parsed from DG1 MRZ). 0 = not constrained. */
   passportExpiryUnix?: number;
 }
@@ -77,7 +79,6 @@ export interface PrimaryProofOutput {
   type: 'primary';
   zkProof: PrimaryZKProof;
   nullifier: string;
-  nextCommitment: string;
   cscaMerkleRoot: `0x${string}`;
 }
 
@@ -340,7 +341,9 @@ export async function generatePrimaryProof(input: ProofInput): Promise<PrimaryPr
 
   const dg1Hash = sha256ToField(stripHexPrefix(input.rawDG1Hex));
   const sodHash = sha256ToField(stripHexPrefix(input.rawSODHex));
-  const nonce = (input.nonce ?? 1).toString();
+  // Primary nullifier is deterministic per passport — fixed nonce so the same passport
+  // always produces the same nullifier across re-registrations.
+  const nonce = '1';
   const hashedAddr = walletAddressToField(input.walletAddress);
   const passportExpiry = (input.passportExpiryUnix ?? 0).toString();
 
@@ -455,8 +458,8 @@ export async function generatePrimaryProof(input: ProofInput): Promise<PrimaryPr
     console.error('[PROOF] Local verification error:', verifyErr);
   }
 
-  // Primary circuit user public inputs: [nullifier, nextCommitment, hashedAddress, cscaMerkleRoot] = 4.
-  const { proof: proofForContract } = reshapeProofForContract(proofBuf, 4);
+  // The Noir circuit emits 3 public inputs: [nullifier, hashedAddress, cscaMerkleRoot].
+  const { proof: proofForContract } = reshapeProofForContract(proofBuf, 3);
 
   const proofHex = arrayBufferToHex(proofForContract);
   const vkHex = arrayBufferToHex(vkBuf);
@@ -470,82 +473,13 @@ export async function generatePrimaryProof(input: ProofInput): Promise<PrimaryPr
       proof: proofHex,
       vk: vkHex,
       nullifier: primaryInputs.nullifier,
-      nextCommitment: primaryInputs.nextCommitment,
       hashedAddress: hashedAddr,
       passportExpiry,
       cscaMerkleRoot: cscaMerkleProof.root,
     },
     nullifier: primaryInputs.nullifier,
-    nextCommitment: primaryInputs.nextCommitment,
     cscaMerkleRoot: cscaMerkleProof.root,
   };
-}
-
-// ---------------------------------------------------------------------------
-// Nonce recovery — stateless primary-tier nonce discovery from passport data
-// ---------------------------------------------------------------------------
-
-export interface NonceRecoveryResult {
-  /** Nonce of the currently-active primary slot (one passport ⇒ at most one), if any. */
-  activeNonce: number | null;
-  /** Nullifier for activeNonce; null if no active slot. */
-  activeNullifier: string | null;
-  /** nextCommitment stored on-chain for the active slot; null if no active slot. */
-  activeNextCommitment: string | null;
-  /** Lowest nonce never used (no active slot, never unregistered). Use this for a new registerPrimary. */
-  nextFreshNonce: number;
-}
-
-const ZERO_BYTES32 = `0x${'00'.repeat(32)}`;
-
-/**
- * Stateless primary-tier nonce discovery.
- *
- * Iterates nonces 1..maxNonce, computes hash(s, n) via Mopro Poseidon2, and probes
- * on-chain state via two callbacks. Returns the active nonce (if any) and the next
- * unused nonce. The unused-nonce step preserves unlinkability across unregister/re-register:
- * an attacker can't tell from the chain whether the new registration is a re-use of the
- * old passport (because the new nullifier hashes differently from any prior nullifier).
- */
-export async function recoverPrimaryNonce(
-  rawDG1Hex: string,
-  rawSODHex: string,
-  readSlot: (nullifier: string) => Promise<{ hashedAddress: string; nextCommitment: string }>,
-  wasUsed: (nullifier: string) => Promise<boolean>,
-  maxNonce = 20,
-): Promise<NonceRecoveryResult> {
-  const Mopro = loadMoproModule();
-
-  const dg1Hash = sha256ToField(stripHexPrefix(rawDG1Hex));
-  const sodHash = sha256ToField(stripHexPrefix(rawSODHex));
-
-  let activeNonce: number | null = null;
-  let activeNullifier: string | null = null;
-  let activeNextCommitment: string | null = null;
-
-  for (let n = 1; n <= maxNonce; n++) {
-    const nullifierStr = await Mopro.computeNullifier(dg1Hash, sodHash, n.toString());
-    const slot = await readSlot(nullifierStr);
-    const isActive = slot.hashedAddress.toLowerCase() !== ZERO_BYTES32;
-
-    if (isActive) {
-      console.log(`[RECOVERY] Active primary slot at nonce ${n}`);
-      activeNonce = n;
-      activeNullifier = nullifierStr;
-      activeNextCommitment = slot.nextCommitment;
-      continue;
-    }
-
-    // Slot empty. If the nullifier was never used, this nonce is fresh.
-    const used = await wasUsed(nullifierStr);
-    if (!used) {
-      console.log(`[RECOVERY] First fresh nonce: ${n} (active=${activeNonce ?? 'none'})`);
-      return { activeNonce, activeNullifier, activeNextCommitment, nextFreshNonce: n };
-    }
-    console.log(`[RECOVERY] Nonce ${n} previously unregistered — skipping`);
-  }
-
-  throw new Error(`[RECOVERY] No fresh nonce found in 1..${maxNonce}`);
 }
 
 // ---------------------------------------------------------------------------
@@ -838,7 +772,6 @@ interface BaseInputsResult {
 interface PrimaryInputsResult {
   inputs: string[];
   nullifier: string;
-  nextCommitment: string;
 }
 
 interface MoproInterface {

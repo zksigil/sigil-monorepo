@@ -19,7 +19,7 @@ uint256 constant BN254_PRIME = 2188824287183927522224640574525727508854836440041
 ///      verifiers, preserving the circuit's declaration order.
 ///
 ///      Base circuit public inputs:    [epoch_nullifier, hashed_address, csca_merkle_root]
-///      Primary circuit public inputs: [nullifier, next_commitment, hashed_address, csca_merkle_root]
+///      Primary circuit public inputs: [nullifier, hashed_address, csca_merkle_root]
 ///
 ///      The CSCA Merkle root is fetched from the on-chain CSCAMerkleTree contract and
 ///      passed as a public input to the circuit. The circuit verifies that the DSC
@@ -54,15 +54,13 @@ contract ProofVerifier is IProofVerifier {
     function verifyPrimaryProof(
         bytes32 hashedAddress,
         bytes32 nullifier,
-        bytes32 nextCommitment,
         bytes32 cscaMerkleRoot,
         bytes calldata proof
     ) external view override returns (bool) {
-        bytes32[] memory publicInputs = new bytes32[](4);
+        bytes32[] memory publicInputs = new bytes32[](3);
         publicInputs[0] = nullifier;
-        publicInputs[1] = nextCommitment;
-        publicInputs[2] = bytes32(uint256(hashedAddress) % BN254_PRIME);
-        publicInputs[3] = cscaMerkleRoot;
+        publicInputs[1] = bytes32(uint256(hashedAddress) % BN254_PRIME);
+        publicInputs[2] = cscaMerkleRoot;
         return i_primaryVerifier.verify(proof, publicInputs);
     }
 }

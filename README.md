@@ -22,7 +22,8 @@ Two verification tiers:
 ```
 apps/mobile/          React Native app
 packages/contracts/   Foundry smart contracts
-packages/shared-types/ TypeScript types
+packages/circuits/    Noir ZK circuits
+packages/mopro-circuits/ Mopro Rust FFI bindings
 ```
 
 ## Getting started

@@ -16,16 +16,14 @@ export interface BaseZKProof {
   cscaMerkleRoot: `0x${string}`;
 }
 
-/** Primary-tier proof: sybil resistance via global nullifier chaining. */
+/** Primary-tier proof: sybil resistance via deterministic per-passport nullifier. */
 export interface PrimaryZKProof {
   /** UltraHonk-Keccak proof bytes (hex). */
   proof: `0x${string}`;
   /** Verification key bytes (hex). */
   vk: `0x${string}`;
-  /** nullifier = Poseidon2([s, nonce]) — global sybil-resistance key. */
+  /** nullifier = Poseidon2(s) — stable per passport (one address per passport globally). */
   nullifier: string;
-  /** nextCommitment = Poseidon2([Poseidon2([s, nonce+1])]) — for chained updates. */
-  nextCommitment: string;
   /** keccak256(wallet) mod BN254 as decimal (public input). */
   hashedAddress: string;
   /** Passport expiry as a unix epoch day — submitted separately to the contract. */

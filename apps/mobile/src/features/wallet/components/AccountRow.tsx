@@ -6,7 +6,6 @@ import { VERIFICATION_REGISTRY_ABI } from '../../../infrastructure/blockchain/co
 import { CONTRACT_ADDRESSES } from '../../../infrastructure/blockchain/contracts';
 import { SUPPORTED_CHAIN_IDS } from '../../../shared/constants/chains';
 import type { SupportedChainId } from '../../../shared/constants/chains';
-import { useAccountStore } from '../store/accountStore';
 import { formatQuarter } from '../hooks/useTrackedAccounts';
 import type { TrackedAccount } from '../hooks/useTrackedAccounts';
 
@@ -25,7 +24,6 @@ function isSupportedChain(chainId: number): chainId is SupportedChainId {
 export function AccountRow({ account, hasExistingUnique, onVerify, onUnregistered }: AccountRowProps): React.JSX.Element {
   const { address: activeAddress } = useAccount();
   const chainId = useChainId();
-  const { primaryNullifiers } = useAccountStore();
   const { writeContractAsync } = useWriteContract();
   const openWallet = useOpenWallet();
   const [txHash, setTxHash] = useState<`0x${string}` | undefined>();
@@ -49,30 +47,15 @@ export function AccountRow({ account, hasExistingUnique, onVerify, onUnregistere
   const submitUnregister = useCallback((tier: 'base' | 'primary') => {
     if (!contractAddress) return;
 
-    if (tier === 'base') {
-      writeContractAsync({
-        address: contractAddress,
-        abi: VERIFICATION_REGISTRY_ABI,
-        functionName: 'unregisterBase',
-      }).then(setTxHash).catch(() => {
-        Alert.alert('Error', 'Transaction failed. Please try again.');
-      });
-    } else {
-      const nullifier = primaryNullifiers[account.address];
-      if (!nullifier) {
-        Alert.alert('Error', 'Nullifier not found. Cannot unregister.');
-        return;
-      }
-      writeContractAsync({
-        address: contractAddress,
-        abi: VERIFICATION_REGISTRY_ABI,
-        functionName: 'unregisterPrimary',
-        args: [nullifier],
-      }).then(setTxHash).catch(() => {
-        Alert.alert('Error', 'Transaction failed. Please try again.');
-      });
-    }
-  }, [account.address, contractAddress, primaryNullifiers, writeContractAsync]);
+    const fnName = tier === 'base' ? 'unregisterBase' : 'unregisterPrimary';
+    writeContractAsync({
+      address: contractAddress,
+      abi: VERIFICATION_REGISTRY_ABI,
+      functionName: fnName,
+    }).then(setTxHash).catch(() => {
+      Alert.alert('Error', 'Transaction failed. Please try again.');
+    });
+  }, [contractAddress, writeContractAsync]);
 
   const handleUnregister = useCallback((tier: 'base' | 'primary') => {
     if (activeAddress?.toLowerCase() !== account.address.toLowerCase()) {

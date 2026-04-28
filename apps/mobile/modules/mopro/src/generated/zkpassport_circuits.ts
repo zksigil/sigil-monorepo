@@ -129,8 +129,8 @@ export function computeNullifier(dg1Hash: string, sodHash: string, nonce: string
 /**
  * Compute the flat witness vector for the primary-tier circuit.
  *
- * Returns `PrimaryInputs` with the full ordered flat array plus `nullifier` and
- * `next_commitment` as decimal strings for on-chain use.
+ * Returns `PrimaryInputs` with the full ordered flat array plus the deterministic
+ * `nullifier` as a decimal string for on-chain use.
  *
  * Input order in circuit ABI:
  * private: dg1_hash, sod_hash, nonce,
@@ -139,7 +139,7 @@ export function computeNullifier(dg1Hash: string, sodHash: string, nonce: string
  * dsc_tbs[1536], dsc_tbs_len, dsc_pubkey_offset,
  * csca_pubkey[512], csca_redc_param[513], csca_exponent, csca_signature[512],
  * csca_merkle_siblings[9], csca_leaf_index
- * public:  nullifier, next_commitment, hashed_address, csca_merkle_root
+ * public:  nullifier, hashed_address, csca_merkle_root
  */
 export function computePrimaryInputs(dg1Hash: string, sodHash: string, nonce: string, signedAttrs: ArrayBuffer, signedAttrsLen: /*u32*/number, signature: ArrayBuffer, pubkey: ArrayBuffer, redcParam: ArrayBuffer, exponent: /*u32*/number, dscTbs: ArrayBuffer, dscTbsLen: /*u32*/number, dscPubkeyOffset: /*u32*/number, cscaPubkey: ArrayBuffer, cscaRedcParam: ArrayBuffer, cscaExponent: /*u32*/number, cscaSignature: ArrayBuffer, cscaMerkleSiblings: Array<string>, cscaLeafIndex: /*u32*/number, hashedAddress: string, cscaMerkleRoot: string): PrimaryInputs /*throws*/ {
     return FfiConverterTypePrimaryInputs.lift(
@@ -347,11 +347,7 @@ export type PrimaryInputs = {
     /**
      * nullifier as decimal string (= Poseidon2([s, nonce])).
      */
-    nullifier: string,
-    /**
-     * next_commitment as decimal string (= Poseidon2([Poseidon2([s, nonce+1])])).
-     */
-    nextCommitment: string
+    nullifier: string
 }
 
 /**
@@ -389,19 +385,16 @@ const FfiConverterTypePrimaryInputs = (() => {
         read(from: RustBuffer): TypeName {
             return {
                 inputs: FfiConverterArrayString.read(from), 
-                nullifier: FfiConverterString.read(from), 
-                nextCommitment: FfiConverterString.read(from)
+                nullifier: FfiConverterString.read(from)
             };
         }
         write(value: TypeName, into: RustBuffer): void {
             FfiConverterArrayString.write(value.inputs, into);
             FfiConverterString.write(value.nullifier, into);
-            FfiConverterString.write(value.nextCommitment, into);
         }
         allocationSize(value: TypeName): number {
             return FfiConverterArrayString.allocationSize(value.inputs) + 
-            FfiConverterString.allocationSize(value.nullifier) + 
-            FfiConverterString.allocationSize(value.nextCommitment);
+            FfiConverterString.allocationSize(value.nullifier);
             
         }
     };
@@ -563,7 +556,7 @@ function uniffiEnsureInitialized() {
     if (nativeModule().ubrn_uniffi_zkpassport_circuits_checksum_func_compute_nullifier() !== 14563) {
         throw new UniffiInternalError.ApiChecksumMismatch("uniffi_zkpassport_circuits_checksum_func_compute_nullifier");
     }
-    if (nativeModule().ubrn_uniffi_zkpassport_circuits_checksum_func_compute_primary_inputs() !== 5234) {
+    if (nativeModule().ubrn_uniffi_zkpassport_circuits_checksum_func_compute_primary_inputs() !== 18519) {
         throw new UniffiInternalError.ApiChecksumMismatch("uniffi_zkpassport_circuits_checksum_func_compute_primary_inputs");
     }
     if (nativeModule().ubrn_uniffi_zkpassport_circuits_checksum_func_compute_redc_param() !== 42320) {

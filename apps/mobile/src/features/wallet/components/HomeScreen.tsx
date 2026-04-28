@@ -226,6 +226,19 @@ function TierSelectionModal({
             <Text className="text-dracula-comment text-xs leading-5">
               One account per passport. Proves you're a real person and that this is your only address with this status.
             </Text>
+            {canSelectUnique && (
+              <View className="mt-3 rounded-xl bg-dracula-yellow/10 border border-dracula-yellow/30 p-3">
+                <Text className="text-dracula-yellow text-xs font-semibold mb-1">
+                  Heads up: Unique addresses are linkable
+                </Text>
+                <Text className="text-dracula-comment text-xs leading-5">
+                  If you ever switch your Unique address (unregister, wait 7 days, then re-register
+                  from a different account), the old and new addresses will be publicly linked
+                  on-chain as belonging to the same passport. Pick Verified instead if you want
+                  multiple accounts that can't be linked to each other.
+                </Text>
+              </View>
+            )}
             {!canSelectUnique && hasExistingUnique && (
               <View className="mt-3 rounded-xl bg-dracula-yellow/10 border border-dracula-yellow/30 p-3">
                 <Text className="text-dracula-yellow text-xs font-semibold mb-1">

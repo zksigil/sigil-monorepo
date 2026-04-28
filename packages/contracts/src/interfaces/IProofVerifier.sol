@@ -13,7 +13,7 @@ pragma solidity ^0.8.28;
 ///      Public inputs per tier:
 ///
 ///      Base:    [epochNullifier, hashedAddress, cscaMerkleRoot]
-///      Primary: [nullifier, nextCommitment, hashedAddress, cscaMerkleRoot]
+///      Primary: [nullifier, hashedAddress, cscaMerkleRoot]
 ///
 ///      Note: passportExpiry is NOT a circuit input — it's checked on-chain before verification.
 interface IProofVerifier {
@@ -29,15 +29,13 @@ interface IProofVerifier {
         bytes calldata proof
     ) external view returns (bool);
 
-    /// @notice Verify a primary-tier registration, renewal, or primary-change proof.
+    /// @notice Verify a primary-tier registration or renewal proof.
     /// @param hashedAddress keccak256(abi.encodePacked(wallet)) — binds proof to registering wallet.
-    /// @param nullifier Permanent primary nullifier: hash(s, nonce). Unique per registration slot.
-    /// @param nextCommitment Commitment to next nullifier: hash(hash(s, nonce+1)).
+    /// @param nullifier Stable primary nullifier derived from the passport secret.
     /// @param cscaMerkleRoot CSCA Merkle root from on-chain registry — binds proof to current ICAO ML.
     function verifyPrimaryProof(
         bytes32 hashedAddress,
         bytes32 nullifier,
-        bytes32 nextCommitment,
         bytes32 cscaMerkleRoot,
         bytes calldata proof
     ) external view returns (bool);

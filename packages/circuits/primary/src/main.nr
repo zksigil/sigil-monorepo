@@ -19,13 +19,12 @@ global MERKLE_DEPTH: u32 = 9;
 ///   2. The DSC certificate was signed by a CSCA (RSA-4096/SHA-256/PKCS#1v1.5)
 ///   3. The DSC pubkey is bound to the CSCA-signed certificate (anti-substitution)
 ///   4. The CSCA public key is in the ICAO CSCA Merkle tree
-///   5. Nullifier chaining for sybil-resistant primary slot management
+///   5. Stable, deterministic nullifier per passport for sybil resistance
 ///
 /// Trust chain: ICAO Master List -> CSCA -> signs DSC cert -> DSC signs SOD -> SOD covers DG1
 ///
 /// Public inputs:
 ///   nullifier          -- stored on-chain as the primary slot key
-///   next_commitment    -- stored alongside the slot
 ///   hashed_address     -- keccak256(wallet) as a Field (prevents proof replay)
 ///   csca_merkle_root   -- current CSCA Merkle root from on-chain contract
 fn main(
@@ -53,7 +52,6 @@ fn main(
     csca_leaf_index: u32,
     // Public inputs
     nullifier: pub Field,
-    next_commitment: pub Field,
     hashed_address: pub Field,
     csca_merkle_root: pub Field,
 ) {
@@ -113,17 +111,16 @@ fn main(
     assert(computed_root == csca_merkle_root, "CSCA Merkle proof failed");
 
     // ---------------------------------------------------------------
-    // 5. Nullifier chaining
+    // 5. Stable per-passport nullifier
     // ---------------------------------------------------------------
+    // The nullifier is deterministic for a given passport: nonce is fixed at 1.
+    // This means re-registering the same passport to a new primary address
+    // links the old and new addresses on-chain (acceptable tradeoff for v1).
 
     let passport_secret = Poseidon2::hash([dg1_hash, sod_hash], 2);
 
     let computed_nullifier = Poseidon2::hash([passport_secret, nonce], 2);
     assert(computed_nullifier == nullifier);
-
-    let next_nullifier = Poseidon2::hash([passport_secret, nonce + 1], 2);
-    let computed_next_commitment = Poseidon2::hash([next_nullifier], 1);
-    assert(computed_next_commitment == next_commitment);
 
     // hashed_address binds this proof to a specific wallet - enforced on-chain via msg.sender.
     let _ = hashed_address;

@@ -70,24 +70,20 @@ export function useProofGeneration(): UseProofGenerationResult {
           const stub = generateStubProof(input);
 
           if (isPrimary) {
-            // Stub primary: derive deterministic nullifier + nextCommitment from the stub nullifier
+            // Stub primary: deterministic nullifier per passport (the real circuit
+            // computes Poseidon2(s); the stub uses a keccak surrogate).
             const stubNullifier = stub.passportNullifierHex;
-            // nextCommitment is a second keccak of the nullifier (mirrors circuit chaining logic)
-            const { keccak256 } = await import('viem');
-            const nextCommitment = keccak256(stubNullifier);
             proofOutput = {
               type: 'primary',
               zkProof: {
                 proof: stub.zkProof.proof,
                 vk: ('0x' + '00'.repeat(32)) as `0x${string}`,
                 nullifier: stubNullifier,
-                nextCommitment,
                 hashedAddress: stub.zkProof.publicSignals[1].toString(),
                 passportExpiry: (input.passportExpiryUnix ?? 0).toString(),
                 cscaMerkleRoot: CSCA_MERKLE_ROOT,
               },
               nullifier: stubNullifier,
-              nextCommitment,
               cscaMerkleRoot: CSCA_MERKLE_ROOT,
             } satisfies PrimaryProofOutput;
           } else {

@@ -5,20 +5,15 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 interface AccountStore {
   /** Tracked wallet addresses (tier-agnostic — tier is chosen at verify time). */
   trackedAddresses: `0x${string}`[];
-  /** Nullifiers for unique-tier accounts (needed for unregisterPrimary). */
-  primaryNullifiers: Record<`0x${string}`, `0x${string}`>;
 
   addAddress: (address: `0x${string}`) => void;
   removeAddress: (address: `0x${string}`) => void;
-  setPrimaryNullifier: (address: `0x${string}`, nullifier: `0x${string}`) => void;
-  clearPrimaryNullifier: (address: `0x${string}`) => void;
 }
 
 export const useAccountStore = create<AccountStore>()(
   persist(
     (set) => ({
       trackedAddresses: [],
-      primaryNullifiers: {},
 
       addAddress: (address) =>
         set((state) => {
@@ -36,17 +31,6 @@ export const useAccountStore = create<AccountStore>()(
             (a) => a.toLowerCase() !== address.toLowerCase(),
           ),
         })),
-
-      setPrimaryNullifier: (address, nullifier) =>
-        set((state) => ({
-          primaryNullifiers: { ...state.primaryNullifiers, [address]: nullifier },
-        })),
-
-      clearPrimaryNullifier: (address) =>
-        set((state) => {
-          const { [address]: _, ...rest } = state.primaryNullifiers;
-          return { primaryNullifiers: rest };
-        }),
     }),
     {
       name: '@zkid/accounts',

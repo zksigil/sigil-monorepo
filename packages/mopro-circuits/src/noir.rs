@@ -37,8 +37,6 @@ pub struct PrimaryInputs {
     pub inputs: Vec<String>,
     /// nullifier as decimal string (= Poseidon2([s, nonce])).
     pub nullifier: String,
-    /// next_commitment as decimal string (= Poseidon2([Poseidon2([s, nonce+1])])).
-    pub next_commitment: String,
 }
 
 // ---------------------------------------------------------------------------
@@ -208,8 +206,8 @@ pub fn compute_base_inputs(
 
 /// Compute the flat witness vector for the primary-tier circuit.
 ///
-/// Returns `PrimaryInputs` with the full ordered flat array plus `nullifier` and
-/// `next_commitment` as decimal strings for on-chain use.
+/// Returns `PrimaryInputs` with the full ordered flat array plus the deterministic
+/// `nullifier` as a decimal string for on-chain use.
 ///
 /// Input order in circuit ABI:
 ///   private: dg1_hash, sod_hash, nonce,
@@ -218,7 +216,7 @@ pub fn compute_base_inputs(
 ///            dsc_tbs[1536], dsc_tbs_len, dsc_pubkey_offset,
 ///            csca_pubkey[512], csca_redc_param[513], csca_exponent, csca_signature[512],
 ///            csca_merkle_siblings[9], csca_leaf_index
-///   public:  nullifier, next_commitment, hashed_address, csca_merkle_root
+///   public:  nullifier, hashed_address, csca_merkle_root
 #[uniffi::export]
 pub fn compute_primary_inputs(
     dg1_hash: String,
@@ -249,15 +247,7 @@ pub fn compute_primary_inputs(
     let passport_secret = poseidon2([dg1, sod])?;
     let nullifier = poseidon2([passport_secret, n])?;
 
-    // next_nullifier = Poseidon2([s, nonce + 1])
-    // next_commitment = Poseidon2([next_nullifier]) -- hashed one extra time
-    let one = FieldElement::from(1u128);
-    let n_plus_1 = n + one;
-    let next_nullifier = poseidon2([passport_secret, n_plus_1])?;
-    let next_commitment = poseidon2([next_nullifier])?;
-
     let nullifier_str = field_to_decimal(nullifier);
-    let next_commitment_str = field_to_decimal(next_commitment);
 
     let mut inputs = Vec::new();
 
@@ -289,14 +279,12 @@ pub fn compute_primary_inputs(
 
     // Public inputs
     inputs.push(nullifier_str.clone());
-    inputs.push(next_commitment_str.clone());
     inputs.push(hashed_address);
     inputs.push(csca_merkle_root);
 
     Ok(PrimaryInputs {
         inputs,
         nullifier: nullifier_str,
-        next_commitment: next_commitment_str,
     })
 }
 
@@ -485,12 +473,9 @@ mod tests {
         "10169623654123766754031260866998371876549336851110854689992825661941566564438";
 
     // Primary: dg1_hash=1, sod_hash=2, nonce=1
-    //   nullifier        = Poseidon2([Poseidon2([1,2]), 1])
-    //   next_commitment  = Poseidon2([Poseidon2([Poseidon2([1,2]), 2])])
+    //   nullifier = Poseidon2([Poseidon2([1,2]), 1])
     const PRIMARY_NULLIFIER: &str =
         "275412644495263924189939344395808058143324727273800689612812660018296150956";
-    const PRIMARY_NEXT_COMMITMENT: &str =
-        "19202002815431368995739791825713219422746529042231652773447201800946151423106";
 
     // NOTE: Proof round-trip tests (test_base_proof_roundtrip, test_primary_proof_roundtrip)
     // are commented out until test-vectors/ are updated with Phase 3b circuit artifacts

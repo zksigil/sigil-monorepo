@@ -11,9 +11,10 @@ pragma solidity ^0.8.28;
 ///                   data stored on-chain. Rate-limited to maxDailyRegistrations/day.
 ///
 ///      Primary tier — sybil resistance (one address per passport, globally).
-///                     Enforced via a nullifier stored on-chain. Switching to a
-///                     different primary address requires unregister + cooldown
-///                     before a fresh registration with the next-nonce nullifier.
+///                     The primary nullifier is deterministic per passport, so the
+///                     same value is reused across registrations of the same passport.
+///                     Switching to a different primary address requires unregister +
+///                     cooldown before re-registering with the same nullifier.
 ///
 ///      All registrations expire at min(registrationTTL, passportExpiry). Users must
 ///      re-tap their passport periodically to renew. isVerified / isPrimaryVerified
@@ -22,7 +23,9 @@ pragma solidity ^0.8.28;
 ///      Privacy invariants:
 ///        - No nullifiers in any event
 ///        - No address ↔ nullifier mapping stored or queryable
-///        - Successive primary nullifiers from the same passport are cryptographically unrelated
+///        - All addresses ever registered as primary under the same passport are
+///          linkable on-chain (they share a stable nullifier). This is an explicit
+///          v1 trade-off: the base tier remains the unlinkable option.
 interface IVerificationRegistry {
     // =========================================================================
     // Events
@@ -71,29 +74,28 @@ interface IVerificationRegistry {
     // =========================================================================
 
     /// @notice Register the caller's wallet as the unique primary address for a passport.
-    /// @param nullifier      Primary nullifier: hash(s, nonce). Stored on-chain.
-    /// @param nextCommitment Commitment to the next nullifier: hash(hash(s, nonce+1)).
-    ///                       Currently unused on-chain; kept as a verifier public input.
+    /// @param nullifier      Stable primary nullifier derived from the passport secret.
+    ///                       The same value is used for every registration of this passport;
+    ///                       cooldown is enforced per-nullifier.
     /// @param passportExpiry Passport expiry timestamp.
     /// @param proof          ZK proof bytes.
     function registerPrimary(
         bytes32 nullifier,
-        bytes32 nextCommitment,
         uint48 passportExpiry,
         bytes calldata proof
     ) external;
 
     /// @notice Renew an existing primary-tier registration, extending its TTL.
-    /// @param nullifier      The nullifier identifying the caller's primary slot.
+    /// @param nullifier      The stable primary nullifier for the caller's passport.
     /// @param passportExpiry Updated passport expiry (e.g. after passport renewal).
     /// @param proof          ZK proof bytes.
     function renewPrimary(bytes32 nullifier, uint48 passportExpiry, bytes calldata proof) external;
 
     /// @notice Remove the caller's primary registration and start the cooldown timer.
-    /// @dev To switch primary to a different address, unregister, wait the cooldown,
-    ///      then call registerPrimary again with a fresh nonce.
-    /// @param nullifier The nullifier identifying the caller's primary slot.
-    function unregisterPrimary(bytes32 nullifier) external;
+    /// @dev The contract looks up the caller's nullifier via s_primaryNullifierByWallet.
+    ///      To switch primary to a different address, unregister, wait the cooldown,
+    ///      then call registerPrimary again from the new address with the same nullifier.
+    function unregisterPrimary() external;
 
     // =========================================================================
     // Protocol Integration (single-line lookups)
@@ -117,8 +119,8 @@ interface IVerificationRegistry {
     function getPrimaryRegisteredAt(address wallet) external view returns (uint48);
 
     /// @notice Returns true if this primary nullifier has ever been used (currently registered OR previously unregistered).
-    /// @dev Used by the app's stateless nonce-recovery walk to skip already-consumed nonces, preserving
-    ///      unlinkability across unregister/re-register. Returning a boolean instead of the cooldown
-    ///      timestamp avoids leaking when the unregister happened.
+    /// @dev Lets the app distinguish "first-time passport registration" from "returning passport"
+    ///      to drive UI copy. Returning a boolean instead of the cooldown timestamp avoids leaking
+    ///      when the unregister happened.
     function wasNullifierUsed(bytes32 nullifier) external view returns (bool);
 }

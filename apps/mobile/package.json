@@ -21,7 +21,6 @@
     "@reown/appkit-wagmi-react-native": "2.0.2",
     "@tanstack/react-query": "^5.56.0",
     "@walletconnect/react-native-compat": "2.23.6",
-    "@zkproof-verifier/shared-types": "workspace:*",
     "expo": "~54.0.33",
     "expo-application": "~7.0.8",
     "expo-asset": "~12.0.12",

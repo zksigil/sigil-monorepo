@@ -17,13 +17,11 @@ import { anvil, sepolia, mainnet } from 'viem/chains';
 import { RPC_URLS } from '../../../infrastructure/blockchain/appKitConfig';
 import type { RootStackRouteProp, RootStackNavigationProp } from '../../../app/navigation/types';
 import { useProofGeneration } from '../hooks/useProofGeneration';
-import { useNonceRecovery } from '../hooks/useNonceRecovery';
 import type { BaseProofOutput, PrimaryProofOutput } from '../services/proofService';
 import { VERIFICATION_REGISTRY_ABI } from '../../../infrastructure/blockchain/contractAbis';
 import { CONTRACT_ADDRESSES } from '../../../infrastructure/blockchain/contracts';
 import type { SupportedChainId } from '../../../shared/constants/chains';
 import { SUPPORTED_CHAIN_IDS } from '../../../shared/constants/chains';
-import { useAccountStore } from '../../wallet/store/accountStore';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -187,13 +185,10 @@ export function ProofGenerationScreen(): React.JSX.Element {
   const { address } = useAccount();
   const chainId = useChainId();
   const { generate, isGenerating, error: proofError } = useProofGeneration();
-  const { recover: recoverNonce } = useNonceRecovery();
-  const { setPrimaryNullifier } = useAccountStore();
 
   const [step, setStep] = useState<FlowStep>('generating');
   const [proofResult, setProofResult] = useState<BaseProofOutput | PrimaryProofOutput | null>(null);
   const [submitError, setSubmitError] = useState<string | null>(null);
-  const [errorTitle, setErrorTitle] = useState<string | null>(null);
   const hasStarted = useRef(false);
 
   // wagmi writeContract hook
@@ -228,51 +223,17 @@ export function ProofGenerationScreen(): React.JSX.Element {
     hasStarted.current = true;
 
     (async () => {
-      // For primary tier, walk on-chain state to find the next unused nonce.
-      // This preserves unlinkability across unregister/re-register: each registration
-      // uses a fresh hash(s, n) so old/new nullifiers can't be correlated on-chain.
-      let nonce: number | undefined;
-      if (tier === 'unique') {
-        try {
-          const recovered = await recoverNonce(passportData.rawDG1Hex, passportData.rawSODHex);
-          if (recovered) {
-            if (recovered.activeNonce !== null) {
-              // Strict invariant: one active primary per passport. Block registration
-              // until the existing address is unregistered and the cooldown elapses.
-              console.warn('[PROOF] Active primary slot already exists at nonce', recovered.activeNonce);
-              setErrorTitle('Passport Already Registered');
-              setSubmitError(
-                'This passport is already registered as a primary verification for another address. ' +
-                'To register a different address, first unregister the existing one and wait 7 days for the cooldown to elapse.',
-              );
-              setStep('error');
-              return;
-            }
-            nonce = recovered.nextFreshNonce;
-            console.log('[PROOF] Using primary nonce:', nonce);
-          } else {
-            console.warn('[PROOF] Nonce recovery returned null — falling back to default nonce');
-          }
-        } catch (err) {
-          // Soft failure: stub-mode (no Mopro) or RPC issue. Proof generation will
-          // fall back to default nonce; in stub mode the nonce isn't used anyway.
-          console.warn('[PROOF] Nonce recovery skipped:', err instanceof Error ? err.message : err);
-        }
-      }
-
       try {
         const output = await generate({
           rawDG1Hex: passportData.rawDG1Hex,
           rawSODHex: passportData.rawSODHex,
           walletAddress: address,
           passportExpiryUnix: mrzExpiryToUnix(passportData.dateOfExpiry),
-          nonce,
         }, tier);
         if (output.type === 'base') {
           console.log('[PROOF] epochNullifier:', output.epochNullifier);
         } else {
           console.log('[PROOF] nullifier:', output.nullifier);
-          console.log('[PROOF] nextCommitment:', output.nextCommitment);
         }
         setProofResult(output);
         setStep('proof_ready');
@@ -280,23 +241,20 @@ export function ProofGenerationScreen(): React.JSX.Element {
         setStep('error');
       }
     })();
-  }, [address, generate, passportData, tier, recoverNonce]);
+  }, [address, generate, passportData, tier]);
 
   // Navigate to success when tx is confirmed
   const navigatedRef = useRef(false);
   const navigateToSuccess = useCallback((hash: `0x${string}`, wallet: `0x${string}`) => {
     if (navigatedRef.current) return;
     navigatedRef.current = true;
-    if (proofResult?.type === 'primary') {
-      setPrimaryNullifier(wallet, decimalOrHexToBytes32(proofResult.nullifier));
-    }
     navigation.navigate('VerificationSuccess', {
       txHash: hash,
       groupSize: 1,
       verifiedAddress: wallet,
       tier,
     });
-  }, [navigation, tier, proofResult, setPrimaryNullifier]);
+  }, [navigation, tier]);
 
   useEffect(() => {
     if (isConfirmed && txHash && address) {
@@ -373,7 +331,6 @@ export function ProofGenerationScreen(): React.JSX.Element {
         functionName: 'registerPrimary' as const,
         args: [
           decimalOrHexToBytes32(proofResult.nullifier),
-          decimalOrHexToBytes32(proofResult.nextCommitment),
           Number(proofResult.zkProof.passportExpiry),
           proofResult.zkProof.proof,
         ] as const,
@@ -381,7 +338,6 @@ export function ProofGenerationScreen(): React.JSX.Element {
 
       console.log('[PROOF SUBMIT] Input args:', {
         nullifier: decimalOrHexToBytes32(proofResult.nullifier),
-        nextCommitment: decimalOrHexToBytes32(proofResult.nextCommitment),
         passportExpiry: Number(proofResult.zkProof.passportExpiry),
         proofLength: proofResult.zkProof.proof.length,
       });
@@ -520,7 +476,7 @@ export function ProofGenerationScreen(): React.JSX.Element {
         <View className="flex-1 px-6 py-8 justify-center items-center gap-y-4">
           <Text className="text-5xl">⚠️</Text>
           <Text className="text-dracula-red text-lg font-semibold">
-            {errorTitle ?? (submitError ? 'Transaction Failed' : 'Proof Generation Failed')}
+            {submitError ? 'Transaction Failed' : 'Proof Generation Failed'}
           </Text>
           <Text className="text-dracula-comment text-sm text-center max-w-xs">
             {errorMessage}
@@ -595,10 +551,7 @@ export function ProofGenerationScreen(): React.JSX.Element {
                 Proof Values
               </Text>
               {isPrimary && proofResult.type === 'primary' ? (
-                <>
-                  <DebugRow label="Nullifier" value={proofResult.nullifier} mono />
-                  <DebugRow label="Next Commitment" value={proofResult.nextCommitment} mono />
-                </>
+                <DebugRow label="Nullifier" value={proofResult.nullifier} mono />
               ) : proofResult.type === 'base' ? (
                 <DebugRow label="Epoch Nullifier" value={proofResult.epochNullifier} mono />
               ) : null}

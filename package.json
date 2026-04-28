@@ -14,7 +14,7 @@
     "contracts:build": "pnpm --filter contracts build",
     "contracts:sync-abi": "node scripts/sync-abi.mjs",
     "contracts:test": "pnpm --filter contracts test",
-    "typecheck": "pnpm --filter mobile typecheck && pnpm --filter shared-types typecheck"
+    "typecheck": "pnpm --filter mobile typecheck"
   },
   "devDependencies": {
     "@zkpassport/poseidon2": "^0.6.2",

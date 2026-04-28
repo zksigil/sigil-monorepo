@@ -21,8 +21,10 @@ import {Pausable} from "@openzeppelin/contracts/utils/Pausable.sol";
 ///        - hashedAddress == keccak256(msg.sender) checked on every write
 ///        - No nullifier emitted in any event
 ///        - No address ↔ nullifier mapping queryable externally
-///        - Switching primary address requires unregister + cooldown + fresh-nonce
-///          register; successive nullifiers are cryptographically unrelated
+///        - Switching primary address requires unregister + cooldown before
+///          re-registering with the same (deterministic) nullifier from a new address.
+///          All addresses ever registered as primary under the same passport are
+///          linkable on-chain via the shared nullifier — explicit v1 trade-off.
 contract VerificationRegistry is IVerificationRegistry, ReentrancyGuard, Pausable {
     // =========================================================================
     // Errors
@@ -53,15 +55,6 @@ contract VerificationRegistry is IVerificationRegistry, ReentrancyGuard, Pausabl
         uint48 registeredAt; // block.timestamp at registration (not updated on renew)
     }
 
-    /// @dev Stores the active primary slot for a given nullifier.
-    ///      The nullifier itself is the mapping key — not stored inside the struct.
-    ///      nextCommitment is retained for ABI/struct stability and verifier public input,
-    ///      but is no longer read by any contract function.
-    struct PrimarySlot {
-        bytes32 hashedAddress;  // keccak256(abi.encodePacked(registeredWallet))
-        bytes32 nextCommitment; // unused on-chain after changePrimary removal
-    }
-
     // =========================================================================
     // Governance
     // =========================================================================
@@ -87,8 +80,15 @@ contract VerificationRegistry is IVerificationRegistry, ReentrancyGuard, Pausabl
     // Primary Tier State
     // =========================================================================
 
-    /// @dev nullifier => active primary slot. Public so the app can scan for recovery.
-    mapping(bytes32 => PrimarySlot) public s_primarySlots;
+    /// @dev nullifier => keccak256(abi.encodePacked(registeredWallet)) of the active primary holder.
+    ///      bytes32(0) means no active slot. The nullifier is deterministic per passport, so
+    ///      re-registering the same passport to a different address reuses this same key.
+    mapping(bytes32 => bytes32) public s_primarySlots;
+
+    /// @dev keccak256(abi.encodePacked(wallet)) => nullifier of the active primary slot.
+    ///      Reverse of s_primarySlots so the registered wallet can recover its nullifier
+    ///      without local state. Cleared on unregister.
+    mapping(bytes32 => bytes32) public s_primaryNullifierByWallet;
 
     /// @dev keccak256(abi.encodePacked(wallet)) => active primary registration.
     mapping(bytes32 => Registration) private s_primaryRegistrations;
@@ -190,7 +190,6 @@ contract VerificationRegistry is IVerificationRegistry, ReentrancyGuard, Pausabl
     /// @inheritdoc IVerificationRegistry
     function registerPrimary(
         bytes32 nullifier,
-        bytes32 nextCommitment,
         uint48 passportExpiry,
         bytes calldata proof
     ) external override whenNotPaused nonReentrant {
@@ -198,18 +197,19 @@ contract VerificationRegistry is IVerificationRegistry, ReentrancyGuard, Pausabl
 
         // Checks
         if (block.timestamp >= passportExpiry) revert VerificationRegistry__PassportExpired();
-        if (s_primarySlots[nullifier].hashedAddress != bytes32(0)) revert VerificationRegistry__NullifierAlreadyUsed();
+        if (s_primarySlots[nullifier] != bytes32(0)) revert VerificationRegistry__NullifierAlreadyUsed();
         if (block.timestamp < s_primaryUnregisteredAt[nullifier]) revert VerificationRegistry__PrimaryInCooldown();
 
         if (s_primaryRegistrations[hashedAddress].expiresAt > block.timestamp) revert VerificationRegistry__AlreadyRegistered();
 
-        if (!s_verifier.verifyPrimaryProof(hashedAddress, nullifier, nextCommitment, s_cscaMerkleTree.getRoot(), proof)) {
+        if (!s_verifier.verifyPrimaryProof(hashedAddress, nullifier, s_cscaMerkleTree.getRoot(), proof)) {
             revert VerificationRegistry__InvalidProof();
         }
 
         // Effects
         uint48 expiresAt = _cappedExpiry(passportExpiry);
-        s_primarySlots[nullifier] = PrimarySlot({hashedAddress: hashedAddress, nextCommitment: nextCommitment});
+        s_primarySlots[nullifier] = hashedAddress;
+        s_primaryNullifierByWallet[hashedAddress] = nullifier;
         s_primaryRegistrations[hashedAddress] = Registration({expiresAt: expiresAt, registeredAt: uint48(block.timestamp)});
 
         emit WalletVerified(msg.sender);
@@ -226,11 +226,11 @@ contract VerificationRegistry is IVerificationRegistry, ReentrancyGuard, Pausabl
         // Checks
         if (block.timestamp >= passportExpiry) revert VerificationRegistry__PassportExpired();
 
-        PrimarySlot memory slot = s_primarySlots[nullifier];
-        if (slot.hashedAddress == bytes32(0)) revert VerificationRegistry__NotRegistered();
-        if (slot.hashedAddress != hashedAddress) revert VerificationRegistry__NotAuthorized();
+        bytes32 slotHolder = s_primarySlots[nullifier];
+        if (slotHolder == bytes32(0)) revert VerificationRegistry__NotRegistered();
+        if (slotHolder != hashedAddress) revert VerificationRegistry__NotAuthorized();
 
-        if (!s_verifier.verifyPrimaryProof(hashedAddress, nullifier, slot.nextCommitment, s_cscaMerkleTree.getRoot(), proof)) {
+        if (!s_verifier.verifyPrimaryProof(hashedAddress, nullifier, s_cscaMerkleTree.getRoot(), proof)) {
             revert VerificationRegistry__InvalidProof();
         }
 
@@ -240,16 +240,16 @@ contract VerificationRegistry is IVerificationRegistry, ReentrancyGuard, Pausabl
     }
 
     /// @inheritdoc IVerificationRegistry
-    function unregisterPrimary(bytes32 nullifier) external override whenNotPaused nonReentrant {
+    function unregisterPrimary() external override whenNotPaused nonReentrant {
         bytes32 hashedAddress = keccak256(abi.encodePacked(msg.sender));
 
-        // Checks — only the registered address can unregister
-        PrimarySlot memory slot = s_primarySlots[nullifier];
-        if (slot.hashedAddress == bytes32(0)) revert VerificationRegistry__NotRegistered();
-        if (slot.hashedAddress != hashedAddress) revert VerificationRegistry__NotAuthorized();
+        // Checks — msg.sender must own a primary slot
+        bytes32 nullifier = s_primaryNullifierByWallet[hashedAddress];
+        if (nullifier == bytes32(0)) revert VerificationRegistry__NotRegistered();
 
         // Effects
         delete s_primarySlots[nullifier];
+        delete s_primaryNullifierByWallet[hashedAddress];
         delete s_primaryRegistrations[hashedAddress];
         s_primaryUnregisteredAt[nullifier] = block.timestamp + s_config.cooldownPeriod();
 
@@ -293,7 +293,7 @@ contract VerificationRegistry is IVerificationRegistry, ReentrancyGuard, Pausabl
 
     /// @inheritdoc IVerificationRegistry
     function wasNullifierUsed(bytes32 nullifier) external view override returns (bool) {
-        return s_primarySlots[nullifier].hashedAddress != bytes32(0)
+        return s_primarySlots[nullifier] != bytes32(0)
             || s_primaryUnregisteredAt[nullifier] != 0;
     }
 
