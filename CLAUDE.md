@@ -136,18 +136,22 @@ If a passport is lost or expires, the user cannot manage their old registered ad
 ### Registration Lifecycle
 All registrations (base and primary) have two independent expiry conditions:
 
-**1. Passport expiry** — hard ceiling, enforced in the ZK circuit
+**1. Passport expiry** — hard ceiling, enforced in the ZK circuit AND at the contract entrypoint
 - `passportExpiry` is a public input to the proof; circuit asserts `block.timestamp < passportExpiry`
-- Contract also checks: `if (block.timestamp >= passportExpiry) revert VerificationRegistry__PassportExpired()`
-- When a passport expires, all its registrations become invalid automatically (checked lazily in `isVerified`)
+- Contract also checks at write time: `if (block.timestamp >= passportExpiry) revert VerificationRegistry__PassportExpired()`
+- `isVerified` does NOT re-check passport expiry on read — it only checks `expiresAt`. Combined with the rounding below, a registration can stay valid up to ~89 days past actual passport expiry.
 
 **2. Registration TTL** — requires periodic re-tap, default 180 days (6 months)
-- Each registration stores `expiresAt = block.timestamp + s_config.registrationTTL()`
-- User must re-submit a fresh proof before expiry to renew (re-tapping passport on phone)
-- `isVerified` returns false for expired registrations without any on-chain write
-- On renewal, `expiresAt` is updated; nullifier does not change for base tier
+- User must re-submit a fresh proof before `expiresAt` to renew (re-tapping passport on phone)
+- `isVerified` returns false lazily for expired registrations — no on-chain write required
+- On renewal, `expiresAt` is updated; `registeredAt` is preserved; nullifier does not change for base tier; renewals skip the daily rate limit.
 
-**Effective expiry** = `min(passportExpiry, registeredAt + TTL)`
+**Effective expiresAt** stored on-chain:
+```
+expiresAt = min(now + registrationTTL,
+                ceil(passportExpiry / 90 days) * 90 days)
+```
+The passport-expiry component is rounded UP to the next 90-day boundary anchored to the Unix epoch (NOT calendar quarters). This is a **privacy** choice — it collapses ~365 distinguishable expiry values per year into 4, so multiple addresses registered from the same passport don't share a uniquely identifiable expiresAt. The trade-off is the ~89-day grace window noted above.
 
 ### Rate Limiting (base tier)
 To limit damage from a stolen passport being used to mass-register addresses:

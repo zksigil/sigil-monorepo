@@ -344,6 +344,41 @@ contract VerificationRegistryTest is Test {
         assertEq(storedAddress, keccak256(abi.encodePacked(alice)));
     }
 
+    function test_RegisterPrimary_ClearsStaleSlot_WhenWalletRotatesPassport() public {
+        // Alice registers with passport A (NULL_1A).
+        _registerPrimary(alice, NULL_1A);
+        bytes32 hashedAlice = keccak256(abi.encodePacked(alice));
+        assertEq(registry.s_primarySlots(NULL_1A), hashedAlice);
+
+        // Registration lapses (TTL passed, no renewal). Note: real passport with finite
+        // expiry would also need to still be valid; PASSPORT_EXPIRY = uint48.max here.
+        vm.warp(block.timestamp + config.registrationTTL() + 1);
+        assertFalse(registry.isPrimaryVerified(alice));
+
+        // Alice re-registers with a new passport (NULL_2A).
+        vm.prank(alice);
+        registry.registerPrimary(NULL_2A, PASSPORT_EXPIRY, PROOF);
+
+        // Stale slot from old passport is cleared; new slot points at alice.
+        assertEq(registry.s_primarySlots(NULL_1A), bytes32(0));
+        assertEq(registry.s_primarySlots(NULL_2A), hashedAlice);
+        assertEq(registry.s_primaryNullifierByWallet(hashedAlice), NULL_2A);
+        assertTrue(registry.isPrimaryVerified(alice));
+    }
+
+    function test_RegisterPrimary_DoesNotClearOtherWalletsSlots() public {
+        // Bob registers first with NULL_2A.
+        _registerPrimary(bob, NULL_2A);
+        bytes32 hashedBob = keccak256(abi.encodePacked(bob));
+
+        // Alice registers fresh with NULL_1A — she has no prior slot.
+        _registerPrimary(alice, NULL_1A);
+
+        // Bob's slot is untouched.
+        assertEq(registry.s_primarySlots(NULL_2A), hashedBob);
+        assertTrue(registry.isPrimaryVerified(bob));
+    }
+
     // =========================================================================
     // Primary Tier — Expiry
     // =========================================================================

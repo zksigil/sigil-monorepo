@@ -16,9 +16,14 @@ pragma solidity ^0.8.28;
 ///                     Switching to a different primary address requires unregister +
 ///                     cooldown before re-registering with the same nullifier.
 ///
-///      All registrations expire at min(registrationTTL, passportExpiry). Users must
-///      re-tap their passport periodically to renew. isVerified / isPrimaryVerified
-///      return false lazily for expired registrations (no write required).
+///      All registrations expire at min(now + registrationTTL,
+///      ceil(passportExpiry / 90 days) * 90 days). The passport-expiry component is
+///      rounded UP to the next 90-day boundary (anchored to the Unix epoch — not calendar
+///      quarters) for privacy: see VerificationRegistry._cappedExpiry. Users must re-tap
+///      their passport before expiresAt to renew. isVerified / isPrimaryVerified return
+///      false lazily for expired registrations (no write required); they do NOT re-check
+///      passportExpiry, so a registration whose passport lapses mid-quarter remains valid
+///      until the rounded boundary.
 ///
 ///      Privacy invariants:
 ///        - No nullifiers in any event
@@ -61,7 +66,9 @@ interface IVerificationRegistry {
     function registerBase(bytes32 epochNullifier, uint48 passportExpiry, bytes calldata proof) external;
 
     /// @notice Renew an existing base-tier registration, extending its TTL.
-    /// @dev Re-tapping the passport resets expiresAt to now + registrationTTL.
+    /// @dev Re-tapping the passport sets expiresAt = min(now + registrationTTL,
+    ///      ceil(passportExpiry / 90 days) * 90 days). registeredAt is preserved.
+    ///      Renewals are exempt from the daily rate limit (epochNullifier is unused).
     function renewBase(uint48 passportExpiry, bytes calldata proof) external;
 
     /// @notice Remove the caller's base-tier registration.
@@ -86,6 +93,9 @@ interface IVerificationRegistry {
     ) external;
 
     /// @notice Renew an existing primary-tier registration, extending its TTL.
+    /// @dev Sets expiresAt = min(now + registrationTTL,
+    ///      ceil(passportExpiry / 90 days) * 90 days). registeredAt is preserved so
+    ///      protocols enforcing a minimum registration age see uninterrupted history.
     /// @param nullifier      The stable primary nullifier for the caller's passport.
     /// @param passportExpiry Updated passport expiry (e.g. after passport renewal).
     /// @param proof          ZK proof bytes.
@@ -108,9 +118,13 @@ interface IVerificationRegistry {
     function isPrimaryVerified(address wallet) external view returns (bool);
 
     /// @notice Returns the base-tier registration expiry for wallet (0 if never registered).
+    /// @dev Stored as min(now + registrationTTL, ceil(passportExpiry / 90 days) * 90 days)
+    ///      at the time of registration or renewal. The 90-day rounding can place expiresAt
+    ///      up to ~89 days past actual passport expiry — see VerificationRegistry._cappedExpiry.
     function getBaseExpiry(address wallet) external view returns (uint48);
 
     /// @notice Returns the primary-tier registration expiry for wallet (0 if never registered).
+    /// @dev Same formula as getBaseExpiry — see VerificationRegistry._cappedExpiry.
     function getPrimaryExpiry(address wallet) external view returns (uint48);
 
     /// @notice Returns the timestamp when wallet's current primary registration was created (0 if never registered).

@@ -46,12 +46,16 @@ contract VerificationRegistry is IVerificationRegistry, ReentrancyGuard, Pausabl
     // =========================================================================
 
     /// @dev Tracks expiry and registration time for a single registered address (base or primary tier).
-    ///      expiresAt is capped at passportExpiry via _cappedExpiry() so passportExpiry need not be stored.
+    ///      expiresAt = min(block.timestamp + registrationTTL,
+    ///                      ceil(passportExpiry / 90 days) * 90 days)
+    ///      Set via _cappedExpiry() — the passport-expiry component is rounded UP to the next
+    ///      90-day boundary so passportExpiry need not be stored and is not uniquely identifiable
+    ///      across multiple addresses registered from the same passport. See _cappedExpiry().
     ///      registeredAt is set on registerPrimary and NOT updated on renewPrimary —
     ///      it reflects how long this passport has been committed to this address, which is the value
     ///      protocols care about when enforcing a minimum registration age.
     struct Registration {
-        uint48 expiresAt;    // min(block.timestamp + TTL, passportExpiry)
+        uint48 expiresAt;    // see formula above
         uint48 registeredAt; // block.timestamp at registration (not updated on renew)
     }
 
@@ -206,7 +210,15 @@ contract VerificationRegistry is IVerificationRegistry, ReentrancyGuard, Pausabl
             revert VerificationRegistry__InvalidProof();
         }
 
-        // Effects
+        // Effects — clean up any stale slot from a prior expired registration on this
+        // wallet (different passport → different nullifier). The old passport can no
+        // longer produce a valid proof, so the orphan slot is unreachable; clear it
+        // so s_primarySlots stays in sync with s_primaryNullifierByWallet.
+        bytes32 prevNullifier = s_primaryNullifierByWallet[hashedAddress];
+        if (prevNullifier != bytes32(0) && prevNullifier != nullifier) {
+            delete s_primarySlots[prevNullifier];
+        }
+
         uint48 expiresAt = _cappedExpiry(passportExpiry);
         s_primarySlots[nullifier] = hashedAddress;
         s_primaryNullifierByWallet[hashedAddress] = nullifier;
@@ -343,14 +355,28 @@ contract VerificationRegistry is IVerificationRegistry, ReentrancyGuard, Pausabl
     // Internal Helpers
     // =========================================================================
 
-    /// @dev Returns block.timestamp + registrationTTL, capped at the quarter-rounded passport expiry.
-    ///      Rounding down to the nearest 90-day boundary reduces calldata/state precision from
-    ///      ~365 distinguishable values/year to 4, making passport expiry dates far less linkable
-    ///      across different registered addresses from the same passport.
+    /// @dev Computes the registration's effective expiresAt:
+    ///
+    ///        expiresAt = min(now + registrationTTL,
+    ///                        ceil(passportExpiry / 90 days) * 90 days)
+    ///
+    ///      The passport-expiry component is rounded UP to the next 90-day boundary.
+    ///      Boundaries are anchored to the Unix epoch (1970-01-01) — they do NOT line up
+    ///      with calendar quarters. This collapses ~365 distinguishable expiry values per
+    ///      year into 4, making passport expiry far less linkable across different addresses
+    ///      registered from the same passport.
+    ///
+    ///      Side effect of rounding UP rather than down: roundedExpiry can exceed
+    ///      passportExpiry by up to ~89 days. isVerified() and isPrimaryVerified() only
+    ///      check `block.timestamp < expiresAt` — they do NOT re-check passportExpiry on
+    ///      read — so a registration whose passport lapses mid-quarter remains valid until
+    ///      the next 90-day boundary. registerBase / registerPrimary / renewBase /
+    ///      renewPrimary all reject expired passports up front, so this grace window only
+    ///      affects existing registrations whose passports happen to expire after registration.
     uint48 private constant QUARTER = 90 days;
 
     function _cappedExpiry(uint48 passportExpiry) private view returns (uint48) {
-        // Round up to next quarter boundary. Guard against overflow when passportExpiry
+        // Round up to next 90-day boundary. Guard against overflow when passportExpiry
         // is near type(uint48).max by saturating: if adding QUARTER-1 would overflow, the
         // expiry is so far in the future that we can use passportExpiry as-is.
         uint48 roundedExpiry = passportExpiry <= type(uint48).max - (QUARTER - 1)
