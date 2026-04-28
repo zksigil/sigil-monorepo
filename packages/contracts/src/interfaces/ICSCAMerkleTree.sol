@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-pragma solidity 0.8.28;
+pragma solidity ^0.8.28;
 
 /// @title ICSCAMerkleTree
 /// @notice Interface for the on-chain CSCA Merkle tree root registry.
