@@ -306,7 +306,7 @@ export function ProofGenerationScreen(): React.JSX.Element {
 
     const registryAddress = CONTRACT_ADDRESSES[supportedChainId].verificationRegistry;
     if (registryAddress === '0x0000000000000000000000000000000000000000') {
-      setSubmitError('Contract not deployed on this chain. Deploy VerificationRegistry first.');
+      setSubmitError(`No registry address for chain ${supportedChainId}. Switch wallet network or rebuild app with EXPO_PUBLIC_*_REGISTRY_ADDRESS set.`);
       setStep('error');
       return;
     }
