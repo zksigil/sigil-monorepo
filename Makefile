@@ -52,9 +52,9 @@ android: ## Build Mopro Rust FFI for Android
 	@echo "✅ Android library built"
 
 # ─── Barretenberg (bb) Commands ───────────────────────────────────────
-# bb 4.2 (matches barretenberg-rs 4.2.0-aztecnr-rc.2 used by Mopro). Override via BB=...
-# Download: https://github.com/AztecProtocol/aztec-packages/releases (barretenberg-static-<ARCH>.tar.gz)
-BB ?= /tmp/bb-4.2/bb
+# Install bb via `bbup` — it auto-detects nargo's version and installs the matching bb to ~/.bb/bb.
+# Override via BB=... if you have it elsewhere.
+BB ?= $(HOME)/.bb/bb
 BB_FLAGS = --oracle_hash keccak
 
 bb-vk: circuits ## Generate verification keys from compiled circuits
