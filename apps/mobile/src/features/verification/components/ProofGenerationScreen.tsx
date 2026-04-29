@@ -525,7 +525,7 @@ export function ProofGenerationScreen(): React.JSX.Element {
             === Generated Proof Debug ===
           </Text>
 
-          <DebugRow label="Tier" value={tier === 'unique' ? 'Unique (sybil-resistant)' : 'Verified (proof of personhood)'} />
+          <DebugRow label="Action" value={tier === 'unique' ? 'Sigilize (sybil-resistant)' : 'Verify (proof of personhood)'} />
           <DebugRow label="Wallet Address" value={address ?? '(not connected)'} mono />
           <DebugRow label="Chain ID" value={String(chainId)} mono />
           <DebugRow label="Doc Number" value={passportData.documentNumber} mono />

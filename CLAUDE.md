@@ -91,28 +91,26 @@ Two tiers of on-chain verification, both integrable with a single mapping lookup
 - Enforced via a single global nullifier — not per-protocol
 - Primary nullifier is an opaque `bytes32`; not tied to any base-tier address, so the two tiers are unlinkable even for the same passport holder
 
-### Primary Nullifier Chaining (unlinkable primary changes)
-Changing primary address must not link the old and new addresses via a shared nullifier. Solution: nullifier chaining.
+### Primary Nullifier (deterministic per passport)
+The primary nullifier is `hash(s, 1)` — nonce is fixed at 1. The same passport always produces the same nullifier, so changing the primary address re-uses that nullifier on-chain.
 
 **Data structure:**
 ```solidity
-struct PrimarySlot {
-    bytes32 nullifier;       // hash(s, nonce)
-    bytes32 hashedAddress;   // keccak256(address)
-    bytes32 nextCommitment;  // hash(hash(s, nonce+1)) — hashed one extra time
-}
-mapping(bytes32 => PrimarySlot) public primarySlots; // nullifier => slot
+mapping(bytes32 => bytes32) public s_primarySlots;             // nullifier => keccak(wallet)
+mapping(bytes32 => bytes32) public s_primaryNullifierByWallet; // keccak(wallet) => nullifier (reverse lookup)
+mapping(bytes32 => uint256) public s_primaryUnregisteredAt;    // nullifier => cooldown deadline
 ```
 
-**Registration:** ZK proof + `nullifier_1 = hash(s, 1)` + `nextCommitment_1 = hash(hash(s, 2))`
-**Changing primary:** Reveal `nullifier_2 = hash(s, 2)` which matches `hash(nextCommitment_1)`. Submit new `nextCommitment_2 = hash(hash(s, 3))`. Contract deletes old slot, creates new one. Old and new nullifiers are unrelated — no on-chain linkage.
+**Registration:** ZK proof + `nullifier = hash(s, 1)`. Contract stores `s_primarySlots[nullifier] = keccak(msg.sender)`.
+**Changing primary address:** call `unregisterPrimary()`, wait `cooldownPeriod` (default 7 days), then `registerPrimary()` from the new address with the same passport. The same nullifier reappears in `s_primarySlots`, mapped to the new address.
+
+**Tradeoff:** old and new primary addresses share the on-chain nullifier and are publicly linkable as belonging to the same passport. v1 accepts this in exchange for a much smaller circuit (no chained-commitment proof) and a flat slot mapping. A chained-nullifier scheme that breaks the linkage was prototyped but cut for v1.
 
 ### Phone Recovery (no persistent state needed)
 The passport secret `s` is derived from the passport itself, not stored on the phone. Recovery flow:
 1. Tap passport on new phone → derive `s`
-2. App scans contract for stored `nextCommitment` values
-3. Iterate: try `hash(hash(s, n))` for n = 1, 2, 3... until one matches a stored commitment
-4. App now knows the current nonce and can resume
+2. App computes `nullifier = hash(s, 1)` and reads `s_primarySlots[nullifier]`
+3. If non-zero, the wallet whose `keccak(addr)` matches is the user's current primary
 
 **Implication:** the app can be fully stateless. The passport + on-chain data is sufficient to reconstruct all state. The only unrecoverable loss is losing the physical passport.
 
@@ -129,9 +127,11 @@ If a passport is lost or expires, the user cannot manage their old registered ad
 - **Language**: Noir (no trusted setup, UltraHonk backend)
 - **Prover**: Mopro React Native SDK (Rust core, native thread, ~5–15s on device)
 - **NOT** snarkjs WASM (too slow, OOM risk on large circuits)
-- Public inputs: `[nullifier, hashedAddress, passportExpiry, registrationTimestamp]`
-- Private inputs: `[SHA256(DG1_raw), SHA256(SOD_signature), nonce]`
-- Circuit proves: correct nullifier derivation from `s` at given nonce; correct `nextCommitment`; `registrationTimestamp < passportExpiry`
+- **Public inputs (primary):** `[nullifier, hashed_address, csca_merkle_root]`
+- **Public inputs (base):** `[epoch_nullifier, hashed_address, csca_merkle_root]`
+- **Private inputs:** `[dg1_hash, sod_hash, nonce, signedAttrs+RSA witness, DSC TBS, CSCA pubkey/signature, CSCA Merkle siblings]`
+- **Circuit proves (Phase 3c):** SOD signed by DSC (RSA-2048); DSC signed by CSCA (RSA-4096); CSCA pubkey is in the on-chain CSCA Merkle tree; nullifier is correctly derived from `s` and the (fixed) nonce
+- Passport expiry is enforced at the contract entrypoint, not in the circuit
 
 ### Registration Lifecycle
 All registrations (base and primary) have two independent expiry conditions:
@@ -199,52 +199,55 @@ function isVerified(address wallet) external view returns (bool) {
 ```
 Integrating protocols need zero changes when a successor is set.
 
-### Contract Interface (Phase 3 redesign)
+### Contract Interface
 ```solidity
 struct Registration {
     uint48 expiresAt;        // registeredAt + TTL
-    uint48 passportExpiry;   // from ZK proof public input
+    uint48 registeredAt;     // block.timestamp at first registration; preserved across renewals
 }
 
 // Base tier
-mapping(bytes32 => Registration) public baseRegistrations;         // keccak(address) => Registration
-mapping(bytes32 => uint8) public epochCounts;                      // epochNullifier => count today
+mapping(bytes32 => Registration) private s_baseRegistrations; // keccak(wallet) => Registration
+mapping(bytes32 => uint8)        private s_epochCounts;       // epochNullifier => count today
 
 // Primary tier
-mapping(bytes32 => PrimarySlot) public primarySlots;               // nullifier => slot
-mapping(bytes32 => Registration) public primaryRegistrations;      // keccak(address) => Registration
-mapping(bytes32 => uint256) public primaryUnregisteredAt;          // nullifier => cooldown ts
+mapping(bytes32 => bytes32) public  s_primarySlots;              // nullifier => keccak(wallet)
+mapping(bytes32 => bytes32) public  s_primaryNullifierByWallet;  // keccak(wallet) => nullifier (reverse)
+mapping(bytes32 => Registration) private s_primaryRegistrations; // keccak(wallet) => Registration
+mapping(bytes32 => uint256) private s_primaryUnregisteredAt;     // nullifier => cooldown deadline
 
-function registerBase(Proof calldata proof, bytes32 epochNullifier) external;
-function renewBase(Proof calldata proof) external;                 // re-tap to extend TTL
-function registerPrimary(Proof calldata proof, bytes32 nullifier, bytes32 nextCommitment) external;
-function renewPrimary(Proof calldata proof) external;
-function changePrimary(bytes32 revealedNextNullifier, Proof calldata proof, bytes32 newNextCommitment) external;
-function unregisterPrimary(bytes32 revealedNextNullifier) external;
+// Mutations
+function registerBase(bytes32 epochNullifier, uint48 passportExpiry, bytes calldata proof) external;
+function renewBase(uint48 passportExpiry, bytes calldata proof) external;
+function unregisterBase() external;
+function registerPrimary(bytes32 nullifier, uint48 passportExpiry, bytes calldata proof) external;
+function renewPrimary(bytes32 nullifier, uint48 passportExpiry, bytes calldata proof) external;
+function unregisterPrimary() external;
 
-// Protocol integration (one line each) — returns false if expired or passport expired
+// Protocol integration (one line each) — returns false if expired
 function isVerified(address wallet) external view returns (bool);
 function isPrimaryVerified(address wallet) external view returns (bool);
 ```
 
+To change the primary wallet for a passport: call `unregisterPrimary()` from the current primary, wait `cooldownPeriod`, then call `registerPrimary()` from the new wallet with a fresh proof. There is no `changePrimary()` function — the unregister/cooldown/re-register sequence is the only path, and old and new primary addresses share the same nullifier on-chain.
+
 ### Privacy Properties
 - Base addresses: fully unlinkable — no passport-derived data on-chain
-- Primary address: nullifier on-chain is opaque; not connected to any base-tier address
-- Primary changes: old/new nullifiers are unrelated — no linkage across changes
+- Primary address: nullifier on-chain is opaque; not connected to any base-tier address (the two tiers remain unlinkable)
+- **Primary changes are linkable** — the same nullifier appears for both the old and new primary address (v1 tradeoff for circuit simplicity)
 - Rate limiting uses epoch nullifiers — no per-passport count stored, same privacy model
 - Events: `WalletVerified(address indexed wallet)` only — NO nullifiers in events
 - Consider ERC-4337 paymaster for gas (eliminates funder-address deanonymization)
 
 ### Phase 3 TODO
 - [x] Update NFC module to read SOD (`SELECT EF.SOD` after DG1 in `src/infrastructure/nfc/index.ts`)
-- [ ] Redesign `VerificationRegistry.sol` per two-tier interface above
-- [ ] Deploy `ProtocolConfig.sol` with default parameters and hard bounds
-- [ ] Deploy `ProofVerifier.sol` (stub initially, real verifier after circuit is written)
+- [x] Redesign `VerificationRegistry.sol` per two-tier interface above
+- [x] Deploy `ProtocolConfig.sol` with default parameters and hard bounds
+- [x] Deploy `ProofVerifier.sol` (`MockProofVerifier` for anvil, real UltraHonk verifiers for prod)
 - [ ] Deploy `TimelockController` as governor (multisig as proposer)
-- [ ] Write Noir circuit (nullifier + commitment derivation + expiry assertion)
-- [ ] Integrate Mopro React Native SDK
-- [ ] Replace stub in `proofService.ts` with real Mopro proof generation
-- [ ] Deploy updated contract + set `EXPO_PUBLIC_VERIFICATION_REGISTRY_ADDRESS`
-- [ ] Wire `useVerificationStatus` hook to HomeScreen (show TTL countdown + renewal prompt)
-- [ ] App iterates nonces at startup to recover state (no AsyncStorage dependency)
+- [x] Write Noir circuit (Phase 3c: full CSCA→DSC→SOD chain + stable per-passport nullifier)
+- [x] Integrate Mopro React Native SDK
+- [x] Replace stub in `proofService.ts` with real Mopro proof generation
+- [x] Deploy updated contract + set `EXPO_PUBLIC_VERIFICATION_REGISTRY_ADDRESS`
+- [x] Wire `useVerificationStatus` hook to HomeScreen (show TTL countdown + renewal prompt)
 - [ ] App prompts renewal when registration is within 30 days of expiry

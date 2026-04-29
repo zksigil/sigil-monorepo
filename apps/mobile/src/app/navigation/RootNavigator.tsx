@@ -53,7 +53,7 @@ export function RootNavigator(): React.JSX.Element {
           name="VerificationSuccess"
           component={VerificationSuccessScreen}
           options={{
-            title: 'Verified',
+            title: 'Success',
             headerBackVisible: false,
             gestureEnabled: false,
           }}

@@ -11,9 +11,10 @@ import type { TrackedAccount } from '../hooks/useTrackedAccounts';
 
 interface AccountRowProps {
   account: TrackedAccount;
-  /** Whether any tracked address already has unique verification. */
-  hasExistingUnique: boolean;
+  /** Whether any tracked address is already Sigilized. */
+  hasExistingSigilized: boolean;
   onVerify: (address: `0x${string}`) => void;
+  onSigilize: (address: `0x${string}`) => void;
   onUnregistered: () => void;
 }
 
@@ -21,12 +22,15 @@ function isSupportedChain(chainId: number): chainId is SupportedChainId {
   return (SUPPORTED_CHAIN_IDS as readonly number[]).includes(chainId);
 }
 
-export function AccountRow({ account, hasExistingUnique, onVerify, onUnregistered }: AccountRowProps): React.JSX.Element {
+export function AccountRow({ account, hasExistingSigilized, onVerify, onSigilize, onUnregistered }: AccountRowProps): React.JSX.Element {
   const { address: activeAddress } = useAccount();
   const chainId = useChainId();
   const { writeContractAsync } = useWriteContract();
   const openWallet = useOpenWallet();
   const [txHash, setTxHash] = useState<`0x${string}` | undefined>();
+  // Tracks an unregister request that's waiting for the user to switch their
+  // active wallet account before we surface the confirmation dialog.
+  const [pendingUnregister, setPendingUnregister] = useState<'base' | 'primary' | null>(null);
 
   const { isSuccess: isConfirmed, isLoading: isConfirming } = useWaitForTransactionReceipt({
     hash: txHash,
@@ -57,32 +61,66 @@ export function AccountRow({ account, hasExistingUnique, onVerify, onUnregistere
     });
   }, [contractAddress, writeContractAsync]);
 
-  const handleUnregister = useCallback((tier: 'base' | 'primary') => {
-    if (activeAddress?.toLowerCase() !== account.address.toLowerCase()) {
-      openWallet();
-      return;
-    }
-    const label = tier === 'primary' ? 'Unique' : 'Verified';
+  const promptUnregisterConfirm = useCallback((tier: 'base' | 'primary') => {
+    const label = tier === 'primary' ? 'Sigilized' : 'Verified';
+    const body = tier === 'primary'
+      ? `Remove Sigilized status from ${account.shortAddress}? You'll need to wait the cooldown period before re-Sigilizing any account with this passport.`
+      : `Remove ${account.shortAddress} from ${label} verification?`;
     Alert.alert(
       'Unregister',
-      `Remove ${account.shortAddress} from ${label} verification?`,
+      body,
       [
         { text: 'Cancel', style: 'cancel' },
         { text: 'Unregister', style: 'destructive', onPress: () => submitUnregister(tier) },
       ],
     );
-  }, [account.address, account.shortAddress, activeAddress, openWallet, submitUnregister]);
+  }, [account.shortAddress, submitUnregister]);
+
+  const handleUnregister = useCallback((tier: 'base' | 'primary') => {
+    if (activeAddress?.toLowerCase() === account.address.toLowerCase()) {
+      promptUnregisterConfirm(tier);
+      return;
+    }
+    setPendingUnregister(tier);
+    Alert.alert(
+      'Switch Account',
+      `Switch your active wallet account to ${account.shortAddress} to unregister.`,
+      [
+        { text: 'Cancel', style: 'cancel', onPress: () => setPendingUnregister(null) },
+        { text: 'Open Wallet', onPress: () => openWallet() },
+      ],
+    );
+  }, [account.address, account.shortAddress, activeAddress, openWallet, promptUnregisterConfirm]);
+
+  // Once the wallet switches to this account, surface the unregister confirmation.
+  useEffect(() => {
+    if (pendingUnregister && activeAddress?.toLowerCase() === account.address.toLowerCase()) {
+      const tier = pendingUnregister;
+      setPendingUnregister(null);
+      promptUnregisterConfirm(tier);
+    }
+  }, [activeAddress, account.address, pendingUnregister, promptUnregisterConfirm]);
 
   // --- Verify ---
   const handleVerify = useCallback(() => {
     onVerify(account.address);
   }, [account.address, onVerify]);
 
-  // Determine which tiers can still be verified
-  const canVerifyUnique = !account.isUniqueVerified && !hasExistingUnique;
-  const canVerifyBase = !account.isBaseVerified;
-  const canVerifyAny = canVerifyUnique || canVerifyBase;
+  // --- Sigilize (promote a Verified account to Sigilized) ---
+  const handleSigilize = useCallback(() => {
+    Alert.alert(
+      'Sigilize this account?',
+      "Sigilizing makes this address publicly linkable to any future Sigilized address you register from the same passport. Only one account per passport can be Sigilized at a time.\n\nYou'll need to tap your passport again to generate the proof.",
+      [
+        { text: 'Cancel', style: 'cancel' },
+        { text: 'Continue', onPress: () => onSigilize(account.address) },
+      ],
+    );
+  }, [account.address, onSigilize]);
+
   const isActive = activeAddress?.toLowerCase() === account.address.toLowerCase();
+  const showVerifyButton = !account.isBaseVerified;
+  const showSigilizeButton = account.isBaseVerified && !account.isUniqueVerified && !hasExistingSigilized;
 
   return (
     <View className="bg-dracula-surface rounded-2xl px-4 py-3">
@@ -97,25 +135,25 @@ export function AccountRow({ account, hasExistingUnique, onVerify, onUnregistere
         {/* Action button */}
         {isConfirming ? (
           <ActivityIndicator size="small" color="#6272a4" className="ml-4" />
-        ) : canVerifyAny ? (
+        ) : showVerifyButton ? (
           <Pressable
             onPress={handleVerify}
             className="ml-4 px-3 py-1.5 rounded-lg bg-dracula-purple active:bg-dracula-purple/80"
           >
             <Text className="text-dracula-fg text-xs font-semibold">Verify</Text>
           </Pressable>
+        ) : showSigilizeButton ? (
+          <Pressable
+            onPress={handleSigilize}
+            className="ml-4 px-3 py-1.5 rounded-lg border border-dracula-purple active:bg-dracula-purple/20"
+          >
+            <Text className="text-dracula-purple text-xs font-semibold">Sigilize</Text>
+          </Pressable>
         ) : null}
       </View>
 
       {/* Status chips */}
       <View className="flex-row flex-wrap gap-2 mt-2">
-        {account.isUniqueVerified && (
-          <Chip
-            label={`Unique${account.uniqueExpiry ? ` · ${formatQuarter(account.uniqueExpiry)}` : ''}`}
-            variant="unique"
-            onLongPress={() => handleUnregister('primary')}
-          />
-        )}
         {account.isBaseVerified && (
           <Chip
             label={`Verified${account.baseExpiry ? ` · ${formatQuarter(account.baseExpiry)}` : ''}`}
@@ -123,8 +161,21 @@ export function AccountRow({ account, hasExistingUnique, onVerify, onUnregistere
             onLongPress={() => handleUnregister('base')}
           />
         )}
+        {account.isUniqueVerified && (
+          <Chip
+            label={`Sigilized${account.uniqueExpiry ? ` · ${formatQuarter(account.uniqueExpiry)}` : ''}`}
+            variant="sigilized"
+            onLongPress={() => handleUnregister('primary')}
+          />
+        )}
         {!account.hasAnyVerification && (
           <Text className="text-dracula-comment/50 text-xs">Not verified</Text>
+        )}
+        {/* Subtle hint: this account is Verified but another is already Sigilized */}
+        {account.isBaseVerified && !account.isUniqueVerified && hasExistingSigilized && (
+          <Text className="text-dracula-comment/40 text-[10px] mt-1 w-full">
+            Another account is already Sigilized.
+          </Text>
         )}
       </View>
     </View>
@@ -141,11 +192,11 @@ function Chip({
   onLongPress,
 }: {
   label: string;
-  variant: 'unique' | 'verified';
+  variant: 'sigilized' | 'verified';
   onLongPress?: () => void;
 }): React.JSX.Element {
-  const bg = variant === 'unique' ? 'bg-dracula-purple/20' : 'bg-dracula-green/20';
-  const text = variant === 'unique' ? 'text-dracula-purple' : 'text-dracula-green';
+  const bg = variant === 'sigilized' ? 'bg-dracula-purple/20' : 'bg-dracula-green/20';
+  const text = variant === 'sigilized' ? 'text-dracula-purple' : 'text-dracula-green';
 
   return (
     <Pressable

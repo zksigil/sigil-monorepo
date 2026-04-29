@@ -11,7 +11,12 @@ export function VerificationSuccessScreen(): React.JSX.Element {
   const navigation = useNavigation<RootStackNavigationProp<'VerificationSuccess'>>();
   const { txHash, groupSize, tier } = route.params;
 
-  const tierLabel = tier === 'unique' ? 'Unique' : 'Verified';
+  const isSigilize = tier === 'unique';
+  const headline = isSigilize ? 'Account Sigilized!' : 'Account Verified!';
+  const actionLabel = isSigilize ? 'Sigilized' : 'Verified';
+  const body = isSigilize
+    ? 'This account is now your Sigilized address. It is publicly linkable to any future Sigilized address registered from the same passport.'
+    : 'Your identity has been verified on-chain. Your wallet is now part of the verified group.';
 
   const shortTxHash = `${txHash.slice(0, 10)}...${txHash.slice(-8)}`;
 
@@ -37,9 +42,9 @@ export function VerificationSuccessScreen(): React.JSX.Element {
           </View>
 
           <View className="items-center gap-y-2">
-            <Text className="text-dracula-fg text-2xl font-bold">{tierLabel} Verified!</Text>
+            <Text className="text-dracula-fg text-2xl font-bold">{headline}</Text>
             <Text className="text-dracula-comment text-sm text-center max-w-xs">
-              Your identity has been verified on-chain. Your wallet is now part of the verified group.
+              {body}
             </Text>
           </View>
 
@@ -53,8 +58,8 @@ export function VerificationSuccessScreen(): React.JSX.Element {
             </View>
 
             <View className="flex-row justify-between items-center">
-              <Text className="text-dracula-comment text-xs">Tier</Text>
-              <Text className="text-dracula-fg text-xs font-medium">{tierLabel}</Text>
+              <Text className="text-dracula-comment text-xs">Action</Text>
+              <Text className="text-dracula-fg text-xs font-medium">{actionLabel}</Text>
             </View>
 
             <View className="flex-row justify-between items-center">
