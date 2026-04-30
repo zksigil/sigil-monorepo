@@ -22,20 +22,20 @@ contract VerificationRegistryTest is Test {
     address public carol = makeAddr("carol");
     address public attacker = makeAddr("attacker");
 
-    // A passport expiry far in the future
     uint48 public constant PASSPORT_EXPIRY = type(uint48).max;
     bytes public constant PROOF = hex"";
 
     bytes32 public constant CSCA_MERKLE_ROOT = 0x06db36480878d971e22b324a7b7d941ed6f986f484059e8ae9ef3c508fa993de;
 
-    // Simulate epoch nullifiers (in prod: hash(s, "epoch", day))
-    bytes32 public constant EPOCH_NULL_A = keccak256("epoch_A_day0");
-    bytes32 public constant EPOCH_NULL_B = keccak256("epoch_B_day0");
+    // Stable per-passport nullifiers (in prod: Poseidon2(passportSecret, 1)).
+    bytes32 public constant NULL_A = keccak256("passport_A_stable_nullifier");
+    bytes32 public constant NULL_B = keccak256("passport_B_stable_nullifier");
 
-    // Primary nullifiers — deterministic per passport in production. NULL_2A is unrelated
-    // to NULL_1A and is used in tests that need a "different passport" nullifier.
-    bytes32 public constant NULL_1A = keccak256("alice_nullifier_1");
-    bytes32 public constant NULL_2A = keccak256("alice_nullifier_2");
+    // Epoch nullifiers (in prod: hash(s, "epoch", day)). A passport on a given day
+    // produces a single epoch nullifier; rate limiting counts registrations per epoch.
+    bytes32 public constant EPOCH_A_DAY0 = keccak256("epoch_A_day0");
+    bytes32 public constant EPOCH_A_DAY1 = keccak256("epoch_A_day1");
+    bytes32 public constant EPOCH_B_DAY0 = keccak256("epoch_B_day0");
 
     function setUp() public {
         config = new ProtocolConfig(governor);
@@ -48,583 +48,425 @@ contract VerificationRegistryTest is Test {
     // Helpers
     // =========================================================================
 
-    function _registerBase(address wallet, bytes32 epochNullifier) internal {
+    function _register(address wallet, bytes32 nullifier, bytes32 epochNullifier) internal {
         vm.prank(wallet);
-        registry.registerBase(epochNullifier, PASSPORT_EXPIRY, PROOF);
+        registry.register(nullifier, epochNullifier, PASSPORT_EXPIRY, PROOF);
     }
 
-    function _registerPrimary(address wallet, bytes32 nullifier) internal {
-        vm.prank(wallet);
-        registry.registerPrimary(nullifier, PASSPORT_EXPIRY, PROOF);
+    function _hashed(address wallet) internal pure returns (bytes32) {
+        return keccak256(abi.encodePacked(wallet));
     }
 
     // =========================================================================
-    // Base Tier — Registration
+    // register — basic
     // =========================================================================
 
-    function test_RegisterBase_Success() public {
-        _registerBase(alice, EPOCH_NULL_A);
+    function test_Register_Success() public {
+        _register(alice, NULL_A, EPOCH_A_DAY0);
         assertTrue(registry.isVerified(alice));
+        assertEq(registry.nullifierOf(alice), NULL_A);
     }
 
-    function test_RegisterBase_EmitsWalletVerified() public {
+    function test_Register_EmitsWalletVerified() public {
         vm.expectEmit(true, false, false, false);
         emit IVerificationRegistry.WalletVerified(alice);
-
-        _registerBase(alice, EPOCH_NULL_A);
+        _register(alice, NULL_A, EPOCH_A_DAY0);
     }
 
-    function test_RegisterBase_Reverts_AlreadyRegistered() public {
-        _registerBase(alice, EPOCH_NULL_A);
+    function test_Register_Reverts_AlreadyRegistered() public {
+        _register(alice, NULL_A, EPOCH_A_DAY0);
 
         vm.prank(alice);
         vm.expectRevert(VerificationRegistry.VerificationRegistry__AlreadyRegistered.selector);
-        registry.registerBase(EPOCH_NULL_A, PASSPORT_EXPIRY, PROOF);
+        registry.register(NULL_A, EPOCH_A_DAY0, PASSPORT_EXPIRY, PROOF);
     }
 
-    function test_RegisterBase_Reverts_PassportExpired() public {
+    function test_Register_Reverts_PassportExpired() public {
         uint48 expiredPassport = uint48(block.timestamp - 1);
         vm.prank(alice);
         vm.expectRevert(VerificationRegistry.VerificationRegistry__PassportExpired.selector);
-        registry.registerBase(EPOCH_NULL_A, expiredPassport, PROOF);
+        registry.register(NULL_A, EPOCH_A_DAY0, expiredPassport, PROOF);
     }
 
-    function test_RegisterBase_Reverts_InvalidProof() public {
+    function test_Register_Reverts_InvalidProof() public {
         verifier.setReject(true);
         vm.prank(alice);
         vm.expectRevert(VerificationRegistry.VerificationRegistry__InvalidProof.selector);
-        registry.registerBase(EPOCH_NULL_A, PASSPORT_EXPIRY, PROOF);
+        registry.register(NULL_A, EPOCH_A_DAY0, PASSPORT_EXPIRY, PROOF);
     }
 
-    function test_RegisterBase_Reverts_WhenPaused() public {
+    function test_Register_Reverts_WhenPaused() public {
         vm.prank(governor);
         registry.pause();
-
         vm.prank(alice);
         vm.expectRevert();
-        registry.registerBase(EPOCH_NULL_A, PASSPORT_EXPIRY, PROOF);
+        registry.register(NULL_A, EPOCH_A_DAY0, PASSPORT_EXPIRY, PROOF);
     }
 
-    function test_RegisterBase_MultipleAddresses_SamePassport() public {
-        // Base tier allows multiple addresses per passport (epoch nullifiers differ each day)
-        _registerBase(alice, EPOCH_NULL_A);
-        _registerBase(bob, EPOCH_NULL_B);
+    // =========================================================================
+    // register — multi-wallet per passport (the core single-tier behavior)
+    // =========================================================================
+
+    function test_Register_MultipleWallets_SamePassport_ShareNullifier() public {
+        // Both wallets register with the same passport nullifier.
+        _register(alice, NULL_A, EPOCH_A_DAY0);
+        _register(bob, NULL_A, EPOCH_A_DAY0);
 
         assertTrue(registry.isVerified(alice));
         assertTrue(registry.isVerified(bob));
+        assertEq(registry.nullifierOf(alice), NULL_A);
+        assertEq(registry.nullifierOf(bob), NULL_A);
+    }
+
+    function test_Register_MultipleWallets_DifferentPassports_DifferentNullifiers() public {
+        _register(alice, NULL_A, EPOCH_A_DAY0);
+        _register(bob, NULL_B, EPOCH_B_DAY0);
+
+        assertEq(registry.nullifierOf(alice), NULL_A);
+        assertEq(registry.nullifierOf(bob), NULL_B);
+    }
+
+    function test_GetWallets_ReturnsAllRegisteredUnderNullifier() public {
+        _register(alice, NULL_A, EPOCH_A_DAY0);
+        _register(bob, NULL_A, EPOCH_A_DAY0);
+        _register(carol, NULL_A, EPOCH_A_DAY0);
+
+        address[] memory wallets = registry.getWallets(NULL_A);
+        assertEq(wallets.length, 3);
+        assertEq(wallets[0], alice);
+        assertEq(wallets[1], bob);
+        assertEq(wallets[2], carol);
+    }
+
+    function test_GetWallets_EmptyForUnusedNullifier() public view {
+        address[] memory wallets = registry.getWallets(NULL_B);
+        assertEq(wallets.length, 0);
     }
 
     // =========================================================================
-    // Base Tier — Rate Limiting
+    // register — rate limiting (epoch nullifier)
     // =========================================================================
 
-    function test_RegisterBase_RateLimit_BlocksEleventhRegistration() public {
-        // Register 10 times from different wallets using same epoch nullifier
+    function test_RateLimit_BlocksEleventhRegistration() public {
         for (uint256 i = 0; i < 10; i++) {
             address wallet = address(uint160(1000 + i));
             vm.prank(wallet);
-            registry.registerBase(EPOCH_NULL_A, PASSPORT_EXPIRY, PROOF);
+            registry.register(NULL_A, EPOCH_A_DAY0, PASSPORT_EXPIRY, PROOF);
         }
 
-        // 11th should fail
         vm.prank(attacker);
         vm.expectRevert(VerificationRegistry.VerificationRegistry__RateLimitExceeded.selector);
-        registry.registerBase(EPOCH_NULL_A, PASSPORT_EXPIRY, PROOF);
+        registry.register(NULL_A, EPOCH_A_DAY0, PASSPORT_EXPIRY, PROOF);
     }
 
-    function test_RegisterBase_RateLimit_DifferentEpochAllows() public {
-        // Fill up epoch nullifier A
+    function test_RateLimit_DifferentEpochAllowsMore() public {
         for (uint256 i = 0; i < 10; i++) {
             address wallet = address(uint160(1000 + i));
             vm.prank(wallet);
-            registry.registerBase(EPOCH_NULL_A, PASSPORT_EXPIRY, PROOF);
+            registry.register(NULL_A, EPOCH_A_DAY0, PASSPORT_EXPIRY, PROOF);
         }
 
-        // Different epoch nullifier (different day) should still work
-        _registerBase(alice, EPOCH_NULL_B);
+        // New day → new epoch nullifier → fresh count
+        _register(alice, NULL_A, EPOCH_A_DAY1);
         assertTrue(registry.isVerified(alice));
     }
 
-    function test_RegisterBase_RateLimit_CanBeReducedByGovernor() public {
+    function test_RateLimit_GovernorCanReduce() public {
         vm.prank(governor);
         config.setMaxDailyRegistrations(2);
 
-        _registerBase(alice, EPOCH_NULL_A);
-        _registerBase(bob, EPOCH_NULL_A);
+        _register(alice, NULL_A, EPOCH_A_DAY0);
+        _register(bob, NULL_A, EPOCH_A_DAY0);
 
         vm.prank(carol);
         vm.expectRevert(VerificationRegistry.VerificationRegistry__RateLimitExceeded.selector);
-        registry.registerBase(EPOCH_NULL_A, PASSPORT_EXPIRY, PROOF);
+        registry.register(NULL_A, EPOCH_A_DAY0, PASSPORT_EXPIRY, PROOF);
     }
 
     // =========================================================================
-    // Base Tier — Expiry
+    // register — expiry
     // =========================================================================
 
-    function test_RegisterBase_ExpiresAfterTTL() public {
-        _registerBase(alice, EPOCH_NULL_A);
+    function test_Register_ExpiresAfterTTL() public {
+        _register(alice, NULL_A, EPOCH_A_DAY0);
         assertTrue(registry.isVerified(alice));
 
-        // Warp past TTL
         vm.warp(block.timestamp + config.registrationTTL() + 1);
         assertFalse(registry.isVerified(alice));
     }
 
-    function test_RegisterBase_ExpiresAtPassportExpiry_WhenEarlierThanTTL() public {
-        // 30 days < 180-day TTL. Rounds UP to the next quarter boundary (90 days from epoch).
+    function test_Register_ExpiresAtPassportExpiry_WhenEarlierThanTTL() public {
         uint48 rawExpiry = uint48(block.timestamp + 30 days);
         uint48 roundedExpiry = ((rawExpiry + 90 days - 1) / 90 days) * 90 days;
 
         vm.prank(alice);
-        registry.registerBase(EPOCH_NULL_A, rawExpiry, PROOF);
+        registry.register(NULL_A, EPOCH_A_DAY0, rawExpiry, PROOF);
         assertTrue(registry.isVerified(alice));
 
-        // Still verified just before rounded expiry
         vm.warp(uint256(roundedExpiry) - 1);
         assertTrue(registry.isVerified(alice));
 
-        // Lapses just after rounded expiry
         vm.warp(uint256(roundedExpiry) + 1);
         assertFalse(registry.isVerified(alice));
     }
 
-    function test_RegisterBase_IsVerified_ReturnsFalseLazily() public {
-        _registerBase(alice, EPOCH_NULL_A);
-
+    function test_Register_IsVerified_ReturnsFalseLazily() public {
+        _register(alice, NULL_A, EPOCH_A_DAY0);
         vm.warp(block.timestamp + config.registrationTTL() + 1);
-
-        // No state write needed — just reads return false
         assertFalse(registry.isVerified(alice));
 
-        // Can re-register after expiry with new epoch nullifier
-        bytes32 newEpochNull = keccak256("epoch_A_day999");
-        _registerBase(alice, newEpochNull);
+        // nullifierOf still returns the nullifier — only liveness is gated by isVerified.
+        assertEq(registry.nullifierOf(alice), NULL_A);
+
+        // Re-register with a different epoch (new day) succeeds.
+        _register(alice, NULL_A, EPOCH_A_DAY1);
         assertTrue(registry.isVerified(alice));
     }
 
     // =========================================================================
-    // Base Tier — Renewal
+    // register — re-registration logic (wallet array deduplication)
     // =========================================================================
 
-    function test_RenewBase_ExtendsExpiry() public {
-        _registerBase(alice, EPOCH_NULL_A);
+    function test_Register_AfterExpiry_SameNullifier_DoesNotDuplicateInArray() public {
+        _register(alice, NULL_A, EPOCH_A_DAY0);
+        vm.warp(block.timestamp + config.registrationTTL() + 1);
+        // No unregister — the array still contains alice.
+        _register(alice, NULL_A, EPOCH_A_DAY1);
 
-        // Warp to 1 day before expiry
-        vm.warp(block.timestamp + config.registrationTTL() - 1 days);
-        assertTrue(registry.isVerified(alice));
+        address[] memory wallets = registry.getWallets(NULL_A);
+        assertEq(wallets.length, 1);
+        assertEq(wallets[0], alice);
+    }
 
-        // Renew
+    function test_Register_AfterExpiry_DifferentNullifier_MovesArrayEntry() public {
+        // Alice registers with passport A. Lapses. Replaces passport — registers with passport B.
+        _register(alice, NULL_A, EPOCH_A_DAY0);
+        vm.warp(block.timestamp + config.registrationTTL() + 1);
+
         vm.prank(alice);
-        registry.renewBase(PASSPORT_EXPIRY, PROOF);
+        registry.register(NULL_B, EPOCH_B_DAY0, PASSPORT_EXPIRY, PROOF);
 
-        // Should now be valid for another full TTL
+        // Old array empty, new array contains alice, nullifierByWallet updated.
+        assertEq(registry.getWallets(NULL_A).length, 0);
+        address[] memory walletsB = registry.getWallets(NULL_B);
+        assertEq(walletsB.length, 1);
+        assertEq(walletsB[0], alice);
+        assertEq(registry.nullifierOf(alice), NULL_B);
+    }
+
+    // =========================================================================
+    // renew
+    // =========================================================================
+
+    function test_Renew_ExtendsExpiry() public {
+        _register(alice, NULL_A, EPOCH_A_DAY0);
+        vm.warp(block.timestamp + config.registrationTTL() - 1 days);
+
+        vm.prank(alice);
+        registry.renew(NULL_A, EPOCH_A_DAY1, PASSPORT_EXPIRY, PROOF);
+
         vm.warp(block.timestamp + config.registrationTTL() - 1);
         assertTrue(registry.isVerified(alice));
     }
 
-    function test_RenewBase_Reverts_NotRegistered() public {
+    function test_Renew_PreservesRegisteredAt() public {
+        _register(alice, NULL_A, EPOCH_A_DAY0);
+        uint48 originalRegisteredAt = registry.getRegisteredAt(alice);
+
+        vm.warp(block.timestamp + 30 days);
+        vm.prank(alice);
+        registry.renew(NULL_A, EPOCH_A_DAY1, PASSPORT_EXPIRY, PROOF);
+
+        assertEq(registry.getRegisteredAt(alice), originalRegisteredAt);
+    }
+
+    function test_Renew_Reverts_NotRegistered() public {
         vm.prank(alice);
         vm.expectRevert(VerificationRegistry.VerificationRegistry__NotRegistered.selector);
-        registry.renewBase(PASSPORT_EXPIRY, PROOF);
+        registry.renew(NULL_A, EPOCH_A_DAY1, PASSPORT_EXPIRY, PROOF);
     }
 
-    function test_RenewBase_Reverts_PassportExpired() public {
-        _registerBase(alice, EPOCH_NULL_A);
-        uint48 expiredPassport = uint48(block.timestamp - 1);
-
-        vm.prank(alice);
-        vm.expectRevert(VerificationRegistry.VerificationRegistry__PassportExpired.selector);
-        registry.renewBase(expiredPassport, PROOF);
-    }
-
-    function test_RenewBase_DoesNotConsumeRateLimit() public {
-        _registerBase(alice, EPOCH_NULL_A);
-
-        // Fill up rate limit with other wallets
-        for (uint256 i = 0; i < 9; i++) {
-            address wallet = address(uint160(1000 + i));
-            vm.prank(wallet);
-            registry.registerBase(EPOCH_NULL_A, PASSPORT_EXPIRY, PROOF);
-        }
-        // Rate limit is now at 10/10
-
-        // Alice can still renew (renewal doesn't use epoch nullifier)
-        vm.prank(alice);
-        registry.renewBase(PASSPORT_EXPIRY, PROOF);
-        assertTrue(registry.isVerified(alice));
-    }
-
-    // =========================================================================
-    // Base Tier — Unregister
-    // =========================================================================
-
-    function test_UnregisterBase_Success() public {
-        _registerBase(alice, EPOCH_NULL_A);
-        assertTrue(registry.isVerified(alice));
-
-        vm.prank(alice);
-        registry.unregisterBase();
-
-        assertFalse(registry.isVerified(alice));
-    }
-
-    function test_UnregisterBase_NoEventEmitted() public {
-        _registerBase(alice, EPOCH_NULL_A);
-        vm.recordLogs();
-
-        vm.prank(alice);
-        registry.unregisterBase();
-
-        assertEq(vm.getRecordedLogs().length, 0);
-    }
-
-    function test_UnregisterBase_AllowsReregister() public {
-        _registerBase(alice, EPOCH_NULL_A);
-
-        vm.prank(alice);
-        registry.unregisterBase();
-
-        // Can re-register immediately with a new epoch nullifier
-        bytes32 newEpochNull = keccak256("epoch_A_day2");
-        _registerBase(alice, newEpochNull);
-        assertTrue(registry.isVerified(alice));
-    }
-
-    function test_UnregisterBase_Reverts_NotRegistered() public {
-        vm.prank(alice);
-        vm.expectRevert(VerificationRegistry.VerificationRegistry__NotRegistered.selector);
-        registry.unregisterBase();
-    }
-
-    // =========================================================================
-    // Primary Tier — Registration
-    // =========================================================================
-
-    function test_RegisterPrimary_Success() public {
-        _registerPrimary(alice, NULL_1A);
-        assertTrue(registry.isPrimaryVerified(alice));
-    }
-
-    function test_RegisterPrimary_EmitsWalletVerified() public {
-        vm.expectEmit(true, false, false, false);
-        emit IVerificationRegistry.WalletVerified(alice);
-
-        _registerPrimary(alice, NULL_1A);
-    }
-
-    function test_RegisterPrimary_Reverts_NullifierAlreadyUsed() public {
-        _registerPrimary(alice, NULL_1A);
-
-        // Bob tries to register with the same nullifier
-        vm.prank(bob);
-        vm.expectRevert(VerificationRegistry.VerificationRegistry__NullifierAlreadyUsed.selector);
-        registry.registerPrimary(NULL_1A, PASSPORT_EXPIRY, PROOF);
-    }
-
-    function test_RegisterPrimary_Reverts_AlreadyRegistered() public {
-        _registerPrimary(alice, NULL_1A);
-
-        // Alice tries to register again with a different nullifier
-        vm.prank(alice);
-        vm.expectRevert(VerificationRegistry.VerificationRegistry__AlreadyRegistered.selector);
-        registry.registerPrimary(NULL_2A, PASSPORT_EXPIRY, PROOF);
-    }
-
-    function test_RegisterPrimary_Reverts_PassportExpired() public {
+    function test_Renew_Reverts_PassportExpired() public {
+        _register(alice, NULL_A, EPOCH_A_DAY0);
         uint48 expired = uint48(block.timestamp - 1);
         vm.prank(alice);
         vm.expectRevert(VerificationRegistry.VerificationRegistry__PassportExpired.selector);
-        registry.registerPrimary(NULL_1A, expired, PROOF);
+        registry.renew(NULL_A, EPOCH_A_DAY1, expired, PROOF);
     }
 
-    function test_RegisterPrimary_StoresSlot() public {
-        _registerPrimary(alice, NULL_1A);
-
-        bytes32 storedAddress = registry.s_primarySlots(NULL_1A);
-        assertEq(storedAddress, keccak256(abi.encodePacked(alice)));
+    function test_Renew_Reverts_NullifierMismatch() public {
+        // Renew must use the same nullifier the wallet was registered with.
+        _register(alice, NULL_A, EPOCH_A_DAY0);
+        vm.prank(alice);
+        vm.expectRevert(VerificationRegistry.VerificationRegistry__NullifierMismatch.selector);
+        registry.renew(NULL_B, EPOCH_A_DAY1, PASSPORT_EXPIRY, PROOF);
     }
 
-    function test_RegisterPrimary_ClearsStaleSlot_WhenWalletRotatesPassport() public {
-        // Alice registers with passport A (NULL_1A).
-        _registerPrimary(alice, NULL_1A);
-        bytes32 hashedAlice = keccak256(abi.encodePacked(alice));
-        assertEq(registry.s_primarySlots(NULL_1A), hashedAlice);
+    function test_Renew_DoesNotConsumeRateLimit() public {
+        _register(alice, NULL_A, EPOCH_A_DAY0);
 
-        // Registration lapses (TTL passed, no renewal). Note: real passport with finite
-        // expiry would also need to still be valid; PASSPORT_EXPIRY = uint48.max here.
+        // Fill the daily rate limit with 9 other wallets (total 10 with alice).
+        for (uint256 i = 0; i < 9; i++) {
+            address wallet = address(uint160(1000 + i));
+            vm.prank(wallet);
+            registry.register(NULL_A, EPOCH_A_DAY0, PASSPORT_EXPIRY, PROOF);
+        }
+
+        // Alice can still renew — renewal is exempt from rate limiting.
+        vm.prank(alice);
+        registry.renew(NULL_A, EPOCH_A_DAY1, PASSPORT_EXPIRY, PROOF);
+        assertTrue(registry.isVerified(alice));
+    }
+
+    function test_Renew_AllowsRenewAfterExpiry_SameNullifier() public {
+        _register(alice, NULL_A, EPOCH_A_DAY0);
         vm.warp(block.timestamp + config.registrationTTL() + 1);
-        assertFalse(registry.isPrimaryVerified(alice));
+        assertFalse(registry.isVerified(alice));
 
-        // Alice re-registers with a new passport (NULL_2A).
+        // Even after lapse, renewing with the same nullifier extends the registration.
         vm.prank(alice);
-        registry.registerPrimary(NULL_2A, PASSPORT_EXPIRY, PROOF);
-
-        // Stale slot from old passport is cleared; new slot points at alice.
-        assertEq(registry.s_primarySlots(NULL_1A), bytes32(0));
-        assertEq(registry.s_primarySlots(NULL_2A), hashedAlice);
-        assertEq(registry.s_primaryNullifierByWallet(hashedAlice), NULL_2A);
-        assertTrue(registry.isPrimaryVerified(alice));
-    }
-
-    function test_RegisterPrimary_DoesNotClearOtherWalletsSlots() public {
-        // Bob registers first with NULL_2A.
-        _registerPrimary(bob, NULL_2A);
-        bytes32 hashedBob = keccak256(abi.encodePacked(bob));
-
-        // Alice registers fresh with NULL_1A — she has no prior slot.
-        _registerPrimary(alice, NULL_1A);
-
-        // Bob's slot is untouched.
-        assertEq(registry.s_primarySlots(NULL_2A), hashedBob);
-        assertTrue(registry.isPrimaryVerified(bob));
+        registry.renew(NULL_A, EPOCH_A_DAY1, PASSPORT_EXPIRY, PROOF);
+        assertTrue(registry.isVerified(alice));
     }
 
     // =========================================================================
-    // Primary Tier — Expiry
+    // unregister
     // =========================================================================
 
-    function test_RegisterPrimary_ExpiresAfterTTL() public {
-        _registerPrimary(alice, NULL_1A);
-        assertTrue(registry.isPrimaryVerified(alice));
-
-        vm.warp(block.timestamp + config.registrationTTL() + 1);
-        assertFalse(registry.isPrimaryVerified(alice));
-    }
-
-    function test_RegisterPrimary_ExpiresAtPassportExpiry_WhenEarlier() public {
-        // 30 days < 180-day TTL. Rounds UP to the next quarter boundary.
-        uint48 rawExpiry = uint48(block.timestamp + 30 days);
-        uint48 roundedExpiry = ((rawExpiry + 90 days - 1) / 90 days) * 90 days;
+    function test_Unregister_Success() public {
+        _register(alice, NULL_A, EPOCH_A_DAY0);
+        assertTrue(registry.isVerified(alice));
 
         vm.prank(alice);
-        registry.registerPrimary(NULL_1A, rawExpiry, PROOF);
+        registry.unregister();
 
-        // Still verified just before rounded expiry
-        vm.warp(uint256(roundedExpiry) - 1);
-        assertTrue(registry.isPrimaryVerified(alice));
-
-        // Lapses just after rounded expiry
-        vm.warp(uint256(roundedExpiry) + 1);
-        assertFalse(registry.isPrimaryVerified(alice));
+        assertFalse(registry.isVerified(alice));
+        assertEq(registry.nullifierOf(alice), bytes32(0));
     }
 
-    // =========================================================================
-    // Primary Tier — Renewal
-    // =========================================================================
-
-    function test_RenewPrimary_ExtendsExpiry() public {
-        _registerPrimary(alice, NULL_1A);
-        vm.warp(block.timestamp + config.registrationTTL() - 1 days);
-
-        vm.prank(alice);
-        registry.renewPrimary(NULL_1A, PASSPORT_EXPIRY, PROOF);
-
-        vm.warp(block.timestamp + config.registrationTTL() - 1);
-        assertTrue(registry.isPrimaryVerified(alice));
-    }
-
-    function test_RenewPrimary_Reverts_NotRegistered() public {
-        vm.prank(alice);
-        vm.expectRevert(VerificationRegistry.VerificationRegistry__NotRegistered.selector);
-        registry.renewPrimary(NULL_1A, PASSPORT_EXPIRY, PROOF);
-    }
-
-    function test_RenewPrimary_Reverts_NotAuthorized() public {
-        _registerPrimary(alice, NULL_1A);
-
-        // Bob tries to renew alice's slot
-        vm.prank(bob);
-        vm.expectRevert(VerificationRegistry.VerificationRegistry__NotAuthorized.selector);
-        registry.renewPrimary(NULL_1A, PASSPORT_EXPIRY, PROOF);
-    }
-
-    // =========================================================================
-    // Primary Tier — unregisterPrimary
-    // =========================================================================
-
-    function test_UnregisterPrimary_Success() public {
-        _registerPrimary(alice, NULL_1A);
-        assertTrue(registry.isPrimaryVerified(alice));
-
-        vm.prank(alice);
-        registry.unregisterPrimary();
-
-        assertFalse(registry.isPrimaryVerified(alice));
-    }
-
-    function test_UnregisterPrimary_NoEventEmitted() public {
-        _registerPrimary(alice, NULL_1A);
+    function test_Unregister_NoEventEmitted() public {
+        _register(alice, NULL_A, EPOCH_A_DAY0);
         vm.recordLogs();
 
         vm.prank(alice);
-        registry.unregisterPrimary();
+        registry.unregister();
 
         assertEq(vm.getRecordedLogs().length, 0);
     }
 
-    function test_UnregisterPrimary_SetsSlotToCooldown() public {
-        _registerPrimary(alice, NULL_1A);
+    function test_Unregister_AllowsImmediateReregister_NoCooldown() public {
+        _register(alice, NULL_A, EPOCH_A_DAY0);
 
         vm.prank(alice);
-        registry.unregisterPrimary();
+        registry.unregister();
 
-        // Immediate re-register with same nullifier should be blocked by cooldown
-        vm.prank(alice);
-        vm.expectRevert(VerificationRegistry.VerificationRegistry__PrimaryInCooldown.selector);
-        registry.registerPrimary(NULL_1A, PASSPORT_EXPIRY, PROOF);
+        // Re-register immediately (a different epoch nullifier — same passport, next bucket
+        // of the day's count if it hadn't been used yet).
+        _register(alice, NULL_A, EPOCH_A_DAY1);
+        assertTrue(registry.isVerified(alice));
     }
 
-    function test_UnregisterPrimary_AllowsReregister_AfterCooldown() public {
-        _registerPrimary(alice, NULL_1A);
+    function test_Unregister_RemovesFromWalletArray() public {
+        _register(alice, NULL_A, EPOCH_A_DAY0);
+        _register(bob, NULL_A, EPOCH_A_DAY0);
+        _register(carol, NULL_A, EPOCH_A_DAY0);
 
-        vm.prank(alice);
-        registry.unregisterPrimary();
+        // Bob unregisters — swap-and-pop with carol (the last entry).
+        vm.prank(bob);
+        registry.unregister();
 
-        vm.warp(block.timestamp + config.cooldownPeriod());
-
-        vm.prank(alice);
-        registry.registerPrimary(NULL_1A, PASSPORT_EXPIRY, PROOF);
-        assertTrue(registry.isPrimaryVerified(alice));
+        address[] memory wallets = registry.getWallets(NULL_A);
+        assertEq(wallets.length, 2);
+        // alice remains at index 0; carol moved to index 1.
+        assertEq(wallets[0], alice);
+        assertEq(wallets[1], carol);
     }
 
-    /// @notice After cooldown, a different wallet can register the same nullifier — this is
-    ///         the explicit primary-switch flow. Old + new addresses are linkable on-chain
-    ///         via the shared nullifier.
-    function test_UnregisterPrimary_DifferentWallet_CanReregister_AfterCooldown() public {
-        _registerPrimary(alice, NULL_1A);
+    function test_Unregister_RemovesLastEntry_NoSwap() public {
+        _register(alice, NULL_A, EPOCH_A_DAY0);
+        _register(bob, NULL_A, EPOCH_A_DAY0);
 
-        vm.prank(alice);
-        registry.unregisterPrimary();
+        // Bob is the last entry — pop without swap.
+        vm.prank(bob);
+        registry.unregister();
 
-        vm.warp(block.timestamp + config.cooldownPeriod());
+        address[] memory wallets = registry.getWallets(NULL_A);
+        assertEq(wallets.length, 1);
+        assertEq(wallets[0], alice);
+    }
+
+    function test_Unregister_FollowedByOtherUnregister_ArrayConsistent() public {
+        _register(alice, NULL_A, EPOCH_A_DAY0);
+        _register(bob, NULL_A, EPOCH_A_DAY0);
+        _register(carol, NULL_A, EPOCH_A_DAY0);
 
         vm.prank(bob);
-        registry.registerPrimary(NULL_1A, PASSPORT_EXPIRY, PROOF);
-        assertTrue(registry.isPrimaryVerified(bob));
-        assertFalse(registry.isPrimaryVerified(alice));
+        registry.unregister();
+
+        vm.prank(carol);
+        registry.unregister();
+
+        address[] memory wallets = registry.getWallets(NULL_A);
+        assertEq(wallets.length, 1);
+        assertEq(wallets[0], alice);
     }
 
-    function test_UnregisterPrimary_Reverts_NotRegistered() public {
+    function test_Unregister_Reverts_NotRegistered() public {
         vm.prank(alice);
         vm.expectRevert(VerificationRegistry.VerificationRegistry__NotRegistered.selector);
-        registry.unregisterPrimary();
-    }
-
-    function test_UnregisterPrimary_Reverts_AttackerHasNoSlot() public {
-        _registerPrimary(alice, NULL_1A);
-
-        // Attacker has no primary slot, so lookup returns zero → NotRegistered.
-        // (Alice's slot is unaffected.)
-        vm.prank(attacker);
-        vm.expectRevert(VerificationRegistry.VerificationRegistry__NotRegistered.selector);
-        registry.unregisterPrimary();
+        registry.unregister();
     }
 
     // =========================================================================
-    // s_primaryNullifierByWallet — reverse mapping for unregister lookup
+    // nullifierOf — public sybil identifier
     // =========================================================================
 
-    function test_PrimaryNullifierByWallet_ZeroBeforeRegister() public view {
-        bytes32 hashedAlice = keccak256(abi.encodePacked(alice));
-        assertEq(registry.s_primaryNullifierByWallet(hashedAlice), bytes32(0));
+    function test_NullifierOf_ZeroBeforeRegister() public view {
+        assertEq(registry.nullifierOf(alice), bytes32(0));
     }
 
-    function test_PrimaryNullifierByWallet_SetAfterRegister() public {
-        _registerPrimary(alice, NULL_1A);
-        bytes32 hashedAlice = keccak256(abi.encodePacked(alice));
-        assertEq(registry.s_primaryNullifierByWallet(hashedAlice), NULL_1A);
+    function test_NullifierOf_SetAfterRegister() public {
+        _register(alice, NULL_A, EPOCH_A_DAY0);
+        assertEq(registry.nullifierOf(alice), NULL_A);
     }
 
-    function test_PrimaryNullifierByWallet_ClearedOnUnregister() public {
-        _registerPrimary(alice, NULL_1A);
+    function test_NullifierOf_ClearedOnUnregister() public {
+        _register(alice, NULL_A, EPOCH_A_DAY0);
         vm.prank(alice);
-        registry.unregisterPrimary();
+        registry.unregister();
 
-        bytes32 hashedAlice = keccak256(abi.encodePacked(alice));
-        assertEq(registry.s_primaryNullifierByWallet(hashedAlice), bytes32(0));
+        assertEq(registry.nullifierOf(alice), bytes32(0));
+    }
+
+    function test_NullifierOf_PersistsAfterExpiry() public {
+        _register(alice, NULL_A, EPOCH_A_DAY0);
+        vm.warp(block.timestamp + config.registrationTTL() + 1);
+
+        // Expiry doesn't auto-clear the nullifier mapping — protocols can still see who
+        // this wallet *was* registered as. Pair with isVerified for liveness.
+        assertEq(registry.nullifierOf(alice), NULL_A);
+        assertFalse(registry.isVerified(alice));
     }
 
     // =========================================================================
-    // wasNullifierUsed — used by app to distinguish first-tap vs returning passport
+    // Successor / migration
     // =========================================================================
 
-    function test_WasNullifierUsed_FalseInitially() public view {
-        assertFalse(registry.wasNullifierUsed(NULL_1A));
-    }
+    function test_Successor_AllReadFunctionsDelegate() public {
+        _register(alice, NULL_A, EPOCH_A_DAY0);
 
-    function test_WasNullifierUsed_TrueAfterRegister() public {
-        _registerPrimary(alice, NULL_1A);
-        assertTrue(registry.wasNullifierUsed(NULL_1A));
-    }
-
-    function test_WasNullifierUsed_TrueAfterUnregister() public {
-        _registerPrimary(alice, NULL_1A);
-        vm.prank(alice);
-        registry.unregisterPrimary();
-
-        assertTrue(registry.wasNullifierUsed(NULL_1A));
-    }
-
-    function test_WasNullifierUsed_TrueAfterCooldownElapsed() public {
-        _registerPrimary(alice, NULL_1A);
-        vm.prank(alice);
-        registry.unregisterPrimary();
-        vm.warp(block.timestamp + config.cooldownPeriod() + 1);
-
-        // Cooldown is over but the nullifier is still flagged as previously used
-        assertTrue(registry.wasNullifierUsed(NULL_1A));
-    }
-
-    function test_WasNullifierUsed_FalseForUnrelatedNullifier() public {
-        _registerPrimary(alice, NULL_1A);
-        assertFalse(registry.wasNullifierUsed(NULL_2A));
-    }
-
-    // =========================================================================
-    // Privacy properties
-    // =========================================================================
-
-    function test_Privacy_BaseTierUnlinkable() public {
-        _registerBase(alice, EPOCH_NULL_A);
-        _registerBase(bob, EPOCH_NULL_B);
-
-        // Both verified; no way to link them to the same passport
-        assertTrue(registry.isVerified(alice));
-        assertTrue(registry.isVerified(bob));
-    }
-
-    function test_Privacy_BasePrimaryUnlinkable() public {
-        // Same passport registers both base and primary — tiers must be unlinkable
-        _registerBase(alice, EPOCH_NULL_A);
-        _registerPrimary(bob, NULL_1A);
-
-        // No shared state links alice (base) and bob (primary)
-        assertTrue(registry.isVerified(alice));
-        assertTrue(registry.isPrimaryVerified(bob));
-        assertFalse(registry.isPrimaryVerified(alice));
-        assertFalse(registry.isVerified(bob));
-    }
-
-    // =========================================================================
-    // Successor / Migration
-    // =========================================================================
-
-    function test_Successor_IsVerified_Delegates() public {
-        _registerBase(alice, EPOCH_NULL_A);
-
-        // Deploy a new registry and set it as successor
         VerificationRegistry successor = new VerificationRegistry(governor, config, verifier, address(cscaTree));
-
-        // Register alice on the new registry too
-        vm.prank(alice);
-        successor.registerBase(EPOCH_NULL_A, PASSPORT_EXPIRY, PROOF);
+        vm.prank(bob);
+        successor.register(NULL_B, EPOCH_B_DAY0, PASSPORT_EXPIRY, PROOF);
 
         vm.prank(governor);
         registry.setSuccessor(address(successor));
 
-        // Old registry now delegates to successor
-        assertTrue(registry.isVerified(alice));
-        assertFalse(registry.isVerified(bob));
+        // Old registry now reflects successor state.
+        assertFalse(registry.isVerified(alice));
+        assertTrue(registry.isVerified(bob));
+        assertEq(registry.nullifierOf(bob), NULL_B);
+        assertEq(registry.getWallets(NULL_B).length, 1);
     }
 
     // =========================================================================
@@ -676,11 +518,10 @@ contract VerificationRegistryTest is Test {
     function test_Unpause_AllowsRegistration() public {
         vm.prank(governor);
         registry.pause();
-
         vm.prank(governor);
         registry.unpause();
 
-        _registerBase(alice, EPOCH_NULL_A);
+        _register(alice, NULL_A, EPOCH_A_DAY0);
         assertTrue(registry.isVerified(alice));
     }
 
@@ -688,30 +529,21 @@ contract VerificationRegistryTest is Test {
     // Fuzz
     // =========================================================================
 
-    function testFuzz_RegisterBase_RandomEpochNullifiers(bytes32 epochNull) public {
+    function testFuzz_Register_RandomNullifierAndEpoch(bytes32 nullifier, bytes32 epochNullifier) public {
         vm.prank(alice);
-        registry.registerBase(epochNull, PASSPORT_EXPIRY, PROOF);
+        registry.register(nullifier, epochNullifier, PASSPORT_EXPIRY, PROOF);
         assertTrue(registry.isVerified(alice));
-    }
-
-    function testFuzz_RegisterPrimary_RandomNullifiers(bytes32 nullifier) public {
-        vm.assume(nullifier != bytes32(0));
-        vm.prank(alice);
-        registry.registerPrimary(nullifier, PASSPORT_EXPIRY, PROOF);
-        assertTrue(registry.isPrimaryVerified(alice));
+        assertEq(registry.nullifierOf(alice), nullifier);
     }
 
     function testFuzz_Expiry_NeverActiveAfterPassportExpiry(uint48 passportExpiry) public {
-        // Keep passportExpiry in a reasonable future range
         passportExpiry = uint48(bound(passportExpiry, block.timestamp + 1, block.timestamp + 10 * 365 days));
-
-        // Round UP to quarter boundary — the effective ceiling stored on-chain
         uint48 roundedExpiry = passportExpiry <= type(uint48).max - (90 days - 1)
             ? ((passportExpiry + 90 days - 1) / 90 days) * 90 days
             : passportExpiry;
 
         vm.prank(alice);
-        registry.registerBase(EPOCH_NULL_A, passportExpiry, PROOF);
+        registry.register(NULL_A, EPOCH_A_DAY0, passportExpiry, PROOF);
 
         vm.warp(uint256(roundedExpiry) + 1);
         assertFalse(registry.isVerified(alice));

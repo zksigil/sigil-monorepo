@@ -4,24 +4,17 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRoute, useNavigation, CommonActions } from '@react-navigation/native';
 import type { RootStackRouteProp, RootStackNavigationProp } from '../../../app/navigation/types';
 
-const BASESCAN_SEPOLIA_TX_URL = 'https://sepolia.basescan.org/tx/';
+const SEPOLIA_TX_URL = 'https://sepolia.etherscan.io/tx/';
 
 export function VerificationSuccessScreen(): React.JSX.Element {
   const route = useRoute<RootStackRouteProp<'VerificationSuccess'>>();
   const navigation = useNavigation<RootStackNavigationProp<'VerificationSuccess'>>();
-  const { txHash, groupSize, tier } = route.params;
-
-  const isSigilize = tier === 'unique';
-  const headline = isSigilize ? 'Account Sigilized!' : 'Account Verified!';
-  const actionLabel = isSigilize ? 'Sigilized' : 'Verified';
-  const body = isSigilize
-    ? 'This account is now your Sigilized address. It is publicly linkable to any future Sigilized address registered from the same passport.'
-    : 'Your identity has been verified on-chain. Your wallet is now part of the verified group.';
+  const { txHash } = route.params;
 
   const shortTxHash = `${txHash.slice(0, 10)}...${txHash.slice(-8)}`;
 
-  const handleViewOnBaseScan = useCallback(() => {
-    void Linking.openURL(`${BASESCAN_SEPOLIA_TX_URL}${txHash}`);
+  const handleViewOnExplorer = useCallback(() => {
+    void Linking.openURL(`${SEPOLIA_TX_URL}${txHash}`);
   }, [txHash]);
 
   const handleDone = useCallback(() => {
@@ -42,31 +35,19 @@ export function VerificationSuccessScreen(): React.JSX.Element {
           </View>
 
           <View className="items-center gap-y-2">
-            <Text className="text-dracula-fg text-2xl font-bold">{headline}</Text>
+            <Text className="text-dracula-fg text-2xl font-bold">Wallet Sigilized!</Text>
             <Text className="text-dracula-comment text-sm text-center max-w-xs">
-              {body}
+              This wallet is now publicly tied to your passport identity on-chain.
+              Other wallets you sigilize will share the same identity.
             </Text>
           </View>
 
-          {/* Transaction details card */}
           <View className="w-full bg-dracula-surface rounded-2xl p-5 gap-y-4 mt-4">
             <View className="flex-row justify-between items-center">
               <Text className="text-dracula-comment text-xs">Transaction</Text>
-              <Pressable onPress={handleViewOnBaseScan}>
+              <Pressable onPress={handleViewOnExplorer}>
                 <Text className="text-dracula-purple text-xs font-medium">{shortTxHash}</Text>
               </Pressable>
-            </View>
-
-            <View className="flex-row justify-between items-center">
-              <Text className="text-dracula-comment text-xs">Action</Text>
-              <Text className="text-dracula-fg text-xs font-medium">{actionLabel}</Text>
-            </View>
-
-            <View className="flex-row justify-between items-center">
-              <Text className="text-dracula-comment text-xs">Group Size</Text>
-              <Text className="text-dracula-fg text-xs font-medium">
-                {groupSize} verified {groupSize === 1 ? 'member' : 'members'}
-              </Text>
             </View>
 
             <View className="flex-row justify-between items-center">
@@ -76,7 +57,7 @@ export function VerificationSuccessScreen(): React.JSX.Element {
           </View>
 
           <Pressable
-            onPress={handleViewOnBaseScan}
+            onPress={handleViewOnExplorer}
             className="w-full rounded-2xl py-4 items-center bg-dracula-surface/70 active:bg-dracula-comment/40"
           >
             <Text className="text-dracula-purple text-base font-semibold">View on Explorer</Text>

@@ -133,7 +133,11 @@ extern "C" {
     uint64_t callback_data, 
     UniffiForeignFutureStructVoid result
     );
-    RustBuffer uniffi_zkpassport_circuits_fn_func_compute_base_inputs(
+    RustBuffer uniffi_zkpassport_circuits_fn_func_compute_redc_param(
+        RustBuffer modulus_bytes, 
+        RustCallStatus *uniffi_out_err
+    );
+    RustBuffer uniffi_zkpassport_circuits_fn_func_compute_sigil_inputs(
         RustBuffer dg1_hash, 
         RustBuffer sod_hash, 
         RustBuffer epoch_day, 
@@ -154,39 +158,6 @@ extern "C" {
         uint32_t csca_leaf_index, 
         RustBuffer hashed_address, 
         RustBuffer csca_merkle_root, 
-        RustCallStatus *uniffi_out_err
-    );
-    RustBuffer uniffi_zkpassport_circuits_fn_func_compute_nullifier(
-        RustBuffer dg1_hash, 
-        RustBuffer sod_hash, 
-        RustBuffer nonce, 
-        RustCallStatus *uniffi_out_err
-    );
-    RustBuffer uniffi_zkpassport_circuits_fn_func_compute_primary_inputs(
-        RustBuffer dg1_hash, 
-        RustBuffer sod_hash, 
-        RustBuffer nonce, 
-        RustBuffer signed_attrs, 
-        uint32_t signed_attrs_len, 
-        RustBuffer signature, 
-        RustBuffer pubkey, 
-        RustBuffer redc_param, 
-        uint32_t exponent, 
-        RustBuffer dsc_tbs, 
-        uint32_t dsc_tbs_len, 
-        uint32_t dsc_pubkey_offset, 
-        RustBuffer csca_pubkey, 
-        RustBuffer csca_redc_param, 
-        uint32_t csca_exponent, 
-        RustBuffer csca_signature, 
-        RustBuffer csca_merkle_siblings, 
-        uint32_t csca_leaf_index, 
-        RustBuffer hashed_address, 
-        RustBuffer csca_merkle_root, 
-        RustCallStatus *uniffi_out_err
-    );
-    RustBuffer uniffi_zkpassport_circuits_fn_func_compute_redc_param(
-        RustBuffer modulus_bytes, 
         RustCallStatus *uniffi_out_err
     );
     RustBuffer uniffi_zkpassport_circuits_fn_func_generate_noir_proof(
@@ -425,13 +396,9 @@ extern "C" {
         /*handle*/ uint64_t handle, 
         RustCallStatus *uniffi_out_err
     );
-    uint16_t uniffi_zkpassport_circuits_checksum_func_compute_base_inputs(
-    );
-    uint16_t uniffi_zkpassport_circuits_checksum_func_compute_nullifier(
-    );
-    uint16_t uniffi_zkpassport_circuits_checksum_func_compute_primary_inputs(
-    );
     uint16_t uniffi_zkpassport_circuits_checksum_func_compute_redc_param(
+    );
+    uint16_t uniffi_zkpassport_circuits_checksum_func_compute_sigil_inputs(
     );
     uint16_t uniffi_zkpassport_circuits_checksum_func_generate_noir_proof(
     );
@@ -1983,36 +1950,20 @@ NativeZkpassportCircuits::NativeZkpassportCircuits(
             return this->cpp_uniffi_internal_fn_func_ffi__arraybuffer_to_string(rt, thisVal, args, count);
         }
     );
-    props["ubrn_uniffi_zkpassport_circuits_fn_func_compute_base_inputs"] = jsi::Function::createFromHostFunction(
-        rt,
-        jsi::PropNameID::forAscii(rt, "ubrn_uniffi_zkpassport_circuits_fn_func_compute_base_inputs"),
-        20,
-        [this](jsi::Runtime &rt, const jsi::Value &thisVal, const jsi::Value *args, size_t count) -> jsi::Value {
-            return this->cpp_uniffi_zkpassport_circuits_fn_func_compute_base_inputs(rt, thisVal, args, count);
-        }
-    );
-    props["ubrn_uniffi_zkpassport_circuits_fn_func_compute_nullifier"] = jsi::Function::createFromHostFunction(
-        rt,
-        jsi::PropNameID::forAscii(rt, "ubrn_uniffi_zkpassport_circuits_fn_func_compute_nullifier"),
-        3,
-        [this](jsi::Runtime &rt, const jsi::Value &thisVal, const jsi::Value *args, size_t count) -> jsi::Value {
-            return this->cpp_uniffi_zkpassport_circuits_fn_func_compute_nullifier(rt, thisVal, args, count);
-        }
-    );
-    props["ubrn_uniffi_zkpassport_circuits_fn_func_compute_primary_inputs"] = jsi::Function::createFromHostFunction(
-        rt,
-        jsi::PropNameID::forAscii(rt, "ubrn_uniffi_zkpassport_circuits_fn_func_compute_primary_inputs"),
-        20,
-        [this](jsi::Runtime &rt, const jsi::Value &thisVal, const jsi::Value *args, size_t count) -> jsi::Value {
-            return this->cpp_uniffi_zkpassport_circuits_fn_func_compute_primary_inputs(rt, thisVal, args, count);
-        }
-    );
     props["ubrn_uniffi_zkpassport_circuits_fn_func_compute_redc_param"] = jsi::Function::createFromHostFunction(
         rt,
         jsi::PropNameID::forAscii(rt, "ubrn_uniffi_zkpassport_circuits_fn_func_compute_redc_param"),
         1,
         [this](jsi::Runtime &rt, const jsi::Value &thisVal, const jsi::Value *args, size_t count) -> jsi::Value {
             return this->cpp_uniffi_zkpassport_circuits_fn_func_compute_redc_param(rt, thisVal, args, count);
+        }
+    );
+    props["ubrn_uniffi_zkpassport_circuits_fn_func_compute_sigil_inputs"] = jsi::Function::createFromHostFunction(
+        rt,
+        jsi::PropNameID::forAscii(rt, "ubrn_uniffi_zkpassport_circuits_fn_func_compute_sigil_inputs"),
+        20,
+        [this](jsi::Runtime &rt, const jsi::Value &thisVal, const jsi::Value *args, size_t count) -> jsi::Value {
+            return this->cpp_uniffi_zkpassport_circuits_fn_func_compute_sigil_inputs(rt, thisVal, args, count);
         }
     );
     props["ubrn_uniffi_zkpassport_circuits_fn_func_generate_noir_proof"] = jsi::Function::createFromHostFunction(
@@ -2039,36 +1990,20 @@ NativeZkpassportCircuits::NativeZkpassportCircuits(
             return this->cpp_uniffi_zkpassport_circuits_fn_func_verify_noir_proof(rt, thisVal, args, count);
         }
     );
-    props["ubrn_uniffi_zkpassport_circuits_checksum_func_compute_base_inputs"] = jsi::Function::createFromHostFunction(
-        rt,
-        jsi::PropNameID::forAscii(rt, "ubrn_uniffi_zkpassport_circuits_checksum_func_compute_base_inputs"),
-        0,
-        [this](jsi::Runtime &rt, const jsi::Value &thisVal, const jsi::Value *args, size_t count) -> jsi::Value {
-            return this->cpp_uniffi_zkpassport_circuits_checksum_func_compute_base_inputs(rt, thisVal, args, count);
-        }
-    );
-    props["ubrn_uniffi_zkpassport_circuits_checksum_func_compute_nullifier"] = jsi::Function::createFromHostFunction(
-        rt,
-        jsi::PropNameID::forAscii(rt, "ubrn_uniffi_zkpassport_circuits_checksum_func_compute_nullifier"),
-        0,
-        [this](jsi::Runtime &rt, const jsi::Value &thisVal, const jsi::Value *args, size_t count) -> jsi::Value {
-            return this->cpp_uniffi_zkpassport_circuits_checksum_func_compute_nullifier(rt, thisVal, args, count);
-        }
-    );
-    props["ubrn_uniffi_zkpassport_circuits_checksum_func_compute_primary_inputs"] = jsi::Function::createFromHostFunction(
-        rt,
-        jsi::PropNameID::forAscii(rt, "ubrn_uniffi_zkpassport_circuits_checksum_func_compute_primary_inputs"),
-        0,
-        [this](jsi::Runtime &rt, const jsi::Value &thisVal, const jsi::Value *args, size_t count) -> jsi::Value {
-            return this->cpp_uniffi_zkpassport_circuits_checksum_func_compute_primary_inputs(rt, thisVal, args, count);
-        }
-    );
     props["ubrn_uniffi_zkpassport_circuits_checksum_func_compute_redc_param"] = jsi::Function::createFromHostFunction(
         rt,
         jsi::PropNameID::forAscii(rt, "ubrn_uniffi_zkpassport_circuits_checksum_func_compute_redc_param"),
         0,
         [this](jsi::Runtime &rt, const jsi::Value &thisVal, const jsi::Value *args, size_t count) -> jsi::Value {
             return this->cpp_uniffi_zkpassport_circuits_checksum_func_compute_redc_param(rt, thisVal, args, count);
+        }
+    );
+    props["ubrn_uniffi_zkpassport_circuits_checksum_func_compute_sigil_inputs"] = jsi::Function::createFromHostFunction(
+        rt,
+        jsi::PropNameID::forAscii(rt, "ubrn_uniffi_zkpassport_circuits_checksum_func_compute_sigil_inputs"),
+        0,
+        [this](jsi::Runtime &rt, const jsi::Value &thisVal, const jsi::Value *args, size_t count) -> jsi::Value {
+            return this->cpp_uniffi_zkpassport_circuits_checksum_func_compute_sigil_inputs(rt, thisVal, args, count);
         }
     );
     props["ubrn_uniffi_zkpassport_circuits_checksum_func_generate_noir_proof"] = jsi::Function::createFromHostFunction(
@@ -2158,39 +2093,19 @@ jsi::Value NativeZkpassportCircuits::cpp_uniffi_internal_fn_func_ffi__arraybuffe
 }
 
 // Methods calling directly into the uniffi generated C API of the Rust crate.
-jsi::Value NativeZkpassportCircuits::cpp_uniffi_zkpassport_circuits_fn_func_compute_base_inputs(jsi::Runtime& rt, const jsi::Value& thisVal, const jsi::Value* args, size_t count) {
-        RustCallStatus status = uniffi::zkpassport_circuits::Bridging<RustCallStatus>::rustSuccess(rt);
-        auto value = uniffi_zkpassport_circuits_fn_func_compute_base_inputs(uniffi::zkpassport_circuits::Bridging<RustBuffer>::fromJs(rt, callInvoker, args[0]), uniffi::zkpassport_circuits::Bridging<RustBuffer>::fromJs(rt, callInvoker, args[1]), uniffi::zkpassport_circuits::Bridging<RustBuffer>::fromJs(rt, callInvoker, args[2]), uniffi::zkpassport_circuits::Bridging<RustBuffer>::fromJs(rt, callInvoker, args[3]), uniffi_jsi::Bridging<uint32_t>::fromJs(rt, callInvoker, args[4]), uniffi::zkpassport_circuits::Bridging<RustBuffer>::fromJs(rt, callInvoker, args[5]), uniffi::zkpassport_circuits::Bridging<RustBuffer>::fromJs(rt, callInvoker, args[6]), uniffi::zkpassport_circuits::Bridging<RustBuffer>::fromJs(rt, callInvoker, args[7]), uniffi_jsi::Bridging<uint32_t>::fromJs(rt, callInvoker, args[8]), uniffi::zkpassport_circuits::Bridging<RustBuffer>::fromJs(rt, callInvoker, args[9]), uniffi_jsi::Bridging<uint32_t>::fromJs(rt, callInvoker, args[10]), uniffi_jsi::Bridging<uint32_t>::fromJs(rt, callInvoker, args[11]), uniffi::zkpassport_circuits::Bridging<RustBuffer>::fromJs(rt, callInvoker, args[12]), uniffi::zkpassport_circuits::Bridging<RustBuffer>::fromJs(rt, callInvoker, args[13]), uniffi_jsi::Bridging<uint32_t>::fromJs(rt, callInvoker, args[14]), uniffi::zkpassport_circuits::Bridging<RustBuffer>::fromJs(rt, callInvoker, args[15]), uniffi::zkpassport_circuits::Bridging<RustBuffer>::fromJs(rt, callInvoker, args[16]), uniffi_jsi::Bridging<uint32_t>::fromJs(rt, callInvoker, args[17]), uniffi::zkpassport_circuits::Bridging<RustBuffer>::fromJs(rt, callInvoker, args[18]), uniffi::zkpassport_circuits::Bridging<RustBuffer>::fromJs(rt, callInvoker, args[19]), 
-            &status
-        );
-        uniffi::zkpassport_circuits::Bridging<RustCallStatus>::copyIntoJs(rt, callInvoker, status, args[count - 1]);
-
-        
-        return uniffi::zkpassport_circuits::Bridging<RustBuffer>::toJs(rt, callInvoker, value);
-}
-jsi::Value NativeZkpassportCircuits::cpp_uniffi_zkpassport_circuits_fn_func_compute_nullifier(jsi::Runtime& rt, const jsi::Value& thisVal, const jsi::Value* args, size_t count) {
-        RustCallStatus status = uniffi::zkpassport_circuits::Bridging<RustCallStatus>::rustSuccess(rt);
-        auto value = uniffi_zkpassport_circuits_fn_func_compute_nullifier(uniffi::zkpassport_circuits::Bridging<RustBuffer>::fromJs(rt, callInvoker, args[0]), uniffi::zkpassport_circuits::Bridging<RustBuffer>::fromJs(rt, callInvoker, args[1]), uniffi::zkpassport_circuits::Bridging<RustBuffer>::fromJs(rt, callInvoker, args[2]), 
-            &status
-        );
-        uniffi::zkpassport_circuits::Bridging<RustCallStatus>::copyIntoJs(rt, callInvoker, status, args[count - 1]);
-
-        
-        return uniffi::zkpassport_circuits::Bridging<RustBuffer>::toJs(rt, callInvoker, value);
-}
-jsi::Value NativeZkpassportCircuits::cpp_uniffi_zkpassport_circuits_fn_func_compute_primary_inputs(jsi::Runtime& rt, const jsi::Value& thisVal, const jsi::Value* args, size_t count) {
-        RustCallStatus status = uniffi::zkpassport_circuits::Bridging<RustCallStatus>::rustSuccess(rt);
-        auto value = uniffi_zkpassport_circuits_fn_func_compute_primary_inputs(uniffi::zkpassport_circuits::Bridging<RustBuffer>::fromJs(rt, callInvoker, args[0]), uniffi::zkpassport_circuits::Bridging<RustBuffer>::fromJs(rt, callInvoker, args[1]), uniffi::zkpassport_circuits::Bridging<RustBuffer>::fromJs(rt, callInvoker, args[2]), uniffi::zkpassport_circuits::Bridging<RustBuffer>::fromJs(rt, callInvoker, args[3]), uniffi_jsi::Bridging<uint32_t>::fromJs(rt, callInvoker, args[4]), uniffi::zkpassport_circuits::Bridging<RustBuffer>::fromJs(rt, callInvoker, args[5]), uniffi::zkpassport_circuits::Bridging<RustBuffer>::fromJs(rt, callInvoker, args[6]), uniffi::zkpassport_circuits::Bridging<RustBuffer>::fromJs(rt, callInvoker, args[7]), uniffi_jsi::Bridging<uint32_t>::fromJs(rt, callInvoker, args[8]), uniffi::zkpassport_circuits::Bridging<RustBuffer>::fromJs(rt, callInvoker, args[9]), uniffi_jsi::Bridging<uint32_t>::fromJs(rt, callInvoker, args[10]), uniffi_jsi::Bridging<uint32_t>::fromJs(rt, callInvoker, args[11]), uniffi::zkpassport_circuits::Bridging<RustBuffer>::fromJs(rt, callInvoker, args[12]), uniffi::zkpassport_circuits::Bridging<RustBuffer>::fromJs(rt, callInvoker, args[13]), uniffi_jsi::Bridging<uint32_t>::fromJs(rt, callInvoker, args[14]), uniffi::zkpassport_circuits::Bridging<RustBuffer>::fromJs(rt, callInvoker, args[15]), uniffi::zkpassport_circuits::Bridging<RustBuffer>::fromJs(rt, callInvoker, args[16]), uniffi_jsi::Bridging<uint32_t>::fromJs(rt, callInvoker, args[17]), uniffi::zkpassport_circuits::Bridging<RustBuffer>::fromJs(rt, callInvoker, args[18]), uniffi::zkpassport_circuits::Bridging<RustBuffer>::fromJs(rt, callInvoker, args[19]), 
-            &status
-        );
-        uniffi::zkpassport_circuits::Bridging<RustCallStatus>::copyIntoJs(rt, callInvoker, status, args[count - 1]);
-
-        
-        return uniffi::zkpassport_circuits::Bridging<RustBuffer>::toJs(rt, callInvoker, value);
-}
 jsi::Value NativeZkpassportCircuits::cpp_uniffi_zkpassport_circuits_fn_func_compute_redc_param(jsi::Runtime& rt, const jsi::Value& thisVal, const jsi::Value* args, size_t count) {
         RustCallStatus status = uniffi::zkpassport_circuits::Bridging<RustCallStatus>::rustSuccess(rt);
         auto value = uniffi_zkpassport_circuits_fn_func_compute_redc_param(uniffi::zkpassport_circuits::Bridging<RustBuffer>::fromJs(rt, callInvoker, args[0]), 
+            &status
+        );
+        uniffi::zkpassport_circuits::Bridging<RustCallStatus>::copyIntoJs(rt, callInvoker, status, args[count - 1]);
+
+        
+        return uniffi::zkpassport_circuits::Bridging<RustBuffer>::toJs(rt, callInvoker, value);
+}
+jsi::Value NativeZkpassportCircuits::cpp_uniffi_zkpassport_circuits_fn_func_compute_sigil_inputs(jsi::Runtime& rt, const jsi::Value& thisVal, const jsi::Value* args, size_t count) {
+        RustCallStatus status = uniffi::zkpassport_circuits::Bridging<RustCallStatus>::rustSuccess(rt);
+        auto value = uniffi_zkpassport_circuits_fn_func_compute_sigil_inputs(uniffi::zkpassport_circuits::Bridging<RustBuffer>::fromJs(rt, callInvoker, args[0]), uniffi::zkpassport_circuits::Bridging<RustBuffer>::fromJs(rt, callInvoker, args[1]), uniffi::zkpassport_circuits::Bridging<RustBuffer>::fromJs(rt, callInvoker, args[2]), uniffi::zkpassport_circuits::Bridging<RustBuffer>::fromJs(rt, callInvoker, args[3]), uniffi_jsi::Bridging<uint32_t>::fromJs(rt, callInvoker, args[4]), uniffi::zkpassport_circuits::Bridging<RustBuffer>::fromJs(rt, callInvoker, args[5]), uniffi::zkpassport_circuits::Bridging<RustBuffer>::fromJs(rt, callInvoker, args[6]), uniffi::zkpassport_circuits::Bridging<RustBuffer>::fromJs(rt, callInvoker, args[7]), uniffi_jsi::Bridging<uint32_t>::fromJs(rt, callInvoker, args[8]), uniffi::zkpassport_circuits::Bridging<RustBuffer>::fromJs(rt, callInvoker, args[9]), uniffi_jsi::Bridging<uint32_t>::fromJs(rt, callInvoker, args[10]), uniffi_jsi::Bridging<uint32_t>::fromJs(rt, callInvoker, args[11]), uniffi::zkpassport_circuits::Bridging<RustBuffer>::fromJs(rt, callInvoker, args[12]), uniffi::zkpassport_circuits::Bridging<RustBuffer>::fromJs(rt, callInvoker, args[13]), uniffi_jsi::Bridging<uint32_t>::fromJs(rt, callInvoker, args[14]), uniffi::zkpassport_circuits::Bridging<RustBuffer>::fromJs(rt, callInvoker, args[15]), uniffi::zkpassport_circuits::Bridging<RustBuffer>::fromJs(rt, callInvoker, args[16]), uniffi_jsi::Bridging<uint32_t>::fromJs(rt, callInvoker, args[17]), uniffi::zkpassport_circuits::Bridging<RustBuffer>::fromJs(rt, callInvoker, args[18]), uniffi::zkpassport_circuits::Bridging<RustBuffer>::fromJs(rt, callInvoker, args[19]), 
             &status
         );
         uniffi::zkpassport_circuits::Bridging<RustCallStatus>::copyIntoJs(rt, callInvoker, status, args[count - 1]);
@@ -2228,29 +2143,15 @@ jsi::Value NativeZkpassportCircuits::cpp_uniffi_zkpassport_circuits_fn_func_veri
         
         return uniffi_jsi::Bridging<int8_t>::toJs(rt, callInvoker, value);
 }
-jsi::Value NativeZkpassportCircuits::cpp_uniffi_zkpassport_circuits_checksum_func_compute_base_inputs(jsi::Runtime& rt, const jsi::Value& thisVal, const jsi::Value* args, size_t count) {
-        auto value = uniffi_zkpassport_circuits_checksum_func_compute_base_inputs(
-        );
-
-        
-        return uniffi_jsi::Bridging<uint16_t>::toJs(rt, callInvoker, value);
-}
-jsi::Value NativeZkpassportCircuits::cpp_uniffi_zkpassport_circuits_checksum_func_compute_nullifier(jsi::Runtime& rt, const jsi::Value& thisVal, const jsi::Value* args, size_t count) {
-        auto value = uniffi_zkpassport_circuits_checksum_func_compute_nullifier(
-        );
-
-        
-        return uniffi_jsi::Bridging<uint16_t>::toJs(rt, callInvoker, value);
-}
-jsi::Value NativeZkpassportCircuits::cpp_uniffi_zkpassport_circuits_checksum_func_compute_primary_inputs(jsi::Runtime& rt, const jsi::Value& thisVal, const jsi::Value* args, size_t count) {
-        auto value = uniffi_zkpassport_circuits_checksum_func_compute_primary_inputs(
-        );
-
-        
-        return uniffi_jsi::Bridging<uint16_t>::toJs(rt, callInvoker, value);
-}
 jsi::Value NativeZkpassportCircuits::cpp_uniffi_zkpassport_circuits_checksum_func_compute_redc_param(jsi::Runtime& rt, const jsi::Value& thisVal, const jsi::Value* args, size_t count) {
         auto value = uniffi_zkpassport_circuits_checksum_func_compute_redc_param(
+        );
+
+        
+        return uniffi_jsi::Bridging<uint16_t>::toJs(rt, callInvoker, value);
+}
+jsi::Value NativeZkpassportCircuits::cpp_uniffi_zkpassport_circuits_checksum_func_compute_sigil_inputs(jsi::Runtime& rt, const jsi::Value& thisVal, const jsi::Value* args, size_t count) {
+        auto value = uniffi_zkpassport_circuits_checksum_func_compute_sigil_inputs(
         );
 
         

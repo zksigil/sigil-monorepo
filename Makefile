@@ -23,15 +23,14 @@ deps: ## Install all monorepo dependencies
 	pnpm install
 
 # ─── Noir Circuits ────────────────────────────────────────────────────
-circuits: ## Compile Noir circuits and copy to app assets
-	@echo "━━━ Compiling Noir circuits (workspace) ━━━"
+circuits: ## Compile Noir circuit and copy to app assets
+	@echo "━━━ Compiling Noir circuit (workspace) ━━━"
 	cd $(CIRCUITS_SRC) && nargo compile --workspace
 	@echo "━━━ Copying circuit JSON to app assets ━━━"
 	mkdir -p $(APP_ASSETS)
-	cp -f $(CIRCUITS_TARGET)/passport_base.json $(APP_ASSETS)/
-	cp -f $(CIRCUITS_TARGET)/passport_primary.json $(APP_ASSETS)/
+	cp -f $(CIRCUITS_TARGET)/passport_sigil.json $(APP_ASSETS)/
 	cp -f certs/tree-data.json $(APP_ASSETS)/
-	@echo "✅ Circuits built and copied to $(APP_ASSETS)/"
+	@echo "✅ Circuit built and copied to $(APP_ASSETS)/"
 
 # ─── Mopro iOS Framework ──────────────────────────────────────────────
 ios: ## Build Mopro Rust FFI for iOS and copy to app modules
@@ -74,60 +73,37 @@ install-bb: ## Install bb 4.2.0-aztecnr-rc.2 (matches barretenberg-rs used by Mo
 	@rm /tmp/bb-4.2.tar.gz
 	@echo "✅ Installed: $$($(HOME)/.bb-4.2/bb --version)"
 
-bb-vk: circuits ## Generate verification keys from compiled circuits
-	@echo "━━━ Writing base VK ━━━"
-	$(BB) write_vk $(BB_TARGET) -b $(CIRCUITS_TARGET)/passport_base.json -o $(CIRCUITS_TARGET)/vk_base
-	@echo "━━━ Writing primary VK ━━━"
-	$(BB) write_vk $(BB_TARGET) -b $(CIRCUITS_TARGET)/passport_primary.json -o $(CIRCUITS_TARGET)/vk_primary
-	@echo "✅ VKs written to $(CIRCUITS_TARGET)/vk_base and vk_primary"
+bb-vk: circuits ## Generate verification key from compiled circuit
+	@echo "━━━ Writing sigil VK ━━━"
+	$(BB) write_vk $(BB_TARGET) -b $(CIRCUITS_TARGET)/passport_sigil.json -o $(CIRCUITS_TARGET)/vk_sigil
+	@echo "✅ VK written to $(CIRCUITS_TARGET)/vk_sigil"
 
-bb-verifier: bb-vk ## Generate self-contained Solidity verifier contracts from VKs (one per circuit)
-	@echo "━━━ Generating base Solidity verifier ━━━"
-	rm -rf /tmp/bb-out-base && mkdir -p /tmp/bb-out-base
-	$(BB) write_solidity_verifier $(BB_TARGET) -k $(CIRCUITS_TARGET)/vk_base/vk -o /tmp/bb-out-base/Verifier.sol
-	sed 's/contract HonkVerifier /contract BaseUltraHonkVerifier /' /tmp/bb-out-base/Verifier.sol > $(CONTRACTS)/src/verifiers/BaseUltraHonkVerifier.sol
-	@echo "━━━ Generating primary Solidity verifier ━━━"
-	rm -rf /tmp/bb-out-primary && mkdir -p /tmp/bb-out-primary
-	$(BB) write_solidity_verifier $(BB_TARGET) -k $(CIRCUITS_TARGET)/vk_primary/vk -o /tmp/bb-out-primary/Verifier.sol
-	sed 's/contract HonkVerifier /contract PrimaryUltraHonkVerifier /' /tmp/bb-out-primary/Verifier.sol > $(CONTRACTS)/src/verifiers/PrimaryUltraHonkVerifier.sol
-	@echo "✅ Verifiers regenerated in $(CONTRACTS)/src/verifiers/"
+bb-verifier: bb-vk ## Generate self-contained Solidity verifier contract from VK
+	@echo "━━━ Generating sigil Solidity verifier ━━━"
+	rm -rf /tmp/bb-out-sigil && mkdir -p /tmp/bb-out-sigil
+	$(BB) write_solidity_verifier $(BB_TARGET) -k $(CIRCUITS_TARGET)/vk_sigil/vk -o /tmp/bb-out-sigil/Verifier.sol
+	sed 's/contract HonkVerifier /contract SigilUltraHonkVerifier /' /tmp/bb-out-sigil/Verifier.sol > $(CONTRACTS)/src/verifiers/SigilUltraHonkVerifier.sol
+	@echo "✅ Verifier regenerated at $(CONTRACTS)/src/verifiers/SigilUltraHonkVerifier.sol"
 
-bb-prove-base: circuits ## Generate a base proof locally (requires witness file)
-	@echo "━━━ Generating base proof with bb ━━━"
+bb-prove: circuits ## Generate a sigil proof locally (requires witness file)
+	@echo "━━━ Generating sigil proof with bb ━━━"
 	$(BB) prove $(BB_TARGET) \
-		-b $(CIRCUITS_TARGET)/passport_base.json \
-		-w $(CIRCUITS_TARGET)/passport_base.gz \
-		-o $(CIRCUITS_TARGET)/proof_base
-	@echo "✅ Base proof written to $(CIRCUITS_TARGET)/proof_base"
+		-b $(CIRCUITS_TARGET)/passport_sigil.json \
+		-w $(CIRCUITS_TARGET)/passport_sigil.gz \
+		-o $(CIRCUITS_TARGET)/proof_sigil
+	@echo "✅ Sigil proof written to $(CIRCUITS_TARGET)/proof_sigil"
 
-bb-prove-primary: circuits ## Generate a primary proof locally (requires witness file)
-	@echo "━━━ Generating primary proof with bb ━━━"
-	$(BB) prove $(BB_TARGET) \
-		-b $(CIRCUITS_TARGET)/passport_primary.json \
-		-w $(CIRCUITS_TARGET)/passport_primary.gz \
-		-o $(CIRCUITS_TARGET)/proof_primary
-	@echo "✅ Primary proof written to $(CIRCUITS_TARGET)/proof_primary"
-
-bb-verify-base: ## Verify a base proof locally
-	@echo "━━━ Verifying base proof ━━━"
+bb-verify: ## Verify a sigil proof locally
+	@echo "━━━ Verifying sigil proof ━━━"
 	$(BB) verify $(BB_TARGET) \
-		-k $(CIRCUITS_TARGET)/vk_base \
-		-p $(CIRCUITS_TARGET)/proof_base
-	@echo "✅ Base proof verification complete"
+		-k $(CIRCUITS_TARGET)/vk_sigil \
+		-p $(CIRCUITS_TARGET)/proof_sigil
+	@echo "✅ Sigil proof verification complete"
 
-bb-verify-primary: ## Verify a primary proof locally
-	@echo "━━━ Verifying primary proof ━━━"
-	$(BB) verify $(BB_TARGET) \
-		-k $(CIRCUITS_TARGET)/vk_primary \
-		-p $(CIRCUITS_TARGET)/proof_primary
-	@echo "✅ Primary proof verification complete"
-
-bb-gate-count: circuits ## Print gate counts for both circuits
-	@echo "━━━ Base circuit gate count ━━━"
-	$(BB) gates $(BB_TARGET) -b $(CIRCUITS_TARGET)/passport_base.json
-	@echo "━━━ Primary circuit gate count ━━━"
-	$(BB) gates $(BB_TARGET) -b $(CIRCUITS_TARGET)/passport_primary.json
-	@echo "✅ Gate counts printed"
+bb-gate-count: circuits ## Print gate count for the sigil circuit
+	@echo "━━━ Sigil circuit gate count ━━━"
+	$(BB) gates $(BB_TARGET) -b $(CIRCUITS_TARGET)/passport_sigil.json
+	@echo "✅ Gate count printed"
 
 # ─── Smart Contracts ──────────────────────────────────────────────────
 contracts: ## Build contracts and sync ABI to mobile app

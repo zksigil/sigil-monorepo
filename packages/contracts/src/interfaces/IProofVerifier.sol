@@ -3,39 +3,29 @@ pragma solidity ^0.8.28;
 
 /// @title IProofVerifier
 /// @notice Interface for ZK proof verification. Implemented as a separate contract so the
-///         verifier can be swapped when the circuit is upgraded (e.g. stub → real Noir verifier)
+///         verifier can be swapped when the circuit is upgraded (e.g. mock → real Noir verifier)
 ///         without redeploying VerificationRegistry.
 ///
-/// @dev Base and primary tiers have different public inputs, so they get separate functions.
-///      The registry is responsible for checking that hashedAddress == keccak256(msg.sender);
+/// @dev The registry is responsible for checking that hashedAddress == keccak256(msg.sender);
 ///      the verifier only validates the cryptographic proof.
 ///
-///      Public inputs per tier:
+///      Public inputs to the circuit (in declaration order):
+///        [nullifier, epochNullifier, hashedAddress, cscaMerkleRoot]
 ///
-///      Base:    [epochNullifier, hashedAddress, cscaMerkleRoot]
-///      Primary: [nullifier, hashedAddress, cscaMerkleRoot]
-///
-///      Note: passportExpiry is NOT a circuit input — it's checked on-chain before verification.
+///      `epochNullifier` is `bytes32(0)` for renewals — the contract skips daily rate limiting
+///      on renewals, and the circuit allows zero in that slot.
+///      `passportExpiry` is NOT a circuit input — it's checked on-chain before verification.
 interface IProofVerifier {
-    /// @notice Verify a base-tier registration or renewal proof.
-    /// @param hashedAddress keccak256(abi.encodePacked(wallet)) — binds proof to registering wallet.
-    /// @param epochNullifier Rate-limiting nullifier: hash(s, "epoch", day). Zero for renewals.
-    /// @param cscaMerkleRoot CSCA Merkle root from on-chain registry — binds proof to current ICAO ML.
-    /// @param proof Raw proof bytes (format determined by proving system).
-    function verifyBaseProof(
-        bytes32 hashedAddress,
-        bytes32 epochNullifier,
-        bytes32 cscaMerkleRoot,
-        bytes calldata proof
-    ) external view returns (bool);
-
-    /// @notice Verify a primary-tier registration or renewal proof.
-    /// @param hashedAddress keccak256(abi.encodePacked(wallet)) — binds proof to registering wallet.
-    /// @param nullifier Stable primary nullifier derived from the passport secret.
-    /// @param cscaMerkleRoot CSCA Merkle root from on-chain registry — binds proof to current ICAO ML.
-    function verifyPrimaryProof(
+    /// @notice Verify a sigil registration or renewal proof.
+    /// @param hashedAddress   keccak256(abi.encodePacked(wallet)) — binds proof to registering wallet.
+    /// @param nullifier       Stable per-passport nullifier (Poseidon2(s, 1)).
+    /// @param epochNullifier  Daily-rate-limit nullifier: hash(s, "epoch", day). Zero on renewals.
+    /// @param cscaMerkleRoot  CSCA Merkle root from on-chain registry — binds proof to current ICAO ML.
+    /// @param proof           Raw proof bytes (format determined by proving system).
+    function verifyProof(
         bytes32 hashedAddress,
         bytes32 nullifier,
+        bytes32 epochNullifier,
         bytes32 cscaMerkleRoot,
         bytes calldata proof
     ) external view returns (bool);

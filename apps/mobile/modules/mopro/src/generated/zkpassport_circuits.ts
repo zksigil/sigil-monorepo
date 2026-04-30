@@ -60,10 +60,35 @@ const uniffiIsDebug =
 // Public interface members begin here.
 
 /**
- * Compute the flat witness vector for the base-tier circuit.
+ * Compute the Barrett reduction parameter for an RSA modulus.
  *
- * Returns `BaseInputs` containing the full ordered flat array (private then public)
- * ready to pass to `generate_noir_proof`, plus the computed `epoch_nullifier`.
+ * Supports both RSA-2048 (256 bytes) and RSA-4096 (512 bytes).
+ *
+ * `redc_param = floor(2^(2*bits + BARRETT_REDUCTION_OVERFLOW_BITS) / modulus)`
+ *
+ * `BARRETT_REDUCTION_OVERFLOW_BITS = 6` matches noir-bignum >= v0.9.x.
+ * (v0.7.3 used 4 -- bumping noir-bignum changed this constant.)
+ *
+ * Returns N+1 bytes (big-endian): 257 bytes for 2048-bit, 513 bytes for 4096-bit.
+ */
+export function computeRedcParam(modulusBytes: ArrayBuffer): ArrayBuffer /*throws*/ {
+    return FfiConverterArrayBuffer.lift(
+        uniffiCaller.rustCallWithError(
+            /*liftError:*/ FfiConverterTypeMoproError.lift.bind(FfiConverterTypeMoproError),
+            /*caller:*/ (callStatus) => {
+                return nativeModule().ubrn_uniffi_zkpassport_circuits_fn_func_compute_redc_param(
+        FfiConverterArrayBuffer.lower(modulusBytes),
+                callStatus);
+            },
+            /*liftString:*/ FfiConverterString.lift,
+    ));
+    }
+/**
+ * Compute the flat witness vector for the unified sigil circuit.
+ *
+ * Returns `SigilInputs` containing the full ordered flat array (private then public)
+ * ready to pass to `generate_noir_proof`, plus the computed `nullifier` and
+ * `epoch_nullifier` for on-chain use.
  *
  * Input order in circuit ABI:
  * private: dg1_hash, sod_hash, epoch_day,
@@ -72,14 +97,14 @@ const uniffiIsDebug =
  * dsc_tbs[1536], dsc_tbs_len, dsc_pubkey_offset,
  * csca_pubkey[512], csca_redc_param[513], csca_exponent, csca_signature[512],
  * csca_merkle_siblings[9], csca_leaf_index
- * public:  epoch_nullifier, hashed_address, csca_merkle_root
+ * public:  nullifier, epoch_nullifier, hashed_address, csca_merkle_root
  */
-export function computeBaseInputs(dg1Hash: string, sodHash: string, epochDay: string, signedAttrs: ArrayBuffer, signedAttrsLen: /*u32*/number, signature: ArrayBuffer, pubkey: ArrayBuffer, redcParam: ArrayBuffer, exponent: /*u32*/number, dscTbs: ArrayBuffer, dscTbsLen: /*u32*/number, dscPubkeyOffset: /*u32*/number, cscaPubkey: ArrayBuffer, cscaRedcParam: ArrayBuffer, cscaExponent: /*u32*/number, cscaSignature: ArrayBuffer, cscaMerkleSiblings: Array<string>, cscaLeafIndex: /*u32*/number, hashedAddress: string, cscaMerkleRoot: string): BaseInputs /*throws*/ {
-    return FfiConverterTypeBaseInputs.lift(
+export function computeSigilInputs(dg1Hash: string, sodHash: string, epochDay: string, signedAttrs: ArrayBuffer, signedAttrsLen: /*u32*/number, signature: ArrayBuffer, pubkey: ArrayBuffer, redcParam: ArrayBuffer, exponent: /*u32*/number, dscTbs: ArrayBuffer, dscTbsLen: /*u32*/number, dscPubkeyOffset: /*u32*/number, cscaPubkey: ArrayBuffer, cscaRedcParam: ArrayBuffer, cscaExponent: /*u32*/number, cscaSignature: ArrayBuffer, cscaMerkleSiblings: Array<string>, cscaLeafIndex: /*u32*/number, hashedAddress: string, cscaMerkleRoot: string): SigilInputs /*throws*/ {
+    return FfiConverterTypeSigilInputs.lift(
         uniffiCaller.rustCallWithError(
             /*liftError:*/ FfiConverterTypeMoproError.lift.bind(FfiConverterTypeMoproError),
             /*caller:*/ (callStatus) => {
-                return nativeModule().ubrn_uniffi_zkpassport_circuits_fn_func_compute_base_inputs(
+                return nativeModule().ubrn_uniffi_zkpassport_circuits_fn_func_compute_sigil_inputs(
         FfiConverterString.lower(dg1Hash),
         FfiConverterString.lower(sodHash),
         FfiConverterString.lower(epochDay),
@@ -106,100 +131,9 @@ export function computeBaseInputs(dg1Hash: string, sodHash: string, epochDay: st
     ));
     }
 /**
- * Compute just the nullifier for a given nonce (used for nonce recovery).
- *
- * nullifier = Poseidon2([Poseidon2([dg1_hash, sod_hash]), nonce])
- *
- * This avoids requiring RSA fields when we only need the nullifier.
- */
-export function computeNullifier(dg1Hash: string, sodHash: string, nonce: string): string /*throws*/ {
-    return FfiConverterString.lift(
-        uniffiCaller.rustCallWithError(
-            /*liftError:*/ FfiConverterTypeMoproError.lift.bind(FfiConverterTypeMoproError),
-            /*caller:*/ (callStatus) => {
-                return nativeModule().ubrn_uniffi_zkpassport_circuits_fn_func_compute_nullifier(
-        FfiConverterString.lower(dg1Hash),
-        FfiConverterString.lower(sodHash),
-        FfiConverterString.lower(nonce),
-                callStatus);
-            },
-            /*liftString:*/ FfiConverterString.lift,
-    ));
-    }
-/**
- * Compute the flat witness vector for the primary-tier circuit.
- *
- * Returns `PrimaryInputs` with the full ordered flat array plus the deterministic
- * `nullifier` as a decimal string for on-chain use.
- *
- * Input order in circuit ABI:
- * private: dg1_hash, sod_hash, nonce,
- * signed_attrs[512], signed_attrs_len, signature[256],
- * pubkey[256], redc_param[257], exponent,
- * dsc_tbs[1536], dsc_tbs_len, dsc_pubkey_offset,
- * csca_pubkey[512], csca_redc_param[513], csca_exponent, csca_signature[512],
- * csca_merkle_siblings[9], csca_leaf_index
- * public:  nullifier, hashed_address, csca_merkle_root
- */
-export function computePrimaryInputs(dg1Hash: string, sodHash: string, nonce: string, signedAttrs: ArrayBuffer, signedAttrsLen: /*u32*/number, signature: ArrayBuffer, pubkey: ArrayBuffer, redcParam: ArrayBuffer, exponent: /*u32*/number, dscTbs: ArrayBuffer, dscTbsLen: /*u32*/number, dscPubkeyOffset: /*u32*/number, cscaPubkey: ArrayBuffer, cscaRedcParam: ArrayBuffer, cscaExponent: /*u32*/number, cscaSignature: ArrayBuffer, cscaMerkleSiblings: Array<string>, cscaLeafIndex: /*u32*/number, hashedAddress: string, cscaMerkleRoot: string): PrimaryInputs /*throws*/ {
-    return FfiConverterTypePrimaryInputs.lift(
-        uniffiCaller.rustCallWithError(
-            /*liftError:*/ FfiConverterTypeMoproError.lift.bind(FfiConverterTypeMoproError),
-            /*caller:*/ (callStatus) => {
-                return nativeModule().ubrn_uniffi_zkpassport_circuits_fn_func_compute_primary_inputs(
-        FfiConverterString.lower(dg1Hash),
-        FfiConverterString.lower(sodHash),
-        FfiConverterString.lower(nonce),
-        FfiConverterArrayBuffer.lower(signedAttrs),
-        FfiConverterUInt32.lower(signedAttrsLen),
-        FfiConverterArrayBuffer.lower(signature),
-        FfiConverterArrayBuffer.lower(pubkey),
-        FfiConverterArrayBuffer.lower(redcParam),
-        FfiConverterUInt32.lower(exponent),
-        FfiConverterArrayBuffer.lower(dscTbs),
-        FfiConverterUInt32.lower(dscTbsLen),
-        FfiConverterUInt32.lower(dscPubkeyOffset),
-        FfiConverterArrayBuffer.lower(cscaPubkey),
-        FfiConverterArrayBuffer.lower(cscaRedcParam),
-        FfiConverterUInt32.lower(cscaExponent),
-        FfiConverterArrayBuffer.lower(cscaSignature),
-        FfiConverterArrayString.lower(cscaMerkleSiblings),
-        FfiConverterUInt32.lower(cscaLeafIndex),
-        FfiConverterString.lower(hashedAddress),
-        FfiConverterString.lower(cscaMerkleRoot),
-                callStatus);
-            },
-            /*liftString:*/ FfiConverterString.lift,
-    ));
-    }
-/**
- * Compute the Barrett reduction parameter for an RSA modulus.
- *
- * Supports both RSA-2048 (256 bytes) and RSA-4096 (512 bytes).
- *
- * `redc_param = floor(2^(2*bits + BARRETT_REDUCTION_OVERFLOW_BITS) / modulus)`
- *
- * `BARRETT_REDUCTION_OVERFLOW_BITS = 6` matches noir-bignum >= v0.9.x.
- * (v0.7.3 used 4 — bumping noir-bignum changed this constant.)
- *
- * Returns N+1 bytes (big-endian): 257 bytes for 2048-bit, 513 bytes for 4096-bit.
- */
-export function computeRedcParam(modulusBytes: ArrayBuffer): ArrayBuffer /*throws*/ {
-    return FfiConverterArrayBuffer.lift(
-        uniffiCaller.rustCallWithError(
-            /*liftError:*/ FfiConverterTypeMoproError.lift.bind(FfiConverterTypeMoproError),
-            /*caller:*/ (callStatus) => {
-                return nativeModule().ubrn_uniffi_zkpassport_circuits_fn_func_compute_redc_param(
-        FfiConverterArrayBuffer.lower(modulusBytes),
-                callStatus);
-            },
-            /*liftString:*/ FfiConverterString.lift,
-    ));
-    }
-/**
  * Generate an UltraHonk-Keccak proof for a compiled Noir circuit.
  *
- * `inputs` — flat ordered string array matching the circuit's private + public
+ * `inputs` -- flat ordered string array matching the circuit's private + public
  * input declaration order (private inputs first, then public).
  * Each value is a decimal field element string.
  */
@@ -223,8 +157,8 @@ export function generateNoirProof(circuitPath: string, srsPath: string | undefin
 /**
  * Get the UltraHonk-Keccak verification key for a compiled Noir circuit.
  *
- * `circuit_path` — absolute path to the nargo-compiled .json artifact.
- * `srs_path`     — optional path to the SRS file. Pass None to use the
+ * `circuit_path` -- absolute path to the nargo-compiled .json artifact.
+ * `srs_path`     -- optional path to the SRS file. Pass None to use the
  * default SRS (downloaded automatically on first call).
  */
 export function getNoirVerificationKey(circuitPath: string, srsPath: string | undefined, onChain: boolean, lowMemoryMode: boolean): ArrayBuffer /*throws*/ {
@@ -243,7 +177,7 @@ export function getNoirVerificationKey(circuitPath: string, srsPath: string | un
     ));
     }
 /**
- * Verify an UltraHonk-Keccak proof locally (optional — the contract verifies on-chain).
+ * Verify an UltraHonk-Keccak proof locally (optional -- the contract verifies on-chain).
  */
 export function verifyNoirProof(circuitPath: string, proof: ArrayBuffer, onChain: boolean, vk: ArrayBuffer, lowMemoryMode: boolean): boolean /*throws*/ {
     return FfiConverterBool.lift(
@@ -270,38 +204,43 @@ export function verifyNoirProof(circuitPath: string, proof: ArrayBuffer, onChain
 
 
 /**
- * Computed inputs for the base-tier circuit, ready to pass to generate_noir_proof.
+ * Computed inputs for the unified sigil circuit, ready to pass to generate_noir_proof.
  */
-export type BaseInputs = {
+export type SigilInputs = {
     /**
      * Flat ordered string array for generate_noir_proof: private first, then public.
      */
     inputs: Array<string>,
     /**
-     * epoch_nullifier as decimal string (= Poseidon2([s, epoch_day])).
-     * Also sent on-chain as the rate-limiting key.
+     * Stable per-passport nullifier as decimal string (= Poseidon2([s, 1])).
+     * Sent on-chain as the wallet's sigil identity.
+     */
+    nullifier: string,
+    /**
+     * Daily epoch nullifier as decimal string (= Poseidon2([s, epoch_day])).
+     * Sent on-chain as the rate-limiting key.
      */
     epochNullifier: string
 }
 
 /**
- * Generated factory for {@link BaseInputs} record objects.
+ * Generated factory for {@link SigilInputs} record objects.
  */
-export const BaseInputs = (() => {
+export const SigilInputs = (() => {
     const defaults = () => ({
     });
     const create = (() => {
-        return uniffiCreateRecord<BaseInputs, ReturnType<typeof defaults>>(defaults);
+        return uniffiCreateRecord<SigilInputs, ReturnType<typeof defaults>>(defaults);
     })();
     return Object.freeze({
         /**
-         * Create a frozen instance of {@link BaseInputs}, with defaults specified
+         * Create a frozen instance of {@link SigilInputs}, with defaults specified
          * in Rust, in the {@link zkpassport_circuits} crate.
          */
         create,
 
         /**
-         * Create a frozen instance of {@link BaseInputs}, with defaults specified
+         * Create a frozen instance of {@link SigilInputs}, with defaults specified
          * in Rust, in the {@link zkpassport_circuits} crate.
          */
         new: create,
@@ -309,92 +248,29 @@ export const BaseInputs = (() => {
         /**
          * Defaults specified in the {@link zkpassport_circuits} crate.
          */
-        defaults: () => Object.freeze(defaults()) as Partial<BaseInputs>,
+        defaults: () => Object.freeze(defaults()) as Partial<SigilInputs>,
     });
 })();
 
-const FfiConverterTypeBaseInputs = (() => {
-    type TypeName = BaseInputs;
+const FfiConverterTypeSigilInputs = (() => {
+    type TypeName = SigilInputs;
     class FFIConverter extends AbstractFfiConverterByteArray<TypeName> {
         read(from: RustBuffer): TypeName {
             return {
                 inputs: FfiConverterArrayString.read(from), 
+                nullifier: FfiConverterString.read(from), 
                 epochNullifier: FfiConverterString.read(from)
             };
         }
         write(value: TypeName, into: RustBuffer): void {
             FfiConverterArrayString.write(value.inputs, into);
+            FfiConverterString.write(value.nullifier, into);
             FfiConverterString.write(value.epochNullifier, into);
         }
         allocationSize(value: TypeName): number {
             return FfiConverterArrayString.allocationSize(value.inputs) + 
+            FfiConverterString.allocationSize(value.nullifier) + 
             FfiConverterString.allocationSize(value.epochNullifier);
-            
-        }
-    };
-    return new FFIConverter();
-})();
-
-
-/**
- * Computed inputs for the primary-tier circuit.
- */
-export type PrimaryInputs = {
-    /**
-     * Flat ordered string array for generate_noir_proof.
-     */
-    inputs: Array<string>,
-    /**
-     * nullifier as decimal string (= Poseidon2([s, nonce])).
-     */
-    nullifier: string
-}
-
-/**
- * Generated factory for {@link PrimaryInputs} record objects.
- */
-export const PrimaryInputs = (() => {
-    const defaults = () => ({
-    });
-    const create = (() => {
-        return uniffiCreateRecord<PrimaryInputs, ReturnType<typeof defaults>>(defaults);
-    })();
-    return Object.freeze({
-        /**
-         * Create a frozen instance of {@link PrimaryInputs}, with defaults specified
-         * in Rust, in the {@link zkpassport_circuits} crate.
-         */
-        create,
-
-        /**
-         * Create a frozen instance of {@link PrimaryInputs}, with defaults specified
-         * in Rust, in the {@link zkpassport_circuits} crate.
-         */
-        new: create,
-
-        /**
-         * Defaults specified in the {@link zkpassport_circuits} crate.
-         */
-        defaults: () => Object.freeze(defaults()) as Partial<PrimaryInputs>,
-    });
-})();
-
-const FfiConverterTypePrimaryInputs = (() => {
-    type TypeName = PrimaryInputs;
-    class FFIConverter extends AbstractFfiConverterByteArray<TypeName> {
-        read(from: RustBuffer): TypeName {
-            return {
-                inputs: FfiConverterArrayString.read(from), 
-                nullifier: FfiConverterString.read(from)
-            };
-        }
-        write(value: TypeName, into: RustBuffer): void {
-            FfiConverterArrayString.write(value.inputs, into);
-            FfiConverterString.write(value.nullifier, into);
-        }
-        allocationSize(value: TypeName): number {
-            return FfiConverterArrayString.allocationSize(value.inputs) + 
-            FfiConverterString.allocationSize(value.nullifier);
             
         }
     };
@@ -550,25 +426,19 @@ function uniffiEnsureInitialized() {
     if (bindingsContractVersion !== scaffoldingContractVersion) {
         throw new UniffiInternalError.ContractVersionMismatch(scaffoldingContractVersion, bindingsContractVersion);
     }
-    if (nativeModule().ubrn_uniffi_zkpassport_circuits_checksum_func_compute_base_inputs() !== 1069) {
-        throw new UniffiInternalError.ApiChecksumMismatch("uniffi_zkpassport_circuits_checksum_func_compute_base_inputs");
-    }
-    if (nativeModule().ubrn_uniffi_zkpassport_circuits_checksum_func_compute_nullifier() !== 14563) {
-        throw new UniffiInternalError.ApiChecksumMismatch("uniffi_zkpassport_circuits_checksum_func_compute_nullifier");
-    }
-    if (nativeModule().ubrn_uniffi_zkpassport_circuits_checksum_func_compute_primary_inputs() !== 18519) {
-        throw new UniffiInternalError.ApiChecksumMismatch("uniffi_zkpassport_circuits_checksum_func_compute_primary_inputs");
-    }
-    if (nativeModule().ubrn_uniffi_zkpassport_circuits_checksum_func_compute_redc_param() !== 42320) {
+    if (nativeModule().ubrn_uniffi_zkpassport_circuits_checksum_func_compute_redc_param() !== 59430) {
         throw new UniffiInternalError.ApiChecksumMismatch("uniffi_zkpassport_circuits_checksum_func_compute_redc_param");
     }
-    if (nativeModule().ubrn_uniffi_zkpassport_circuits_checksum_func_generate_noir_proof() !== 9753) {
+    if (nativeModule().ubrn_uniffi_zkpassport_circuits_checksum_func_compute_sigil_inputs() !== 48585) {
+        throw new UniffiInternalError.ApiChecksumMismatch("uniffi_zkpassport_circuits_checksum_func_compute_sigil_inputs");
+    }
+    if (nativeModule().ubrn_uniffi_zkpassport_circuits_checksum_func_generate_noir_proof() !== 35127) {
         throw new UniffiInternalError.ApiChecksumMismatch("uniffi_zkpassport_circuits_checksum_func_generate_noir_proof");
     }
-    if (nativeModule().ubrn_uniffi_zkpassport_circuits_checksum_func_get_noir_verification_key() !== 38757) {
+    if (nativeModule().ubrn_uniffi_zkpassport_circuits_checksum_func_get_noir_verification_key() !== 5025) {
         throw new UniffiInternalError.ApiChecksumMismatch("uniffi_zkpassport_circuits_checksum_func_get_noir_verification_key");
     }
-    if (nativeModule().ubrn_uniffi_zkpassport_circuits_checksum_func_verify_noir_proof() !== 21733) {
+    if (nativeModule().ubrn_uniffi_zkpassport_circuits_checksum_func_verify_noir_proof() !== 9050) {
         throw new UniffiInternalError.ApiChecksumMismatch("uniffi_zkpassport_circuits_checksum_func_verify_noir_proof");
     }
 
@@ -577,7 +447,6 @@ function uniffiEnsureInitialized() {
 export default Object.freeze({
   initialize: uniffiEnsureInitialized,
   converters: {
-    FfiConverterTypeBaseInputs,
-    FfiConverterTypePrimaryInputs,
+    FfiConverterTypeSigilInputs,
   }
 });

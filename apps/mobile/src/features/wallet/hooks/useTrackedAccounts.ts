@@ -12,14 +12,12 @@ import type { SupportedChainId } from '../../../shared/constants/chains';
 export interface TrackedAccount {
   address: `0x${string}`;
   shortAddress: string;
-  /** Base tier (proof of personhood, multiple allowed). */
-  isBaseVerified: boolean;
-  baseExpiry: bigint | null;
-  /** Unique tier (sybil resistance, one per passport). */
-  isUniqueVerified: boolean;
-  uniqueExpiry: bigint | null;
-  /** True if at least one tier is verified. */
-  hasAnyVerification: boolean;
+  /** True if this wallet has an active sigil registration. */
+  isVerified: boolean;
+  /** Sigil expiry (0 if never registered). */
+  expiry: bigint | null;
+  /** The passport nullifier this wallet is registered under (zero hash if none). */
+  nullifier: `0x${string}` | null;
 }
 
 function isSupportedChain(chainId: number): chainId is SupportedChainId {
@@ -32,6 +30,8 @@ export function formatQuarter(timestamp: bigint): string {
   const q = Math.floor(date.getMonth() / 3) + 1;
   return `Q${q} ${date.getFullYear()}`;
 }
+
+const ZERO_NULLIFIER = '0x0000000000000000000000000000000000000000000000000000000000000000' as `0x${string}`;
 
 // ---------------------------------------------------------------------------
 // Standalone viem clients — bypass wagmi/WalletConnect transport so reads
@@ -62,7 +62,6 @@ export function useTrackedAccounts(): {
   const chainId = useChainId();
   const { addresses } = useAccount();
 
-  // Deduplicate wallet addresses and keep a stable order.
   const stableOrderRef = useRef<`0x${string}`[] | null>(null);
   const walletAddresses = useMemo<`0x${string}`[]>(() => {
     const deduped = addresses ? ([...new Set(addresses)] as `0x${string}`[]) : [];
@@ -91,11 +90,9 @@ export function useTrackedAccounts(): {
       setAccounts(walletAddresses.map((addr) => ({
         address: addr,
         shortAddress: `${addr.slice(0, 6)}...${addr.slice(-4)}`,
-        isBaseVerified: false,
-        baseExpiry: null,
-        isUniqueVerified: false,
-        uniqueExpiry: null,
-        hasAnyVerification: false,
+        isVerified: false,
+        expiry: null,
+        nullifier: null,
       })));
       setIsLoading(false);
       return;
@@ -108,13 +105,12 @@ export function useTrackedAccounts(): {
     if (contractAddress === '0x0000000000000000000000000000000000000000') { setIsLoading(false); return; }
 
     const id = ++fetchIdRef.current;
-    // Only show loading spinner on first fetch — subsequent refetches update silently
     if (!hasFetchedRef.current) setIsLoading(true);
 
     try {
       const results = await Promise.all(
         walletAddresses.map(async (addr): Promise<TrackedAccount> => {
-          const [isBase, isPrimary, baseExp, primaryExp] = await Promise.all([
+          const [verified, expiry, nullifier] = await Promise.all([
             client.readContract({
               address: contractAddress,
               abi: VERIFICATION_REGISTRY_ABI,
@@ -124,36 +120,28 @@ export function useTrackedAccounts(): {
             client.readContract({
               address: contractAddress,
               abi: VERIFICATION_REGISTRY_ABI,
-              functionName: 'isPrimaryVerified',
-              args: [addr],
-            }).catch(() => false as boolean),
-            client.readContract({
-              address: contractAddress,
-              abi: VERIFICATION_REGISTRY_ABI,
-              functionName: 'getBaseExpiry',
+              functionName: 'getExpiry',
               args: [addr],
             }).catch(() => null as bigint | null),
             client.readContract({
               address: contractAddress,
               abi: VERIFICATION_REGISTRY_ABI,
-              functionName: 'getPrimaryExpiry',
+              functionName: 'nullifierOf',
               args: [addr],
-            }).catch(() => null as bigint | null),
+            }).catch(() => null as `0x${string}` | null),
           ]);
 
+          const nullifierVal = nullifier as `0x${string}` | null;
           return {
             address: addr,
             shortAddress: `${addr.slice(0, 6)}...${addr.slice(-4)}`,
-            isBaseVerified: isBase as boolean,
-            baseExpiry: baseExp as bigint | null,
-            isUniqueVerified: isPrimary as boolean,
-            uniqueExpiry: primaryExp as bigint | null,
-            hasAnyVerification: (isBase as boolean) || (isPrimary as boolean),
+            isVerified: verified as boolean,
+            expiry: expiry as bigint | null,
+            nullifier: nullifierVal && nullifierVal !== ZERO_NULLIFIER ? nullifierVal : null,
           };
         }),
       );
 
-      // Only apply if this is still the latest fetch
       if (id === fetchIdRef.current) {
         hasFetchedRef.current = true;
         setAccounts(results);
@@ -167,12 +155,10 @@ export function useTrackedAccounts(): {
     }
   }, [chainId, walletAddresses]);
 
-  // Fetch on mount and when addresses/chain change
   useEffect(() => {
     void fetchStatus();
   }, [fetchStatus]);
 
-  // Re-fetch when app returns to foreground
   useEffect(() => {
     const sub = AppState.addEventListener('change', (state) => {
       if (state === 'active') {

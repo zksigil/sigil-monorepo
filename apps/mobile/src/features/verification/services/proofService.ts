@@ -1,32 +1,29 @@
 /**
- * ZK proof generation service — Phase 3 real implementation.
+ * ZK proof generation service - Phase 4 single-tier implementation.
  *
  * Uses Mopro React Native SDK (Rust + Barretenberg backend) to generate
- * UltraHonk-Keccak proofs for both base-tier and primary-tier circuits.
+ * UltraHonk-Keccak proofs for the unified sigil circuit.
  *
  * Passport data NEVER leaves the device. All hashing and proving is done
  * on-device in native Rust code.
  *
  * Circuit inputs:
- *   Base tier:    private=[dg1_hash, sod_hash, epoch_day,
- *                          signed_attrs[512], signed_attrs_len, signature[256], pubkey[256], redc_param[257], exponent,
- *                          dsc_tbs[1536], dsc_tbs_len, dsc_pubkey_offset,
- *                          csca_pubkey[512], csca_redc_param[513], csca_exponent, csca_signature[512],
- *                          csca_merkle_siblings[9], csca_leaf_index]
- *                 public=[epoch_nullifier, hashed_address, csca_merkle_root]
- *   Primary tier: same private layout (nonce instead of epoch_day)
- *                 public=[nullifier, hashed_address, csca_merkle_root]
+ *   private: dg1_hash, sod_hash, epoch_day,
+ *            signed_attrs[512], signed_attrs_len, signature[256], pubkey[256], redc_param[257], exponent,
+ *            dsc_tbs[1536], dsc_tbs_len, dsc_pubkey_offset,
+ *            csca_pubkey[512], csca_redc_param[513], csca_exponent, csca_signature[512],
+ *            csca_merkle_siblings[9], csca_leaf_index
+ *   public:  nullifier, epoch_nullifier, hashed_address, csca_merkle_root
  *
- *   The primary nullifier is deterministic per passport (Poseidon2(s, "primary"));
- *   re-registering the same passport reuses the same nullifier value.
+ * The stable nullifier (Poseidon2(passport_secret, 1)) is the on-chain sigil identity.
+ * The epoch_nullifier (Poseidon2(passport_secret, epoch_day)) is the daily rate-limit key.
  *
- * Requires `mopro build --platforms ios` (or android) to have been run so that
- * apps/mobile/modules/mopro is populated.
+ * Requires `make ios` to have been run so that apps/mobile/modules/mopro is populated.
  */
 
 import { sha256 } from '@noble/hashes/sha2';
 import { keccak256, encodePacked, type Hex } from 'viem';
-import type { BaseZKProof, PrimaryZKProof, ZKProof } from '../../../shared/types/verification';
+import type { SigilZKProof, ZKProof } from '../../../shared/types/verification';
 import { parseSod, verifyDSCChain, extractDSCChainData } from '../../../infrastructure/sod/parseSod';
 import { findCSCAMerkleProof, CSCA_MERKLE_ROOT } from './cscaMerkleProof';
 export { CSCA_MERKLE_ROOT };
@@ -36,25 +33,21 @@ export { CSCA_MERKLE_ROOT };
 // ---------------------------------------------------------------------------
 const BN254_PRIME = 21888242871839275222246405745257275088548364400416034343698204186575808495617n;
 
-/** Must match SIGNED_ATTRS_MAX_LEN in the Noir circuits. */
+/** Must match SIGNED_ATTRS_MAX_LEN in the Noir circuit. */
 const SIGNED_ATTRS_MAX_LEN = 512;
 
-/** Must match DSC_TBS_MAX_LEN in the Noir circuits. */
+/** Must match DSC_TBS_MAX_LEN in the Noir circuit. */
 const DSC_TBS_MAX_LEN = 1536;
 
 /** RSA-4096 modulus = 512 bytes, redc_param = 513 bytes, signature = 512 bytes. */
 const CSCA_MODULUS_LEN = 512;
-const CSCA_REDC_PARAM_LEN = 513;
 const CSCA_SIGNATURE_LEN = 512;
 
 /**
- * Phase 3c expected input counts:
- *   Base:    3 + 512+1+256+256+257+1 + 1536+1+1+512+513+1+512 + 9+1 + 3 = 4375
- *   Primary: 3 + 512+1+256+256+257+1 + 1536+1+1+512+513+1+512 + 9+1 + 3 = 4375
- *   Both circuits emit 3 public inputs: [nullifier|epochNullifier, hashedAddress, cscaMerkleRoot].
+ * Sigil circuit emits 4 user public inputs:
+ *   [nullifier, epoch_nullifier, hashed_address, csca_merkle_root]
  */
-const EXPECTED_BASE_INPUTS = 4375;
-const EXPECTED_PRIMARY_INPUTS = 4375;
+const USER_PUBLIC_INPUTS_COUNT = 4;
 
 // ---------------------------------------------------------------------------
 // Public interface
@@ -68,34 +61,22 @@ export interface ProofInput {
   passportExpiryUnix?: number;
 }
 
-export interface BaseProofOutput {
-  type: 'base';
-  zkProof: BaseZKProof;
+export interface SigilProofOutput {
+  zkProof: SigilZKProof;
+  nullifier: string;
   epochNullifier: string;
   cscaMerkleRoot: `0x${string}`;
 }
-
-export interface PrimaryProofOutput {
-  type: 'primary';
-  zkProof: PrimaryZKProof;
-  nullifier: string;
-  cscaMerkleRoot: `0x${string}`;
-}
-
-export type ProofOutput = BaseProofOutput | PrimaryProofOutput;
 
 // ---------------------------------------------------------------------------
 // Circuit file paths (bundled in app assets, copied to documents dir at runtime)
 // ---------------------------------------------------------------------------
 
-/** These paths are set after the circuit JSONs are copied to the writable FS. */
-let BASE_CIRCUIT_PATH: string | null = null;
-let PRIMARY_CIRCUIT_PATH: string | null = null;
+let SIGIL_CIRCUIT_PATH: string | null = null;
 let SRS_PATH: string | null = null;
 
-export function setCircuitPaths(basePath: string, primaryPath: string, srsPath?: string): void {
-  BASE_CIRCUIT_PATH = basePath;
-  PRIMARY_CIRCUIT_PATH = primaryPath;
+export function setCircuitPaths(sigilPath: string, srsPath?: string): void {
+  SIGIL_CIRCUIT_PATH = sigilPath;
   SRS_PATH = srsPath ?? null;
 }
 
@@ -107,11 +88,11 @@ export function testMoproModuleLoading(): boolean {
   try {
     console.log('[TEST] Testing Mopro native module loading...');
     const Mopro = loadMoproModule();
-    console.log('[TEST] ✅ Mopro module loaded successfully');
+    console.log('[TEST] Mopro module loaded successfully');
     console.log('[TEST] Available functions:', Object.keys(Mopro).filter(key => typeof (Mopro as unknown as Record<string, unknown>)[key] === 'function'));
     return true;
   } catch (e) {
-    console.error('[TEST] ❌ Mopro module loading failed:', e);
+    console.error('[TEST] Mopro module loading failed:', e);
     return false;
   }
 }
@@ -121,14 +102,14 @@ export function testMoproModuleLoading(): boolean {
 // ---------------------------------------------------------------------------
 
 /**
- * Generate a base-tier UltraHonk-Keccak proof.
+ * Generate a sigil UltraHonk-Keccak proof.
  *
  * Requires mopro build to have been run so that the native module is available.
  * Throws `MoproNotAvailable` if the native module cannot be loaded.
  */
-export async function generateBaseProof(input: ProofInput): Promise<BaseProofOutput> {
-  if (!BASE_CIRCUIT_PATH) {
-    throw new Error('Base circuit path not set. Call setCircuitPaths() first.');
+export async function generateSigilProof(input: ProofInput): Promise<SigilProofOutput> {
+  if (!SIGIL_CIRCUIT_PATH) {
+    throw new Error('Sigil circuit path not set. Call setCircuitPaths() first.');
   }
 
   const Mopro = loadMoproModule();
@@ -142,56 +123,23 @@ export async function generateBaseProof(input: ProofInput): Promise<BaseProofOut
   // Parse SOD to extract RSA fields
   console.log('[PROOF] Parsing SOD for RSA verification...');
   const sod = parseSod(input.rawSODHex);
-  console.log('[PROOF-DBG] Parsed SOD exponent:', sod.exponent);
-  console.log('[PROOF-DBG] Parsed SOD signedAttrs length:', sod.signedAttrs.length);
-  console.log('[DEBUG-SIG] signature:', JSON.stringify(Array.from(sod.signature)));
-  console.log('[DEBUG-PUBKEY] pubkey:', JSON.stringify(Array.from(sod.pubkeyModulus)));
-  // Debug: dump all certs in SOD chain
-  console.log(`[CERT-DBG] SOD contains ${sod.certificates.length} certificate(s):`);
-  for (let i = 0; i < sod.certificates.length; i++) {
-    const cert = sod.certificates[i]!;
-    const certHex = Array.from(cert).map(b => b.toString(16).padStart(2, '0')).join('');
-    const keySize = Math.ceil(cert.length * 8);
-    console.log(`[CERT-DBG]   Cert[${i}]: ${cert.length} bytes (~${keySize}-bit), hex[:32]=${certHex.slice(0, 32)}`);
-  }
   const signedAttrs = padToLength(sod.signedAttrs, SIGNED_ATTRS_MAX_LEN);
   const signedAttrsLen = sod.signedAttrs.length;
   const signature = ensureLength(sod.signature, 256, 'signature');
   const pubkey = ensureLength(sod.pubkeyModulus, 256, 'pubkey');
 
-  // JS-side RSA verification sanity check (before sending to circuit)
-  console.log('[PROOF-DBG] Verifying RSA signature in JS...');
-  const jsRsaResult = verifyRSASignatureJS(sod.signedAttrs, signature, pubkey, sod.exponent);
-  console.log('[PROOF-DBG] JS RSA verify:', jsRsaResult.valid ? '✅ VALID' : '❌ INVALID');
-  console.log('[PROOF-DBG] JS signedAttrs SHA-256:', jsRsaResult.signedAttrsHash);
-  console.log('[PROOF-DBG] JS recovered hash from sig:', jsRsaResult.recoveredHash);
-  if (jsRsaResult.paddingInfo) {
-    console.log('[PROOF-DBG] PKCS#1 padding:', jsRsaResult.paddingInfo);
-  }
-
-  // Off-circuit certificate chain verification
-  // Verifies that the DSC cert was issued by a known CSCA
-  console.log('[PROOF] Verifying DSC→CSCA certificate chain...');
-  const chainResult = await verifyDSCChain(pubkey, sod.exponent, sod.certificates);
-  console.log('[PROOF-DBG] Chain verification:', chainResult.valid ? '✅ VALID' : '❌ INVALID',
-    chainResult.cscaSource ? `(${chainResult.cscaSource})` : '');
-  if (chainResult.cscaName) {
-    console.log('[PROOF-DBG] CSCA:', chainResult.cscaName);
-  }
-
   console.log('[PROOF] Computing redc_param (Barrett reduction)...');
   const redcParam = await Mopro.computeRedcParam(pubkey.buffer as ArrayBuffer);
-  console.log('[PROOF-DBG] redcParam byteLength:', redcParam.byteLength);
-  console.log('[PROOF-DBG] First 10 bytes of signature:', Array.from(new Uint8Array(signature.buffer)).slice(0, 10));
-  console.log('[PROOF-DBG] First 10 bytes of pubkey:', Array.from(new Uint8Array(pubkey.buffer)).slice(0, 10));
-  console.log('[PROOF-DBG] First 10 bytes of redcParam:', Array.from(new Uint8Array(redcParam)).slice(0, 10));
 
-  // Extract DSC chain data for in-circuit CSCA->DSC verification (Phase 3c)
-  console.log('[PROOF] Extracting DSC chain data for CSCA->DSC verification...');
+  // Off-circuit certificate chain verification
+  console.log('[PROOF] Verifying DSC->CSCA certificate chain...');
+  const chainResult = await verifyDSCChain(pubkey, sod.exponent, sod.certificates);
+  console.log('[PROOF-DBG] Chain verification:', chainResult.valid ? 'VALID' : 'INVALID',
+    chainResult.cscaSource ? `(${chainResult.cscaSource})` : '');
+
   if (!chainResult.valid || !chainResult.cscaModulusHex || chainResult.cscaExponent == null) {
-    throw new Error('DSC chain verification failed — cannot extract CSCA data for circuit');
+    throw new Error('DSC chain verification failed - cannot extract CSCA data for circuit');
   }
-  // DSC cert is the first certificate in the SOD (ICAO 9303 convention)
   const dscCertDer = sod.certificates[0];
   if (!dscCertDer) {
     throw new Error('No DSC certificate found in SOD');
@@ -200,40 +148,32 @@ export async function generateBaseProof(input: ProofInput): Promise<BaseProofOut
   if (!dscChain) {
     throw new Error('Failed to extract DSC chain data from certificate');
   }
-  console.log('[PROOF-DBG] DSC TBS length:', dscChain.dscTbs.length, 'pubkey offset:', dscChain.dscPubkeyOffset);
-  console.log('[PROOF-DBG] CSCA pubkey length:', dscChain.cscaPubkey.length, 'exponent:', dscChain.cscaExponent);
-  console.log('[PROOF-DBG] DSC signature length:', dscChain.dscSignature.length);
+  console.log('[PROOF-DBG] DSC TBS length:', dscChain.dscTbs.length, 'CSCA pubkey length:', dscChain.cscaPubkey.length);
 
-  // Pad CSCA data to circuit-expected sizes
   const dscTbs = padToLength(dscChain.dscTbs, DSC_TBS_MAX_LEN);
   const dscTbsLen = dscChain.dscTbs.length;
   const dscPubkeyOffset = dscChain.dscPubkeyOffset;
   const cscaPubkey = padToLength(dscChain.cscaPubkey, CSCA_MODULUS_LEN);
   const cscaSignature = padToLength(dscChain.dscSignature, CSCA_SIGNATURE_LEN);
 
-  // Compute CSCA Barrett reduction parameter (for RSA-4096)
   console.log('[PROOF] Computing CSCA redc_param (Barrett reduction for RSA-4096)...');
   const cscaRedcParam = await Mopro.computeRedcParam(cscaPubkey.buffer as ArrayBuffer);
-  console.log('[PROOF-DBG] CSCA redcParam byteLength:', cscaRedcParam.byteLength);
 
-  // Look up CSCA Merkle proof using CSCA pubkey (NOT DSC pubkey)
   console.log('[PROOF] Finding CSCA Merkle proof (by CSCA pubkey)...');
   let cscaMerkleProof = findCSCAMerkleProof(dscChain.cscaPubkey);
   if (!cscaMerkleProof) {
-    // Dev fallback: use placeholder Merkle proof.
-    // This works because MockProofVerifier accepts any proof.
-    // In production (real verifier), this path would throw.
-    console.warn('[PROOF-DBG] CSCA pubkey not in Merkle tree — using dev fallback (placeholder Merkle proof)');
+    // Dev fallback: placeholder Merkle proof. Works only against MockProofVerifier;
+    // a real verifier would reject this proof.
+    console.warn('[PROOF-DBG] CSCA pubkey not in Merkle tree - using dev fallback');
     cscaMerkleProof = {
       siblings: new Array(9).fill('0'),
       leafIndex: 0,
       root: '0x0000000000000000000000000000000000000000000000000000000000000000' as `0x${string}`,
     };
   }
-  console.log('[PROOF-DBG] CSCA Merkle proof: leafIndex=', cscaMerkleProof.leafIndex, 'root=', cscaMerkleProof.root);
 
-  console.log('[PROOF] Computing base inputs (native Poseidon2)...');
-  const baseInputs = await Mopro.computeBaseInputs(
+  console.log('[PROOF] Computing sigil inputs (native Poseidon2)...');
+  const sigilInputs = await Mopro.computeSigilInputs(
     dg1Hash,
     sodHash,
     epochDay,
@@ -256,198 +196,34 @@ export async function generateBaseProof(input: ProofInput): Promise<BaseProofOut
     cscaMerkleProof.root,
   );
 
-  console.log('[PROOF-DBG] baseInputs count:', baseInputs.inputs.length, `(expected ${EXPECTED_BASE_INPUTS})`);
-  console.log('[PROOF-DBG] epochNullifier:', baseInputs.epochNullifier);
-  console.log('[PROOF-DBG] first 5 inputs (dg1,sod,day,sa[0],sa[1]):', baseInputs.inputs.slice(0, 5));
-  console.log('[PROOF-DBG] last 5 inputs:', baseInputs.inputs.slice(-5));
+  console.log('[PROOF-DBG] inputs count:', sigilInputs.inputs.length);
+  console.log('[PROOF-DBG] nullifier:', sigilInputs.nullifier);
+  console.log('[PROOF-DBG] epoch_nullifier:', sigilInputs.epochNullifier);
 
-  console.log('[PROOF] Getting base VK...');
+  console.log('[PROOF] Getting sigil VK...');
   const vkBuf = await Mopro.getNoirVerificationKey(
-    BASE_CIRCUIT_PATH,
+    SIGIL_CIRCUIT_PATH,
     SRS_PATH ?? undefined,
     true,
     false,
   );
-  console.log('[PROOF-VK] base VK bytes:', vkBuf.byteLength);
+  console.log('[PROOF-VK] sigil VK bytes:', vkBuf.byteLength);
 
-  console.log('[PROOF] Generating base proof (5-15s)...');
-  try {
-    const proofBuf = await Mopro.generateNoirProof(
-      BASE_CIRCUIT_PATH,
-      SRS_PATH ?? undefined,
-      baseInputs.inputs,
-      true,
-      vkBuf,
-      false,
-    );
-
-    console.log('[PROOF] Base proof generated, raw size:', proofBuf.byteLength, 'bytes');
-
-    try {
-      const localValid = await Mopro.verifyNoirProof(
-        BASE_CIRCUIT_PATH,
-        proofBuf,
-        true,
-        vkBuf,
-        false,
-      );
-      console.log('[PROOF] Local verification:', localValid ? 'PASSED' : 'FAILED');
-    } catch (verifyErr) {
-      console.error('[PROOF] Local verification error:', verifyErr);
-    }
-
-    // Base circuit user public inputs: [epochNullifier, hashedAddress, cscaMerkleRoot] = 3.
-    const { proof: proofForContract } = reshapeProofForContract(proofBuf, 3);
-    console.log('[PROOF] Reshaped proof size:', proofForContract.byteLength, 'bytes =',
-      proofForContract.byteLength / 32, 'field elements');
-    const proofHex = arrayBufferToHex(proofForContract);
-    const vkHex = arrayBufferToHex(vkBuf);
-
-    return {
-      type: 'base',
-      zkProof: {
-        proof: proofHex,
-        vk: vkHex,
-        epochNullifier: baseInputs.epochNullifier,
-        hashedAddress: hashedAddr,
-        passportExpiry,
-        cscaMerkleRoot: cscaMerkleProof.root,
-      },
-      epochNullifier: baseInputs.epochNullifier,
-      cscaMerkleRoot: cscaMerkleProof.root,
-    };
-  } catch (error) {
-    console.error('[PROOF] Generation error:', error);
-    if (error instanceof Error) {
-      console.error('[PROOF] Error name:', error.name);
-      console.error('[PROOF] Error message:', error.message);
-      console.error('[PROOF] Error stack:', error.stack);
-    }
-    throw error;
-  }
-}
-
-/**
- * Generate a primary-tier UltraHonk-Keccak proof.
- *
- * Requires mopro build to have been run so that the native module is available.
- */
-export async function generatePrimaryProof(input: ProofInput): Promise<PrimaryProofOutput> {
-  if (!PRIMARY_CIRCUIT_PATH) {
-    throw new Error('Primary circuit path not set. Call setCircuitPaths() first.');
-  }
-
-  const Mopro = loadMoproModule();
-
-  const dg1Hash = sha256ToField(stripHexPrefix(input.rawDG1Hex));
-  const sodHash = sha256ToField(stripHexPrefix(input.rawSODHex));
-  // Primary nullifier is deterministic per passport — fixed nonce so the same passport
-  // always produces the same nullifier across re-registrations.
-  const nonce = '1';
-  const hashedAddr = walletAddressToField(input.walletAddress);
-  const passportExpiry = (input.passportExpiryUnix ?? 0).toString();
-
-  // Parse SOD to extract RSA fields
-  console.log('[PROOF] Parsing SOD for RSA verification...');
-  const sod = parseSod(input.rawSODHex);
-  const signedAttrs = padToLength(sod.signedAttrs, SIGNED_ATTRS_MAX_LEN);
-  const signedAttrsLen = sod.signedAttrs.length;
-  const signature = ensureLength(sod.signature, 256, 'signature');
-  const pubkey = ensureLength(sod.pubkeyModulus, 256, 'pubkey');
-
-  console.log('[PROOF] Computing redc_param (Barrett reduction)...');
-  const redcParam = await Mopro.computeRedcParam(pubkey.buffer as ArrayBuffer);
-
-  // Off-circuit certificate chain verification
-  console.log('[PROOF] Verifying DSC->CSCA certificate chain...');
-  const chainResult = await verifyDSCChain(pubkey, sod.exponent, sod.certificates);
-  console.log('[PROOF-DBG] Chain verification:', chainResult.valid ? 'VALID' : 'INVALID',
-    chainResult.cscaSource ? `(${chainResult.cscaSource})` : '');
-
-  // Extract DSC chain data for in-circuit CSCA->DSC verification (Phase 3c)
-  console.log('[PROOF] Extracting DSC chain data for CSCA->DSC verification...');
-  if (!chainResult.valid || !chainResult.cscaModulusHex || chainResult.cscaExponent == null) {
-    throw new Error('DSC chain verification failed — cannot extract CSCA data for circuit');
-  }
-  const dscCertDer = sod.certificates[0];
-  if (!dscCertDer) {
-    throw new Error('No DSC certificate found in SOD');
-  }
-  const dscChain = extractDSCChainData(dscCertDer, chainResult.cscaModulusHex, chainResult.cscaExponent);
-  if (!dscChain) {
-    throw new Error('Failed to extract DSC chain data from certificate');
-  }
-  console.log('[PROOF-DBG] DSC TBS length:', dscChain.dscTbs.length, 'CSCA pubkey length:', dscChain.cscaPubkey.length);
-
-  // Pad CSCA data to circuit-expected sizes
-  const dscTbs = padToLength(dscChain.dscTbs, DSC_TBS_MAX_LEN);
-  const dscTbsLen = dscChain.dscTbs.length;
-  const dscPubkeyOffset = dscChain.dscPubkeyOffset;
-  const cscaPubkey = padToLength(dscChain.cscaPubkey, CSCA_MODULUS_LEN);
-  const cscaSignature = padToLength(dscChain.dscSignature, CSCA_SIGNATURE_LEN);
-
-  // Compute CSCA Barrett reduction parameter (for RSA-4096)
-  console.log('[PROOF] Computing CSCA redc_param (Barrett reduction for RSA-4096)...');
-  const cscaRedcParam = await Mopro.computeRedcParam(cscaPubkey.buffer as ArrayBuffer);
-
-  // Look up CSCA Merkle proof using CSCA pubkey (NOT DSC pubkey)
-  console.log('[PROOF] Finding CSCA Merkle proof (by CSCA pubkey)...');
-  let cscaMerkleProof = findCSCAMerkleProof(dscChain.cscaPubkey);
-  if (!cscaMerkleProof) {
-    console.warn('[PROOF-DBG] CSCA pubkey not in Merkle tree — using dev fallback (placeholder Merkle proof)');
-    cscaMerkleProof = {
-      siblings: new Array(9).fill('0'),
-      leafIndex: 0,
-      root: '0x0000000000000000000000000000000000000000000000000000000000000000' as `0x${string}`,
-    };
-  }
-
-  console.log('[PROOF] Computing primary inputs (native Poseidon2)...');
-  const primaryInputs = await Mopro.computePrimaryInputs(
-    dg1Hash,
-    sodHash,
-    nonce,
-    signedAttrs.buffer as ArrayBuffer,
-    signedAttrsLen,
-    signature.buffer as ArrayBuffer,
-    pubkey.buffer as ArrayBuffer,
-    redcParam,
-    sod.exponent,
-    dscTbs.buffer as ArrayBuffer,
-    dscTbsLen,
-    dscPubkeyOffset,
-    cscaPubkey.buffer as ArrayBuffer,
-    cscaRedcParam,
-    dscChain.cscaExponent,
-    cscaSignature.buffer as ArrayBuffer,
-    cscaMerkleProof.siblings,
-    cscaMerkleProof.leafIndex,
-    hashedAddr,
-    cscaMerkleProof.root,
-  );
-
-  console.log('[PROOF] Getting primary VK...');
-  const vkBuf = await Mopro.getNoirVerificationKey(
-    PRIMARY_CIRCUIT_PATH,
-    SRS_PATH ?? undefined,
-    true,
-    false,
-  );
-  console.log('[PROOF-VK] primary VK bytes:', vkBuf.byteLength);
-
-  console.log('[PROOF] Generating primary proof (5-15s)...');
+  console.log('[PROOF] Generating sigil proof (5-15s)...');
   const proofBuf = await Mopro.generateNoirProof(
-    PRIMARY_CIRCUIT_PATH,
+    SIGIL_CIRCUIT_PATH,
     SRS_PATH ?? undefined,
-    primaryInputs.inputs,
+    sigilInputs.inputs,
     true,
     vkBuf,
     false,
   );
 
+  console.log('[PROOF] Sigil proof generated, raw size:', proofBuf.byteLength, 'bytes');
+
   try {
     const localValid = await Mopro.verifyNoirProof(
-      PRIMARY_CIRCUIT_PATH,
+      SIGIL_CIRCUIT_PATH,
       proofBuf,
       true,
       vkBuf,
@@ -458,32 +234,28 @@ export async function generatePrimaryProof(input: ProofInput): Promise<PrimaryPr
     console.error('[PROOF] Local verification error:', verifyErr);
   }
 
-  // The Noir circuit emits 3 public inputs: [nullifier, hashedAddress, cscaMerkleRoot].
-  const { proof: proofForContract } = reshapeProofForContract(proofBuf, 3);
-
+  const { proof: proofForContract } = reshapeProofForContract(proofBuf, USER_PUBLIC_INPUTS_COUNT);
   const proofHex = arrayBufferToHex(proofForContract);
   const vkHex = arrayBufferToHex(vkBuf);
 
-  console.log('[PROOF] Primary proof generated, raw:', proofBuf.byteLength,
-    'bytes → verifier proof:', proofForContract.byteLength, 'bytes');
-
   return {
-    type: 'primary',
     zkProof: {
       proof: proofHex,
       vk: vkHex,
-      nullifier: primaryInputs.nullifier,
+      nullifier: sigilInputs.nullifier,
+      epochNullifier: sigilInputs.epochNullifier,
       hashedAddress: hashedAddr,
       passportExpiry,
       cscaMerkleRoot: cscaMerkleProof.root,
     },
-    nullifier: primaryInputs.nullifier,
+    nullifier: sigilInputs.nullifier,
+    epochNullifier: sigilInputs.epochNullifier,
     cscaMerkleRoot: cscaMerkleProof.root,
   };
 }
 
 // ---------------------------------------------------------------------------
-// Stub (Phase 2 backward compat — no native module required)
+// Stub (no native module required - dev fallback)
 // ---------------------------------------------------------------------------
 
 export interface StubProofInput {
@@ -500,7 +272,7 @@ export interface StubProofOutput {
 /**
  * Generate a stub ZK proof (no native module required).
  * The passportNullifier is deterministic (keccak256(DG1 || SOD)) but is NOT
- * a real ZK proof — a real on-chain verifier will reject it.
+ * a real ZK proof - a real on-chain verifier will reject it.
  */
 export function generateStubProof(input: StubProofInput): StubProofOutput {
   const dg1Hex = (input.rawDG1Hex.startsWith('0x') ? input.rawDG1Hex : `0x${input.rawDG1Hex}`) as Hex;
@@ -513,10 +285,6 @@ export function generateStubProof(input: StubProofInput): StubProofOutput {
   const walletAddressBigInt = BigInt(input.walletAddress);
   const passportNullifierBigInt = BigInt(passportNullifier);
   const zkProofBytes = ('0x' + '00'.repeat(320)) as `0x${string}`;
-
-  console.log('[PROOF] === Stub ZK Proof (Phase 2) ===');
-  console.log('[PROOF] Wallet Address:', input.walletAddress);
-  console.log('[PROOF] Passport Nullifier:', passportNullifier);
 
   return {
     zkProof: {
@@ -532,112 +300,6 @@ export function generateStubProof(input: StubProofInput): StubProofOutput {
 // Internal helpers
 // ---------------------------------------------------------------------------
 
-/**
- * Verify an RSA signature (PKCS#1 v1.5) on signedAttrs and return diagnostic info.
- * 
- * This is a JS-side sanity check to validate the RSA signature before sending
- * to the ZK circuit.
- */
-interface RSASignatureCheckResult {
-  valid: boolean;
-  signedAttrsHash: string;
-  recoveredHash: string;
-  paddingInfo?: string;
-}
-
-function verifyRSASignatureJS(
-  signedAttrs: Uint8Array,
-  signature: Uint8Array,
-  pubkeyModulus: Uint8Array,
-  exponent: number,
-): RSASignatureCheckResult {
-  try {
-    // Compute SHA-256 hash of signedAttrs
-    const signedAttrsHash = sha256(signedAttrs);
-    const signedAttrsHashHex = Array.from(signedAttrsHash)
-      .map(b => b.toString(16).padStart(2, '0'))
-      .join('');
-
-    // RSA public key operation: decrypt signature using pubkey
-    // signature^exponent mod pubkeyModulus
-    const sigBigInt = BigInt('0x' + Array.from(signature).map(b => b.toString(16).padStart(2, '0')).join(''));
-    const modulusBigInt = BigInt('0x' + Array.from(pubkeyModulus).map(b => b.toString(16).padStart(2, '0')).join(''));
-    const exponentBigInt = BigInt(exponent);
-
-    // Modular exponentiation: sig^exponent mod modulus
-    const decryptedBigInt = modPow(sigBigInt, exponentBigInt, modulusBigInt);
-
-    // Convert decrypted value back to bytes
-    const decryptedBytes = bigIntToBytes(decryptedBigInt, 256);
-
-    // Parse PKCS#1 v1.5 padding: 0x00 || 0x01 || PS || 0x00 || DigestInfo
-    // DigestInfo for SHA-256: 30 31 30 0d 06 09 60 86 48 01 65 03 04 02 01 05 00 04 20 || hash
-    const digestInfoPrefix = '3031300d060960864801650304020105000420';
-    const decryptedHex = Array.from(decryptedBytes)
-      .map(b => b.toString(16).padStart(2, '0'))
-      .join('');
-
-    // Find the recovered hash from the decrypted signature
-    const digestInfoIndex = decryptedHex.indexOf(digestInfoPrefix);
-    let recoveredHash = '';
-    let paddingInfo = '';
-
-    if (digestInfoIndex !== -1) {
-      // Found proper PKCS#1 DigestInfo structure
-      const hashStart = digestInfoIndex + digestInfoPrefix.length;
-      const hashEnd = hashStart + 64; // SHA-256 hash is 32 bytes = 64 hex chars
-      recoveredHash = decryptedHex.slice(hashStart, hashEnd);
-      paddingInfo = `PKCS#1 v1.5 DigestInfo found at byte offset ${digestInfoIndex / 2}`;
-    } else {
-      // Fallback: try to extract last 32 bytes as hash
-      recoveredHash = decryptedHex.slice(-64);
-      paddingInfo = 'PKCS#1 DigestInfo not found, using raw decrypted bytes';
-    }
-
-    const valid = signedAttrsHashHex === recoveredHash;
-
-    return {
-      valid,
-      signedAttrsHash: signedAttrsHashHex,
-      recoveredHash,
-      paddingInfo,
-    };
-  } catch (error) {
-    console.error('[PROOF-DBG] RSA verification error:', error);
-    return {
-      valid: false,
-      signedAttrsHash: '',
-      recoveredHash: '',
-      paddingInfo: `Error: ${error instanceof Error ? error.message : String(error)}`,
-    };
-  }
-}
-
-/** Modular exponentiation: base^exp mod mod */
-function modPow(base: bigint, exp: bigint, mod: bigint): bigint {
-  let result = 1n;
-  base = base % mod;
-  while (exp > 0n) {
-    if (exp % 2n === 1n) {
-      result = (result * base) % mod;
-    }
-    exp = exp / 2n;
-    base = (base * base) % mod;
-  }
-  return result;
-}
-
-/** Convert a bigint to big-endian bytes of specified length */
-function bigIntToBytes(value: bigint, length: number): Uint8Array {
-  const bytes = new Uint8Array(length);
-  for (let i = length - 1; i >= 0; i--) {
-    bytes[i] = Number(value & 0xffn);
-    value = value >> 8n;
-  }
-  return bytes;
-}
-
-/** Zero-pad a byte array to the target length. */
 function padToLength(bytes: Uint8Array, targetLen: number): Uint8Array {
   if (bytes.length > targetLen) {
     throw new Error(`Input is ${bytes.length} bytes, exceeds max ${targetLen}`);
@@ -648,7 +310,6 @@ function padToLength(bytes: Uint8Array, targetLen: number): Uint8Array {
   return padded;
 }
 
-/** Ensure a byte array is exactly the expected length. */
 function ensureLength(bytes: Uint8Array, expected: number, label: string): Uint8Array {
   if (bytes.length !== expected) {
     throw new Error(`${label} is ${bytes.length} bytes, expected ${expected} (RSA-2048)`);
@@ -656,44 +317,36 @@ function ensureLength(bytes: Uint8Array, expected: number, label: string): Uint8
   return bytes;
 }
 
-/** Lazy-load the mopro native module. Throws if not available. */
 function loadMoproModule(): MoproInterface {
   console.log('[MOPRO] Attempting to load mopro-ffi native module...');
   try {
     // eslint-disable-next-line @typescript-eslint/no-var-requires
     const mod = require('mopro-ffi');
-    console.log('[MOPRO] Successfully loaded mopro-ffi module:', typeof mod);
-
-    // The generated index.tsx does `export * from './generated/...'` so named
-    // exports (computeBaseInputs, generateNoirProof, etc.) are at mod top-level.
-    if (!mod?.computeBaseInputs) {
-      console.error('[MOPRO] ERROR: computeBaseInputs function not found in module');
+    if (!mod?.computeSigilInputs) {
+      console.error('[MOPRO] ERROR: computeSigilInputs function not found in module');
       throw new Error('Mopro native module not available.');
     }
-    console.log('[MOPRO] ✅ Mopro native module loaded successfully');
+    console.log('[MOPRO] Mopro native module loaded successfully');
     return mod as MoproInterface;
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);
-    console.error('[MOPRO] ❌ Failed to load mopro-ffi:', msg);
+    console.error('[MOPRO] Failed to load mopro-ffi:', msg);
     throw new Error(`Mopro native module not available: ${msg}`);
   }
 }
 
-/** Convert a hex string (no 0x prefix) of raw bytes to a BN254 field decimal string. */
 function sha256ToField(hexBytes: string): string {
   const bytes = hexStringToUint8Array(hexBytes);
   const hashBytes = sha256(bytes);
   return bytesToFieldDecimal(hashBytes);
 }
 
-/** Convert keccak256(wallet_address) to a BN254 field decimal string. */
 function walletAddressToField(address: `0x${string}`): string {
   const hash = keccak256(address);
   const bytes = hexStringToUint8Array(hash.slice(2));
   return bytesToFieldDecimal(bytes);
 }
 
-/** Convert big-endian bytes to a BN254 field element decimal string (mod prime). */
 function bytesToFieldDecimal(bytes: Uint8Array): string {
   let val = 0n;
   for (const b of bytes) {
@@ -702,7 +355,6 @@ function bytesToFieldDecimal(bytes: Uint8Array): string {
   return (val % BN254_PRIME).toString(10);
 }
 
-/** Return the number of whole days since unix epoch (used as epoch_day in base circuit). */
 function currentEpochDay(): number {
   return Math.floor(Date.now() / 1000 / 86400);
 }
@@ -732,10 +384,7 @@ function arrayBufferToHex(buf: ArrayBuffer): `0x${string}` {
  * Convert a raw noir-rs proof buffer into the byte string the Solidity verifier expects.
  *
  * noir-rs (barretenberg-rs 4.2.0-aztecnr-rc.2) returns:
- *   [4 bytes BE num_pub][num_pub × 32-byte user public inputs][PAIRING_POINTS_SIZE Frs][proof body bytes]
- * where `num_pub = userPubInputsCount` (pairing points are NOT in the public-inputs section —
- * they sit at the very start of the proof body, exactly where the Solidity verifier wants them).
- * PAIRING_POINTS_SIZE is 8 for bb 4.2 (was 16 for bb 4.0).
+ *   [4 bytes BE num_pub][num_pub * 32-byte user public inputs][PAIRING_POINTS_SIZE Frs][proof body bytes]
  *
  * The bb-generated Solidity `verify(bytes proof, bytes32[] publicInputs)` expects:
  *   - `publicInputs` = the N user public inputs only
@@ -761,21 +410,17 @@ function reshapeProofForContract(
 }
 
 // ---------------------------------------------------------------------------
-// Type stub for the mopro native module (generated at build time by uniffi-bindgen-react-native)
+// Type stub for the mopro native module
 // ---------------------------------------------------------------------------
 
-interface BaseInputsResult {
+interface SigilInputsResult {
   inputs: string[];
+  nullifier: string;
   epochNullifier: string;
 }
 
-interface PrimaryInputsResult {
-  inputs: string[];
-  nullifier: string;
-}
-
 interface MoproInterface {
-  computeBaseInputs(
+  computeSigilInputs(
     dg1Hash: string,
     sodHash: string,
     epochDay: string,
@@ -796,40 +441,11 @@ interface MoproInterface {
     cscaLeafIndex: number,
     hashedAddress: string,
     cscaMerkleRoot: string,
-  ): Promise<BaseInputsResult> | BaseInputsResult;
-
-  computePrimaryInputs(
-    dg1Hash: string,
-    sodHash: string,
-    nonce: string,
-    signedAttrs: ArrayBuffer,
-    signedAttrsLen: number,
-    signature: ArrayBuffer,
-    pubkey: ArrayBuffer,
-    redcParam: ArrayBuffer,
-    exponent: number,
-    dscTbs: ArrayBuffer,
-    dscTbsLen: number,
-    dscPubkeyOffset: number,
-    cscaPubkey: ArrayBuffer,
-    cscaRedcParam: ArrayBuffer,
-    cscaExponent: number,
-    cscaSignature: ArrayBuffer,
-    cscaMerkleSiblings: string[],
-    cscaLeafIndex: number,
-    hashedAddress: string,
-    cscaMerkleRoot: string,
-  ): Promise<PrimaryInputsResult> | PrimaryInputsResult;
+  ): Promise<SigilInputsResult> | SigilInputsResult;
 
   computeRedcParam(
     modulusBytes: ArrayBuffer,
   ): Promise<ArrayBuffer> | ArrayBuffer;
-
-  computeNullifier(
-    dg1Hash: string,
-    sodHash: string,
-    nonce: string,
-  ): Promise<string> | string;
 
   getNoirVerificationKey(
     circuitPath: string,

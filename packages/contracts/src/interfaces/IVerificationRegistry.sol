@@ -2,42 +2,39 @@
 pragma solidity ^0.8.28;
 
 /// @title IVerificationRegistry
-/// @notice Two-tier on-chain identity registry backed by ZK passport proofs.
+/// @notice Single-tier on-chain identity registry backed by ZK passport proofs.
 ///
-/// @dev Two tiers, both queryable with a single mapping lookup:
+/// @dev Model:
+///      - One stable nullifier per passport (`Poseidon2(passportSecret, 1)`).
+///      - A user can sigilize multiple wallets — they all share the same nullifier on-chain
+///        and are publicly linkable as belonging to the same passport.
+///      - Protocols call `isVerified(wallet)` for proof of personhood.
+///        Protocols call `nullifierOf(wallet)` to dedupe per-protocol (sybil resistance).
 ///
-///      Base tier  — proof of personhood, fully unlinkable.
-///                   Multiple addresses per passport allowed. No passport-derived
-///                   data stored on-chain. Rate-limited to maxDailyRegistrations/day.
+///      Privacy:
+///      - All addresses sigilized under the same passport are publicly linkable via the
+///        shared nullifier. Users opt-in per wallet — non-sigilized wallets stay anonymous.
+///      - No name, DOB, nationality, or any other passport-derived data on-chain.
 ///
-///      Primary tier — sybil resistance (one address per passport, globally).
-///                     The primary nullifier is deterministic per passport, so the
-///                     same value is reused across registrations of the same passport.
-///                     Switching to a different primary address requires unregister +
-///                     cooldown before re-registering with the same nullifier.
+///      Expiry:
+///      - All registrations expire at `min(now + registrationTTL,
+///        ceil(passportExpiry / 90 days) * 90 days)`. The passport-expiry component is
+///        rounded UP to the next 90-day boundary anchored to the Unix epoch (privacy:
+///        collapses ~365 distinct expiry timestamps into 4). Re-tapping the passport
+///        before `expiresAt` renews; `isVerified` returns false lazily for expired
+///        registrations (no on-chain write needed).
 ///
-///      All registrations expire at min(now + registrationTTL,
-///      ceil(passportExpiry / 90 days) * 90 days). The passport-expiry component is
-///      rounded UP to the next 90-day boundary (anchored to the Unix epoch — not calendar
-///      quarters) for privacy: see VerificationRegistry._cappedExpiry. Users must re-tap
-///      their passport before expiresAt to renew. isVerified / isPrimaryVerified return
-///      false lazily for expired registrations (no write required); they do NOT re-check
-///      passportExpiry, so a registration whose passport lapses mid-quarter remains valid
-///      until the rounded boundary.
-///
-///      Privacy invariants:
-///        - No nullifiers in any event
-///        - No address ↔ nullifier mapping stored or queryable
-///        - All addresses ever registered as primary under the same passport are
-///          linkable on-chain (they share a stable nullifier). This is an explicit
-///          v1 trade-off: the base tier remains the unlinkable option.
+///      Rate limiting:
+///      - Max `maxDailyRegistrations` new wallets per passport per day, enforced via an
+///        epoch nullifier (`hash(s, "epoch", day)`). Renewals are exempt.
 interface IVerificationRegistry {
     // =========================================================================
     // Events
     // =========================================================================
 
-    /// @notice Emitted on successful base or primary registration / renewal.
-    /// @dev NO nullifier — critical privacy requirement.
+    /// @notice Emitted on successful registration / renewal.
+    /// @dev NO nullifier — that level of detail belongs in storage (publicly readable),
+    ///      not in indexed event topics.
     event WalletVerified(address indexed wallet);
 
     /// @notice Emitted when the governor address changes.
@@ -56,85 +53,72 @@ interface IVerificationRegistry {
     event SuccessorSet(address indexed successor);
 
     // =========================================================================
-    // Base Tier
+    // Mutations
     // =========================================================================
 
-    /// @notice Register the caller's wallet as a verified human (base tier).
-    /// @param epochNullifier Rate-limiting nullifier derived from passport + current day.
-    /// @param passportExpiry Passport expiry timestamp, submitted separately to the contract.
-    /// @param proof ZK proof bytes.
-    function registerBase(bytes32 epochNullifier, uint48 passportExpiry, bytes calldata proof) external;
-
-    /// @notice Renew an existing base-tier registration, extending its TTL.
-    /// @dev Re-tapping the passport sets expiresAt = min(now + registrationTTL,
-    ///      ceil(passportExpiry / 90 days) * 90 days). registeredAt is preserved.
-    ///      Renewals are exempt from the daily rate limit (epochNullifier is unused).
-    function renewBase(uint48 passportExpiry, bytes calldata proof) external;
-
-    /// @notice Remove the caller's base-tier registration.
-    /// @dev No event emitted — privacy requirement. The epochNullifier count for the day
-    ///      is not decremented, so unregistering does not free up a daily registration slot.
-    function unregisterBase() external;
-
-    // =========================================================================
-    // Primary Tier
-    // =========================================================================
-
-    /// @notice Register the caller's wallet as the unique primary address for a passport.
-    /// @param nullifier      Stable primary nullifier derived from the passport secret.
-    ///                       The same value is used for every registration of this passport;
-    ///                       cooldown is enforced per-nullifier.
+    /// @notice Sigilize the caller's wallet — link it to the passport identified by `nullifier`.
+    /// @param nullifier      Stable per-passport nullifier (Poseidon2(s, 1)). Multiple wallets
+    ///                       may share this nullifier.
+    /// @param epochNullifier Rate-limiting nullifier: hash(s, "epoch", day). New registrations
+    ///                       per epoch are capped at `maxDailyRegistrations`.
     /// @param passportExpiry Passport expiry timestamp.
     /// @param proof          ZK proof bytes.
-    function registerPrimary(
+    function register(
         bytes32 nullifier,
+        bytes32 epochNullifier,
         uint48 passportExpiry,
         bytes calldata proof
     ) external;
 
-    /// @notice Renew an existing primary-tier registration, extending its TTL.
-    /// @dev Sets expiresAt = min(now + registrationTTL,
-    ///      ceil(passportExpiry / 90 days) * 90 days). registeredAt is preserved so
-    ///      protocols enforcing a minimum registration age see uninterrupted history.
-    /// @param nullifier      The stable primary nullifier for the caller's passport.
+    /// @notice Renew the caller's existing registration — extends `expiresAt`.
+    ///         Must be called from the same wallet with the same nullifier as the existing
+    ///         registration; the proof binds the nullifier to the passport that owns it.
+    /// @param nullifier      Stable per-passport nullifier — must match the wallet's existing one.
+    /// @param epochNullifier Real epoch nullifier for the day the proof was generated. Required
+    ///                       so the proof's public input matches the circuit's constraint, but
+    ///                       NOT counted toward the daily rate limit on renewals.
     /// @param passportExpiry Updated passport expiry (e.g. after passport renewal).
     /// @param proof          ZK proof bytes.
-    function renewPrimary(bytes32 nullifier, uint48 passportExpiry, bytes calldata proof) external;
+    /// @dev Renewals are exempt from the daily rate limit. `registeredAt` is preserved.
+    function renew(
+        bytes32 nullifier,
+        bytes32 epochNullifier,
+        uint48 passportExpiry,
+        bytes calldata proof
+    ) external;
 
-    /// @notice Remove the caller's primary registration and start the cooldown timer.
-    /// @dev The contract looks up the caller's nullifier via s_primaryNullifierByWallet.
-    ///      To switch primary to a different address, unregister, wait the cooldown,
-    ///      then call registerPrimary again from the new address with the same nullifier.
-    function unregisterPrimary() external;
+    /// @notice Remove the caller's registration. No event emitted (privacy).
+    /// @dev Also removes the caller from `walletsByNullifier`. The `nullifierByWallet`
+    ///      mapping is cleared.
+    function unregister() external;
 
     // =========================================================================
     // Protocol Integration (single-line lookups)
     // =========================================================================
 
-    /// @notice Returns true if wallet has an active, non-expired base-tier registration.
+    /// @notice Returns true if `wallet` has an active, non-expired registration.
     function isVerified(address wallet) external view returns (bool);
 
-    /// @notice Returns true if wallet has an active, non-expired primary-tier registration.
-    function isPrimaryVerified(address wallet) external view returns (bool);
+    /// @notice Returns the nullifier `wallet` is registered under, or `bytes32(0)`.
+    /// @dev Returns the nullifier even after expiry; pair with `isVerified` for liveness.
+    ///      This is the public sybil identifier — protocols can use it as a per-protocol
+    ///      dedup key (`mapping(bytes32 => bool) seenInThisProtocol`).
+    function nullifierOf(address wallet) external view returns (bytes32);
 
-    /// @notice Returns the base-tier registration expiry for wallet (0 if never registered).
-    /// @dev Stored as min(now + registrationTTL, ceil(passportExpiry / 90 days) * 90 days)
-    ///      at the time of registration or renewal. The 90-day rounding can place expiresAt
-    ///      up to ~89 days past actual passport expiry — see VerificationRegistry._cappedExpiry.
-    function getBaseExpiry(address wallet) external view returns (uint48);
+    /// @notice Returns the registration's `expiresAt` (0 if never registered).
+    /// @dev Stored as `min(now + registrationTTL, ceil(passportExpiry / 90 days) * 90 days)`
+    ///      at registration / renewal time. The 90-day rounding can place expiresAt up to
+    ///      ~89 days past actual passport expiry.
+    function getExpiry(address wallet) external view returns (uint48);
 
-    /// @notice Returns the primary-tier registration expiry for wallet (0 if never registered).
-    /// @dev Same formula as getBaseExpiry — see VerificationRegistry._cappedExpiry.
-    function getPrimaryExpiry(address wallet) external view returns (uint48);
+    /// @notice Returns the timestamp when this wallet was first registered with its current
+    ///         nullifier (0 if never registered). Renewals do not reset this value.
+    /// @dev Protocols can use this to enforce a minimum registration age.
+    function getRegisteredAt(address wallet) external view returns (uint48);
 
-    /// @notice Returns the timestamp when wallet's current primary registration was created (0 if never registered).
-    /// @dev Renewing does not reset this value — it reflects when this address was first (or last) registered/changed.
-    ///      Protocols can use this to enforce a minimum registration age, e.g. require(age >= 30 days).
-    function getPrimaryRegisteredAt(address wallet) external view returns (uint48);
-
-    /// @notice Returns true if this primary nullifier has ever been used (currently registered OR previously unregistered).
-    /// @dev Lets the app distinguish "first-time passport registration" from "returning passport"
-    ///      to drive UI copy. Returning a boolean instead of the cooldown timestamp avoids leaking
-    ///      when the unregister happened.
-    function wasNullifierUsed(bytes32 nullifier) external view returns (bool);
+    /// @notice Returns all wallets currently registered under `nullifier`.
+    /// @dev Includes wallets whose registrations have expired but not been unregistered.
+    ///      Filter by `isVerified` for active-only. Order is registration order, with
+    ///      swap-and-pop on `unregister` (so the array is unordered after any unregister).
+    function getWallets(bytes32 nullifier) external view returns (address[] memory);
 }

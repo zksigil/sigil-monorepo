@@ -9,22 +9,21 @@ import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol
 import {Pausable} from "@openzeppelin/contracts/utils/Pausable.sol";
 
 /// @title VerificationRegistry
-/// @notice Two-tier ZK passport identity registry for Sigil.
+/// @notice Single-tier ZK passport identity registry for Sigil.
 ///
-/// @dev Architecture:
-///      - Core logic is immutable. All tunables live in ProtocolConfig (swappable).
-///      - ZK verifier is swappable (stub → real Noir verifier after circuit is ready).
-///      - Governor starts as a multisig; transfer to DAO via transferGovernance().
-///      - If core logic must change, set a successor and isVerified() delegates to it.
+/// @dev One stable nullifier per passport. Multiple wallets can register under the same
+///      nullifier — they are publicly linkable on-chain via the shared `nullifierByWallet`
+///      mapping and the `walletsByNullifier` array.
+///
+///      Architecture:
+///        - Core logic is immutable. Tunables live in ProtocolConfig (swappable).
+///        - ZK verifier is swappable for circuit upgrades.
+///        - Governor starts as a multisig; transfer to DAO via `transferGovernance()`.
+///        - If core logic must change, set a successor and read functions delegate to it.
 ///
 ///      Privacy invariants enforced here (not in circuit):
-///        - hashedAddress == keccak256(msg.sender) checked on every write
-///        - No nullifier emitted in any event
-///        - No address ↔ nullifier mapping queryable externally
-///        - Switching primary address requires unregister + cooldown before
-///          re-registering with the same (deterministic) nullifier from a new address.
-///          All addresses ever registered as primary under the same passport are
-///          linkable on-chain via the shared nullifier — explicit v1 trade-off.
+///        - hashedAddress == keccak256(msg.sender) checked on every write.
+///        - No nullifier in any event.
 contract VerificationRegistry is IVerificationRegistry, ReentrancyGuard, Pausable {
     // =========================================================================
     // Errors
@@ -37,26 +36,18 @@ contract VerificationRegistry is IVerificationRegistry, ReentrancyGuard, Pausabl
     error VerificationRegistry__PassportExpired();
     error VerificationRegistry__RateLimitExceeded();
     error VerificationRegistry__InvalidProof();
-    error VerificationRegistry__NullifierAlreadyUsed();
-    error VerificationRegistry__PrimaryInCooldown();
-    error VerificationRegistry__NotAuthorized();
+    error VerificationRegistry__NullifierMismatch();
 
     // =========================================================================
     // Structs
     // =========================================================================
 
-    /// @dev Tracks expiry and registration time for a single registered address (base or primary tier).
-    ///      expiresAt = min(block.timestamp + registrationTTL,
-    ///                      ceil(passportExpiry / 90 days) * 90 days)
-    ///      Set via _cappedExpiry() — the passport-expiry component is rounded UP to the next
-    ///      90-day boundary so passportExpiry need not be stored and is not uniquely identifiable
-    ///      across multiple addresses registered from the same passport. See _cappedExpiry().
-    ///      registeredAt is set on registerPrimary and NOT updated on renewPrimary —
-    ///      it reflects how long this passport has been committed to this address, which is the value
-    ///      protocols care about when enforcing a minimum registration age.
+    /// @dev Tracks expiry and registration time for a single registered wallet.
+    ///      `expiresAt = min(now + registrationTTL, ceil(passportExpiry / 90 days) * 90 days)`
+    ///      `registeredAt` is set on first `register` and preserved across `renew`.
     struct Registration {
-        uint48 expiresAt;    // see formula above
-        uint48 registeredAt; // block.timestamp at registration (not updated on renew)
+        uint48 expiresAt;
+        uint48 registeredAt;
     }
 
     // =========================================================================
@@ -70,35 +61,28 @@ contract VerificationRegistry is IVerificationRegistry, ReentrancyGuard, Pausabl
     address public s_successor;
 
     // =========================================================================
-    // Base Tier State
+    // Registration State
     // =========================================================================
 
     /// @dev keccak256(abi.encodePacked(wallet)) => active registration.
-    mapping(bytes32 => Registration) private s_baseRegistrations;
+    mapping(bytes32 => Registration) private s_registrations;
 
-    /// @dev epochNullifier => number of base registrations today from this passport.
-    ///      epochNullifier = hash(s, "epoch", floor(block.timestamp / 1 days))
+    /// @dev keccak256(abi.encodePacked(wallet)) => stable per-passport nullifier.
+    ///      Public — this is the sybil identifier protocols read via `nullifierOf`.
+    mapping(bytes32 => bytes32) public s_nullifierByWallet;
+
+    /// @dev nullifier => list of wallets registered under it. Mutated on register/unregister
+    ///      via swap-and-pop. Includes wallets whose registrations have expired but not been
+    ///      unregistered (filter by `isVerified` for active-only).
+    mapping(bytes32 => address[]) private s_walletsByNullifier;
+
+    /// @dev nullifier => wallet => 1-based index into `s_walletsByNullifier[nullifier]`.
+    ///      Zero means the wallet is not in the array. Used to support O(1) swap-and-pop.
+    mapping(bytes32 => mapping(address => uint256)) private s_walletIndex;
+
+    /// @dev epochNullifier => number of new registrations this epoch.
+    ///      `epochNullifier = hash(s, "epoch", floor(block.timestamp / 1 days))`.
     mapping(bytes32 => uint8) private s_epochCounts;
-
-    // =========================================================================
-    // Primary Tier State
-    // =========================================================================
-
-    /// @dev nullifier => keccak256(abi.encodePacked(registeredWallet)) of the active primary holder.
-    ///      bytes32(0) means no active slot. The nullifier is deterministic per passport, so
-    ///      re-registering the same passport to a different address reuses this same key.
-    mapping(bytes32 => bytes32) public s_primarySlots;
-
-    /// @dev keccak256(abi.encodePacked(wallet)) => nullifier of the active primary slot.
-    ///      Reverse of s_primarySlots so the registered wallet can recover its nullifier
-    ///      without local state. Cleared on unregister.
-    mapping(bytes32 => bytes32) public s_primaryNullifierByWallet;
-
-    /// @dev keccak256(abi.encodePacked(wallet)) => active primary registration.
-    mapping(bytes32 => Registration) private s_primaryRegistrations;
-
-    /// @dev nullifier => timestamp after which re-registration with this nullifier is allowed.
-    mapping(bytes32 => uint256) private s_primaryUnregisteredAt;
 
     // =========================================================================
     // Constructor
@@ -126,11 +110,12 @@ contract VerificationRegistry is IVerificationRegistry, ReentrancyGuard, Pausabl
     }
 
     // =========================================================================
-    // Base Tier — Registration
+    // Mutations
     // =========================================================================
 
     /// @inheritdoc IVerificationRegistry
-    function registerBase(
+    function register(
+        bytes32 nullifier,
         bytes32 epochNullifier,
         uint48 passportExpiry,
         bytes calldata proof
@@ -139,133 +124,76 @@ contract VerificationRegistry is IVerificationRegistry, ReentrancyGuard, Pausabl
 
         // Checks
         if (block.timestamp >= passportExpiry) revert VerificationRegistry__PassportExpired();
-
-        if (s_baseRegistrations[hashedAddress].expiresAt > block.timestamp) revert VerificationRegistry__AlreadyRegistered();
+        if (s_registrations[hashedAddress].expiresAt > block.timestamp) revert VerificationRegistry__AlreadyRegistered();
 
         uint8 count = s_epochCounts[epochNullifier];
         if (count >= s_config.maxDailyRegistrations()) revert VerificationRegistry__RateLimitExceeded();
 
-        if (!s_verifier.verifyBaseProof(hashedAddress, epochNullifier, s_cscaMerkleTree.getRoot(), proof)) {
+        if (!s_verifier.verifyProof(hashedAddress, nullifier, epochNullifier, s_cscaMerkleTree.getRoot(), proof)) {
             revert VerificationRegistry__InvalidProof();
         }
 
         // Effects
+        // If this wallet was previously registered under a different nullifier (e.g. an
+        // expired registration with an old passport that has since been replaced), evict
+        // it from the old nullifier's wallet array so the array stays accurate.
+        bytes32 prevNullifier = s_nullifierByWallet[hashedAddress];
+        bool isReregistration = (prevNullifier == nullifier);
+        if (prevNullifier != bytes32(0) && prevNullifier != nullifier) {
+            _removeWalletFromArray(prevNullifier, msg.sender);
+        }
+
+        // Append to nullifier's wallet array (skip if this is a re-registration of an
+        // expired entry under the SAME nullifier — already in the array).
+        if (!isReregistration || s_walletIndex[nullifier][msg.sender] == 0) {
+            s_walletsByNullifier[nullifier].push(msg.sender);
+            s_walletIndex[nullifier][msg.sender] = s_walletsByNullifier[nullifier].length;
+        }
+
         uint48 expiresAt = _cappedExpiry(passportExpiry);
-        s_baseRegistrations[hashedAddress] = Registration({expiresAt: expiresAt, registeredAt: uint48(block.timestamp)});
+        s_registrations[hashedAddress] = Registration({expiresAt: expiresAt, registeredAt: uint48(block.timestamp)});
+        s_nullifierByWallet[hashedAddress] = nullifier;
         s_epochCounts[epochNullifier] = count + 1;
 
         emit WalletVerified(msg.sender);
     }
 
     /// @inheritdoc IVerificationRegistry
-    function unregisterBase() external override whenNotPaused nonReentrant {
-        bytes32 hashedAddress = keccak256(abi.encodePacked(msg.sender));
-        if (s_baseRegistrations[hashedAddress].expiresAt == 0) revert VerificationRegistry__NotRegistered();
-
-        delete s_baseRegistrations[hashedAddress];
-        // No event — privacy requirement
-    }
-
-    /// @inheritdoc IVerificationRegistry
-    function renewBase(
-        uint48 passportExpiry,
-        bytes calldata proof
-    ) external override whenNotPaused nonReentrant {
-        bytes32 hashedAddress = keccak256(abi.encodePacked(msg.sender));
-
-        // Checks — must have a registration (even if expired) to renew
-        if (s_baseRegistrations[hashedAddress].expiresAt == 0) revert VerificationRegistry__NotRegistered();
-        if (block.timestamp >= passportExpiry) revert VerificationRegistry__PassportExpired();
-
-        // epochNullifier is zero for renewals — rate limiting only applies to new registrations
-        if (!s_verifier.verifyBaseProof(hashedAddress, bytes32(0), s_cscaMerkleTree.getRoot(), proof)) {
-            revert VerificationRegistry__InvalidProof();
-        }
-
-        // Effects — preserve original registeredAt on renewal
-        uint48 expiresAt = _cappedExpiry(passportExpiry);
-        s_baseRegistrations[hashedAddress].expiresAt = expiresAt;
-    }
-
-    // =========================================================================
-    // Primary Tier — Registration
-    // =========================================================================
-
-    /// @inheritdoc IVerificationRegistry
-    function registerPrimary(
+    function renew(
         bytes32 nullifier,
+        bytes32 epochNullifier,
         uint48 passportExpiry,
         bytes calldata proof
     ) external override whenNotPaused nonReentrant {
         bytes32 hashedAddress = keccak256(abi.encodePacked(msg.sender));
 
-        // Checks
+        // Checks — must already be registered, and renewal must use the same nullifier.
+        // To replace the passport (different nullifier), unregister first then register fresh.
+        if (s_registrations[hashedAddress].expiresAt == 0) revert VerificationRegistry__NotRegistered();
+        if (s_nullifierByWallet[hashedAddress] != nullifier) revert VerificationRegistry__NullifierMismatch();
         if (block.timestamp >= passportExpiry) revert VerificationRegistry__PassportExpired();
-        if (s_primarySlots[nullifier] != bytes32(0)) revert VerificationRegistry__NullifierAlreadyUsed();
-        if (block.timestamp < s_primaryUnregisteredAt[nullifier]) revert VerificationRegistry__PrimaryInCooldown();
 
-        if (s_primaryRegistrations[hashedAddress].expiresAt > block.timestamp) revert VerificationRegistry__AlreadyRegistered();
-
-        if (!s_verifier.verifyPrimaryProof(hashedAddress, nullifier, s_cscaMerkleTree.getRoot(), proof)) {
+        // The real epochNullifier is passed through to the verifier (the circuit always
+        // constrains it). Rate limiting is NOT applied on renewals — `s_epochCounts` stays put.
+        if (!s_verifier.verifyProof(hashedAddress, nullifier, epochNullifier, s_cscaMerkleTree.getRoot(), proof)) {
             revert VerificationRegistry__InvalidProof();
         }
 
-        // Effects — clean up any stale slot from a prior expired registration on this
-        // wallet (different passport → different nullifier). The old passport can no
-        // longer produce a valid proof, so the orphan slot is unreachable; clear it
-        // so s_primarySlots stays in sync with s_primaryNullifierByWallet.
-        bytes32 prevNullifier = s_primaryNullifierByWallet[hashedAddress];
-        if (prevNullifier != bytes32(0) && prevNullifier != nullifier) {
-            delete s_primarySlots[prevNullifier];
-        }
-
-        uint48 expiresAt = _cappedExpiry(passportExpiry);
-        s_primarySlots[nullifier] = hashedAddress;
-        s_primaryNullifierByWallet[hashedAddress] = nullifier;
-        s_primaryRegistrations[hashedAddress] = Registration({expiresAt: expiresAt, registeredAt: uint48(block.timestamp)});
-
-        emit WalletVerified(msg.sender);
+        // Effects — preserve registeredAt; only extend expiresAt.
+        s_registrations[hashedAddress].expiresAt = _cappedExpiry(passportExpiry);
     }
 
     /// @inheritdoc IVerificationRegistry
-    function renewPrimary(
-        bytes32 nullifier,
-        uint48 passportExpiry,
-        bytes calldata proof
-    ) external override whenNotPaused nonReentrant {
+    function unregister() external override whenNotPaused nonReentrant {
         bytes32 hashedAddress = keccak256(abi.encodePacked(msg.sender));
+        if (s_registrations[hashedAddress].expiresAt == 0) revert VerificationRegistry__NotRegistered();
 
-        // Checks
-        if (block.timestamp >= passportExpiry) revert VerificationRegistry__PassportExpired();
+        bytes32 nullifier = s_nullifierByWallet[hashedAddress];
+        _removeWalletFromArray(nullifier, msg.sender);
 
-        bytes32 slotHolder = s_primarySlots[nullifier];
-        if (slotHolder == bytes32(0)) revert VerificationRegistry__NotRegistered();
-        if (slotHolder != hashedAddress) revert VerificationRegistry__NotAuthorized();
-
-        if (!s_verifier.verifyPrimaryProof(hashedAddress, nullifier, s_cscaMerkleTree.getRoot(), proof)) {
-            revert VerificationRegistry__InvalidProof();
-        }
-
-        // Effects — extend TTL only; registeredAt is preserved to reflect true registration age
-        uint48 expiresAt = _cappedExpiry(passportExpiry);
-        s_primaryRegistrations[hashedAddress].expiresAt = expiresAt;
-    }
-
-    /// @inheritdoc IVerificationRegistry
-    function unregisterPrimary() external override whenNotPaused nonReentrant {
-        bytes32 hashedAddress = keccak256(abi.encodePacked(msg.sender));
-
-        // Checks — msg.sender must own a primary slot
-        bytes32 nullifier = s_primaryNullifierByWallet[hashedAddress];
-        if (nullifier == bytes32(0)) revert VerificationRegistry__NotRegistered();
-
-        // Effects
-        delete s_primarySlots[nullifier];
-        delete s_primaryNullifierByWallet[hashedAddress];
-        delete s_primaryRegistrations[hashedAddress];
-        s_primaryUnregisteredAt[nullifier] = block.timestamp + s_config.cooldownPeriod();
-
-        // No event — privacy requirement
+        delete s_registrations[hashedAddress];
+        delete s_nullifierByWallet[hashedAddress];
+        // No event — privacy requirement.
     }
 
     // =========================================================================
@@ -277,36 +205,39 @@ contract VerificationRegistry is IVerificationRegistry, ReentrancyGuard, Pausabl
         if (s_successor != address(0)) {
             return IVerificationRegistry(s_successor).isVerified(wallet);
         }
-        return s_baseRegistrations[keccak256(abi.encodePacked(wallet))].expiresAt > block.timestamp;
+        return s_registrations[keccak256(abi.encodePacked(wallet))].expiresAt > block.timestamp;
     }
 
     /// @inheritdoc IVerificationRegistry
-    function isPrimaryVerified(address wallet) external view override returns (bool) {
+    function nullifierOf(address wallet) external view override returns (bytes32) {
         if (s_successor != address(0)) {
-            return IVerificationRegistry(s_successor).isPrimaryVerified(wallet);
+            return IVerificationRegistry(s_successor).nullifierOf(wallet);
         }
-        return s_primaryRegistrations[keccak256(abi.encodePacked(wallet))].expiresAt > block.timestamp;
+        return s_nullifierByWallet[keccak256(abi.encodePacked(wallet))];
     }
 
     /// @inheritdoc IVerificationRegistry
-    function getPrimaryRegisteredAt(address wallet) external view override returns (uint48) {
-        return s_primaryRegistrations[keccak256(abi.encodePacked(wallet))].registeredAt;
+    function getExpiry(address wallet) external view override returns (uint48) {
+        if (s_successor != address(0)) {
+            return IVerificationRegistry(s_successor).getExpiry(wallet);
+        }
+        return s_registrations[keccak256(abi.encodePacked(wallet))].expiresAt;
     }
 
     /// @inheritdoc IVerificationRegistry
-    function getBaseExpiry(address wallet) external view override returns (uint48) {
-        return s_baseRegistrations[keccak256(abi.encodePacked(wallet))].expiresAt;
+    function getRegisteredAt(address wallet) external view override returns (uint48) {
+        if (s_successor != address(0)) {
+            return IVerificationRegistry(s_successor).getRegisteredAt(wallet);
+        }
+        return s_registrations[keccak256(abi.encodePacked(wallet))].registeredAt;
     }
 
     /// @inheritdoc IVerificationRegistry
-    function getPrimaryExpiry(address wallet) external view override returns (uint48) {
-        return s_primaryRegistrations[keccak256(abi.encodePacked(wallet))].expiresAt;
-    }
-
-    /// @inheritdoc IVerificationRegistry
-    function wasNullifierUsed(bytes32 nullifier) external view override returns (bool) {
-        return s_primarySlots[nullifier] != bytes32(0)
-            || s_primaryUnregisteredAt[nullifier] != 0;
+    function getWallets(bytes32 nullifier) external view override returns (address[] memory) {
+        if (s_successor != address(0)) {
+            return IVerificationRegistry(s_successor).getWallets(nullifier);
+        }
+        return s_walletsByNullifier[nullifier];
     }
 
     // =========================================================================
@@ -355,30 +286,37 @@ contract VerificationRegistry is IVerificationRegistry, ReentrancyGuard, Pausabl
     // Internal Helpers
     // =========================================================================
 
-    /// @dev Computes the registration's effective expiresAt:
+    /// @dev Removes a wallet from `s_walletsByNullifier[nullifier]` via swap-and-pop.
+    ///      No-op if the wallet is not in the array.
+    function _removeWalletFromArray(bytes32 nullifier, address wallet) private {
+        uint256 idx1 = s_walletIndex[nullifier][wallet];
+        if (idx1 == 0) return;
+
+        address[] storage arr = s_walletsByNullifier[nullifier];
+        uint256 idx = idx1 - 1;
+        uint256 lastIdx = arr.length - 1;
+        if (idx != lastIdx) {
+            address moved = arr[lastIdx];
+            arr[idx] = moved;
+            s_walletIndex[nullifier][moved] = idx1; // moved now holds the 1-based index of the removed slot
+        }
+        arr.pop();
+        delete s_walletIndex[nullifier][wallet];
+    }
+
+    /// @dev Computes effective `expiresAt`:
+    ///        `min(now + registrationTTL, ceil(passportExpiry / 90 days) * 90 days)`
     ///
-    ///        expiresAt = min(now + registrationTTL,
-    ///                        ceil(passportExpiry / 90 days) * 90 days)
-    ///
-    ///      The passport-expiry component is rounded UP to the next 90-day boundary.
-    ///      Boundaries are anchored to the Unix epoch (1970-01-01) — they do NOT line up
-    ///      with calendar quarters. This collapses ~365 distinguishable expiry values per
-    ///      year into 4, making passport expiry far less linkable across different addresses
-    ///      registered from the same passport.
-    ///
-    ///      Side effect of rounding UP rather than down: roundedExpiry can exceed
-    ///      passportExpiry by up to ~89 days. isVerified() and isPrimaryVerified() only
-    ///      check `block.timestamp < expiresAt` — they do NOT re-check passportExpiry on
-    ///      read — so a registration whose passport lapses mid-quarter remains valid until
-    ///      the next 90-day boundary. registerBase / registerPrimary / renewBase /
-    ///      renewPrimary all reject expired passports up front, so this grace window only
-    ///      affects existing registrations whose passports happen to expire after registration.
+    ///      The passport-expiry component is rounded UP to the next 90-day boundary anchored
+    ///      to the Unix epoch (NOT calendar quarters). This collapses ~365 distinguishable
+    ///      expiry values per year into 4. Side effect: a registration can stay valid up to
+    ///      ~89 days past actual passport expiry. `isVerified` does not re-check passport
+    ///      expiry on read, so this grace window only affects existing registrations whose
+    ///      passport happens to lapse mid-quarter; all entrypoints reject expired passports
+    ///      up front.
     uint48 private constant QUARTER = 90 days;
 
     function _cappedExpiry(uint48 passportExpiry) private view returns (uint48) {
-        // Round up to next 90-day boundary. Guard against overflow when passportExpiry
-        // is near type(uint48).max by saturating: if adding QUARTER-1 would overflow, the
-        // expiry is so far in the future that we can use passportExpiry as-is.
         uint48 roundedExpiry = passportExpiry <= type(uint48).max - (QUARTER - 1)
             ? ((passportExpiry + QUARTER - 1) / QUARTER) * QUARTER
             : passportExpiry;

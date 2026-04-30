@@ -1,41 +1,34 @@
 import { useCallback, useState } from 'react';
 import {
-  generateBaseProof,
-  generatePrimaryProof,
+  generateSigilProof,
   generateStubProof,
   CSCA_MERKLE_ROOT,
   type ProofInput,
-  type BaseProofOutput,
-  type PrimaryProofOutput,
-  type ProofOutput,
+  type SigilProofOutput,
 } from '../services/proofService';
-import type { VerificationTier } from '../../../app/navigation/types';
 
 export interface UseProofGenerationResult {
-  generate: (input: ProofInput, tier: VerificationTier) => Promise<ProofOutput>;
+  generate: (input: ProofInput) => Promise<SigilProofOutput>;
   isGenerating: boolean;
-  result: ProofOutput | null;
+  result: SigilProofOutput | null;
   error: string | null;
 }
 
 /**
- * Hook wrapping ZK proof generation for both tiers.
+ * Hook wrapping ZK proof generation for the unified sigil flow.
  *
- * Tries the real Mopro native module (UltraHonk-Keccak, ~5–15s on device).
+ * Tries the real Mopro native module (UltraHonk-Keccak, ~5-15s on device).
  * Falls back to a stub proof if the native module is unavailable (development).
  */
 export function useProofGeneration(): UseProofGenerationResult {
   const [isGenerating, setIsGenerating] = useState(false);
-  const [result, setResult] = useState<ProofOutput | null>(null);
+  const [result, setResult] = useState<SigilProofOutput | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  const generate = useCallback(async (input: ProofInput, tier: VerificationTier): Promise<ProofOutput> => {
+  const generate = useCallback(async (input: ProofInput): Promise<SigilProofOutput> => {
     setIsGenerating(true);
     setError(null);
     setResult(null);
-
-    // Map user-facing tier to contract-level tier
-    const isPrimary = tier === 'unique';
 
     try {
       if (!input.walletAddress || !input.walletAddress.startsWith('0x')) {
@@ -48,12 +41,10 @@ export function useProofGeneration(): UseProofGenerationResult {
         throw new Error('Raw SOD data is required');
       }
 
-      let proofOutput: ProofOutput;
+      let proofOutput: SigilProofOutput;
 
       try {
-        proofOutput = isPrimary
-          ? await generatePrimaryProof(input)
-          : await generateBaseProof(input);
+        proofOutput = await generateSigilProof(input);
       } catch (moproErr) {
         const innerMsg = (moproErr != null && typeof moproErr === 'object' && 'inner' in moproErr && Array.isArray((moproErr as { inner: unknown[] }).inner))
           ? String((moproErr as { inner: unknown[] }).inner[0])
@@ -65,42 +56,26 @@ export function useProofGeneration(): UseProofGenerationResult {
           msg.includes('Incompatible versions of uniffi') ||
           msg.includes('ContractVersionMismatch')
         ) {
-          // Development fallback: stub proof (not verifiable on-chain)
-          console.warn('[PROOF] Mopro unavailable — using stub proof for development');
+          console.warn('[PROOF] Mopro unavailable - using stub proof for development');
           const stub = generateStubProof(input);
 
-          if (isPrimary) {
-            // Stub primary: deterministic nullifier per passport (the real circuit
-            // computes Poseidon2(s); the stub uses a keccak surrogate).
-            const stubNullifier = stub.passportNullifierHex;
-            proofOutput = {
-              type: 'primary',
-              zkProof: {
-                proof: stub.zkProof.proof,
-                vk: ('0x' + '00'.repeat(32)) as `0x${string}`,
-                nullifier: stubNullifier,
-                hashedAddress: stub.zkProof.publicSignals[1].toString(),
-                passportExpiry: (input.passportExpiryUnix ?? 0).toString(),
-                cscaMerkleRoot: CSCA_MERKLE_ROOT,
-              },
+          // Stub: nullifier and epoch_nullifier both derived from the keccak surrogate.
+          // Real circuit uses Poseidon2; stub is only valid against MockProofVerifier.
+          const stubNullifier = stub.passportNullifierHex;
+          proofOutput = {
+            zkProof: {
+              proof: stub.zkProof.proof,
+              vk: ('0x' + '00'.repeat(32)) as `0x${string}`,
               nullifier: stubNullifier,
+              epochNullifier: stubNullifier,
+              hashedAddress: stub.zkProof.publicSignals[1].toString(),
+              passportExpiry: (input.passportExpiryUnix ?? 0).toString(),
               cscaMerkleRoot: CSCA_MERKLE_ROOT,
-            } satisfies PrimaryProofOutput;
-          } else {
-            proofOutput = {
-              type: 'base',
-              zkProof: {
-                proof: stub.zkProof.proof,
-                vk: ('0x' + '00'.repeat(32)) as `0x${string}`,
-                epochNullifier: stub.passportNullifierHex,
-                hashedAddress: stub.zkProof.publicSignals[1].toString(),
-                passportExpiry: (input.passportExpiryUnix ?? 0).toString(),
-                cscaMerkleRoot: CSCA_MERKLE_ROOT,
-              },
-              epochNullifier: stub.passportNullifierHex,
-              cscaMerkleRoot: CSCA_MERKLE_ROOT,
-            } satisfies BaseProofOutput;
-          }
+            },
+            nullifier: stubNullifier,
+            epochNullifier: stubNullifier,
+            cscaMerkleRoot: CSCA_MERKLE_ROOT,
+          };
         } else {
           throw moproErr;
         }

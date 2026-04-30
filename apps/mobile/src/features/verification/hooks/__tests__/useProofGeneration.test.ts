@@ -1,6 +1,6 @@
 import { renderHook, act } from '@testing-library/react-native';
 import { useProofGeneration } from '../useProofGeneration';
-import type { StubProofInput, StubProofOutput, BaseProofOutput } from '../../services/proofService';
+import type { StubProofInput, StubProofOutput, SigilProofOutput } from '../../services/proofService';
 
 const mockStubOutput: StubProofOutput = {
   zkProof: {
@@ -13,24 +13,25 @@ const mockStubOutput: StubProofOutput = {
 
 import { CSCA_MERKLE_ROOT } from '../../services/cscaMerkleProof';
 
-// Expected BaseProofOutput produced by the stub fallback path in useProofGeneration
-const expectedBaseOutput: BaseProofOutput = {
-  type: 'base',
+// Expected SigilProofOutput produced by the stub fallback path in useProofGeneration
+const expectedSigilOutput: SigilProofOutput = {
   zkProof: {
     proof: mockStubOutput.zkProof.proof,
     vk: ('0x' + '00'.repeat(32)) as `0x${string}`,
+    nullifier: mockStubOutput.passportNullifierHex,
     epochNullifier: mockStubOutput.passportNullifierHex,
     hashedAddress: mockStubOutput.zkProof.publicSignals[1].toString(),
     passportExpiry: '0',
     cscaMerkleRoot: CSCA_MERKLE_ROOT,
   },
+  nullifier: mockStubOutput.passportNullifierHex,
   epochNullifier: mockStubOutput.passportNullifierHex,
   cscaMerkleRoot: CSCA_MERKLE_ROOT,
 };
 
 jest.mock('../../services/proofService', () => ({
   // Simulate Mopro native module not being available (expected in dev/CI)
-  generateBaseProof: jest.fn().mockRejectedValue(new Error('Mopro native module not available')),
+  generateSigilProof: jest.fn().mockRejectedValue(new Error('Mopro native module not available')),
   generateStubProof: jest.fn().mockImplementation(() => mockStubOutput),
   CSCA_MERKLE_ROOT: require('../../services/cscaMerkleProof').CSCA_MERKLE_ROOT,
 }));
@@ -65,21 +66,19 @@ describe('useProofGeneration', () => {
   });
 
   it('sets isGenerating=true during generation', async () => {
-    // Use a never-resolving promise so we can observe isGenerating=true
-    const { generateBaseProof } = jest.requireMock('../../services/proofService') as {
-      generateBaseProof: jest.Mock;
+    const { generateSigilProof } = jest.requireMock('../../services/proofService') as {
+      generateSigilProof: jest.Mock;
     };
-    generateBaseProof.mockImplementationOnce(() => new Promise(() => {}));
+    generateSigilProof.mockImplementationOnce(() => new Promise(() => {}));
 
     const { result, unmount } = renderHook(() => useProofGeneration());
 
     act(() => {
-      void result.current.generate(validInput, 'verified');
+      void result.current.generate(validInput);
     });
 
     expect(result.current.isGenerating).toBe(true);
 
-    // Unmount to avoid act() warning from the dangling promise
     unmount();
   });
 
@@ -87,12 +86,12 @@ describe('useProofGeneration', () => {
     const { result } = renderHook(() => useProofGeneration());
 
     await act(async () => {
-      const promise = result.current.generate(validInput, 'verified');
+      const promise = result.current.generate(validInput);
       await jest.runAllTimersAsync();
       await promise;
     });
 
-    expect(result.current.result).toEqual(expectedBaseOutput);
+    expect(result.current.result).toEqual(expectedSigilOutput);
     expect(result.current.isGenerating).toBe(false);
   });
 
@@ -105,7 +104,7 @@ describe('useProofGeneration', () => {
     };
 
     await act(async () => {
-      await result.current.generate(invalidInput, 'verified').catch(() => undefined);
+      await result.current.generate(invalidInput).catch(() => undefined);
     });
 
     expect(result.current.error).toBe('Invalid wallet address');
@@ -118,7 +117,7 @@ describe('useProofGeneration', () => {
     const invalidInput: StubProofInput = { ...validInput, rawDG1Hex: '' };
 
     await act(async () => {
-      await result.current.generate(invalidInput, 'verified').catch(() => undefined);
+      await result.current.generate(invalidInput).catch(() => undefined);
     });
 
     expect(result.current.error).toBe('Raw DG1 data is required');
@@ -130,7 +129,7 @@ describe('useProofGeneration', () => {
     const invalidInput: StubProofInput = { ...validInput, rawSODHex: '' };
 
     await act(async () => {
-      await result.current.generate(invalidInput, 'verified').catch(() => undefined);
+      await result.current.generate(invalidInput).catch(() => undefined);
     });
 
     expect(result.current.error).toBe('Raw SOD data is required');

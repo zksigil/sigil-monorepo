@@ -6,8 +6,7 @@ import {ProtocolConfig} from "../src/ProtocolConfig.sol";
 import {ProofVerifier} from "../src/ProofVerifier.sol";
 import {VerificationRegistry} from "../src/VerificationRegistry.sol";
 import {CSCAMerkleTree} from "../src/CSCAMerkleTree.sol";
-import {BaseUltraHonkVerifier} from "../src/verifiers/BaseUltraHonkVerifier.sol";
-import {PrimaryUltraHonkVerifier} from "../src/verifiers/PrimaryUltraHonkVerifier.sol";
+import {SigilUltraHonkVerifier} from "../src/verifiers/SigilUltraHonkVerifier.sol";
 
 /// @notice Full deployment script for Sigil contracts on Sepolia / Ethereum Mainnet.
 ///
@@ -48,7 +47,6 @@ contract Deploy is Script {
         config = new ProtocolConfig(deployer);
         console2.log("ProtocolConfig:       ", address(config));
         console2.log("  registrationTTL:    ", config.registrationTTL() / 1 days, "days");
-        console2.log("  cooldownPeriod:     ", config.cooldownPeriod() / 1 days, "days");
         console2.log("  maxDailyRegistrations:", config.maxDailyRegistrations());
 
         // 2. CSCAMerkleTree — stores ICAO CSCA Merkle root, deployer is initial owner
@@ -56,19 +54,12 @@ contract Deploy is Script {
         console2.log("CSCAMerkleTree:       ", address(cscaTree));
         console2.logBytes32(CSCA_MERKLE_ROOT);
 
-        // 3. UltraHonk verifiers — VK is embedded directly in each verifier (literal struct return)
-        BaseUltraHonkVerifier baseHonk = new BaseUltraHonkVerifier();
-        console2.log("BaseUltraHonkVerifier:", address(baseHonk));
+        // 3. UltraHonk verifier — single verifier for the unified sigil circuit.
+        SigilUltraHonkVerifier honk = new SigilUltraHonkVerifier();
+        console2.log("UltraHonk verifier:   ", address(honk));
 
-        PrimaryUltraHonkVerifier primaryHonk = new PrimaryUltraHonkVerifier();
-        console2.log("PrimaryUltraHonkVerifier:", address(primaryHonk));
-
-        // 4. ProofVerifier — marshals typed inputs and delegates to UltraHonk verifiers
-        verifier = new ProofVerifier(
-            address(baseHonk),
-            address(primaryHonk),
-            address(cscaTree)
-        );
+        // 4. ProofVerifier — marshals typed inputs and delegates to the UltraHonk verifier
+        verifier = new ProofVerifier(address(honk));
         console2.log("ProofVerifier:        ", address(verifier));
 
         // 5. VerificationRegistry

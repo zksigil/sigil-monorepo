@@ -20,23 +20,17 @@ use crate::MoproError;
 // Public types
 // ---------------------------------------------------------------------------
 
-/// Computed inputs for the base-tier circuit, ready to pass to generate_noir_proof.
+/// Computed inputs for the unified sigil circuit, ready to pass to generate_noir_proof.
 #[derive(uniffi::Record)]
-pub struct BaseInputs {
+pub struct SigilInputs {
     /// Flat ordered string array for generate_noir_proof: private first, then public.
     pub inputs: Vec<String>,
-    /// epoch_nullifier as decimal string (= Poseidon2([s, epoch_day])).
-    /// Also sent on-chain as the rate-limiting key.
-    pub epoch_nullifier: String,
-}
-
-/// Computed inputs for the primary-tier circuit.
-#[derive(uniffi::Record)]
-pub struct PrimaryInputs {
-    /// Flat ordered string array for generate_noir_proof.
-    pub inputs: Vec<String>,
-    /// nullifier as decimal string (= Poseidon2([s, nonce])).
+    /// Stable per-passport nullifier as decimal string (= Poseidon2([s, 1])).
+    /// Sent on-chain as the wallet's sigil identity.
     pub nullifier: String,
+    /// Daily epoch nullifier as decimal string (= Poseidon2([s, epoch_day])).
+    /// Sent on-chain as the rate-limiting key.
+    pub epoch_nullifier: String,
 }
 
 // ---------------------------------------------------------------------------
@@ -45,9 +39,9 @@ pub struct PrimaryInputs {
 
 /// Get the UltraHonk-Keccak verification key for a compiled Noir circuit.
 ///
-/// `circuit_path` — absolute path to the nargo-compiled .json artifact.
-/// `srs_path`     — optional path to the SRS file. Pass None to use the
-///                  default SRS (downloaded automatically on first call).
+/// `circuit_path` -- absolute path to the nargo-compiled .json artifact.
+/// `srs_path`     -- optional path to the SRS file. Pass None to use the
+///                   default SRS (downloaded automatically on first call).
 #[uniffi::export]
 pub fn get_noir_verification_key(
     circuit_path: String,
@@ -57,7 +51,7 @@ pub fn get_noir_verification_key(
 ) -> Result<Vec<u8>, MoproError> {
     if !on_chain {
         return Err(MoproError::NoirError(
-            "off-chain (Poseidon) proofs not supported — use on_chain=true for EVM".into(),
+            "off-chain (Poseidon) proofs not supported -- use on_chain=true for EVM".into(),
         ));
     }
     let bytecode = read_bytecode(&circuit_path)?;
@@ -73,9 +67,9 @@ pub fn get_noir_verification_key(
 
 /// Generate an UltraHonk-Keccak proof for a compiled Noir circuit.
 ///
-/// `inputs` — flat ordered string array matching the circuit's private + public
-///            input declaration order (private inputs first, then public).
-///            Each value is a decimal field element string.
+/// `inputs` -- flat ordered string array matching the circuit's private + public
+///             input declaration order (private inputs first, then public).
+///             Each value is a decimal field element string.
 #[uniffi::export]
 pub fn generate_noir_proof(
     circuit_path: String,
@@ -87,7 +81,7 @@ pub fn generate_noir_proof(
 ) -> Result<Vec<u8>, MoproError> {
     if !on_chain {
         return Err(MoproError::NoirError(
-            "off-chain (Poseidon) proofs not supported — use on_chain=true for EVM".into(),
+            "off-chain (Poseidon) proofs not supported -- use on_chain=true for EVM".into(),
         ));
     }
     let bytecode = read_bytecode(&circuit_path)?;
@@ -100,7 +94,7 @@ pub fn generate_noir_proof(
         .map_err(|e| MoproError::NoirError(format!("Proof generation failed: {e:?}")))
 }
 
-/// Verify an UltraHonk-Keccak proof locally (optional — the contract verifies on-chain).
+/// Verify an UltraHonk-Keccak proof locally (optional -- the contract verifies on-chain).
 #[uniffi::export]
 pub fn verify_noir_proof(
     circuit_path: String,
@@ -111,7 +105,7 @@ pub fn verify_noir_proof(
 ) -> Result<bool, MoproError> {
     if !on_chain {
         return Err(MoproError::NoirError(
-            "off-chain (Poseidon) proofs not supported — use on_chain=true for EVM".into(),
+            "off-chain (Poseidon) proofs not supported -- use on_chain=true for EVM".into(),
         ));
     }
     let _bytecode = read_bytecode(&circuit_path)?;
@@ -120,13 +114,14 @@ pub fn verify_noir_proof(
 }
 
 // ---------------------------------------------------------------------------
-// Input pre-computation helpers (exported via uniffi)
+// Input pre-computation (exported via uniffi)
 // ---------------------------------------------------------------------------
 
-/// Compute the flat witness vector for the base-tier circuit.
+/// Compute the flat witness vector for the unified sigil circuit.
 ///
-/// Returns `BaseInputs` containing the full ordered flat array (private then public)
-/// ready to pass to `generate_noir_proof`, plus the computed `epoch_nullifier`.
+/// Returns `SigilInputs` containing the full ordered flat array (private then public)
+/// ready to pass to `generate_noir_proof`, plus the computed `nullifier` and
+/// `epoch_nullifier` for on-chain use.
 ///
 /// Input order in circuit ABI:
 ///   private: dg1_hash, sod_hash, epoch_day,
@@ -135,9 +130,9 @@ pub fn verify_noir_proof(
 ///            dsc_tbs[1536], dsc_tbs_len, dsc_pubkey_offset,
 ///            csca_pubkey[512], csca_redc_param[513], csca_exponent, csca_signature[512],
 ///            csca_merkle_siblings[9], csca_leaf_index
-///   public:  epoch_nullifier, hashed_address, csca_merkle_root
+///   public:  nullifier, epoch_nullifier, hashed_address, csca_merkle_root
 #[uniffi::export]
-pub fn compute_base_inputs(
+pub fn compute_sigil_inputs(
     dg1_hash: String,
     sod_hash: String,
     epoch_day: String,
@@ -158,14 +153,17 @@ pub fn compute_base_inputs(
     csca_leaf_index: u32,
     hashed_address: String,
     csca_merkle_root: String,
-) -> Result<BaseInputs, MoproError> {
+) -> Result<SigilInputs, MoproError> {
     let dg1 = parse_field(&dg1_hash)?;
     let sod = parse_field(&sod_hash)?;
     let day = parse_field(&epoch_day)?;
+    let one = FieldElement::from(1u128);
 
     let passport_secret = poseidon2([dg1, sod])?;
+    let nullifier = poseidon2([passport_secret, one])?;
     let epoch_nullifier = poseidon2([passport_secret, day])?;
 
+    let nullifier_str = field_to_decimal(nullifier);
     let epoch_nullifier_str = field_to_decimal(epoch_nullifier);
 
     let mut inputs = Vec::new();
@@ -197,115 +195,16 @@ pub fn compute_base_inputs(
     inputs.push(csca_leaf_index.to_string());
 
     // Public inputs
+    inputs.push(nullifier_str.clone());
     inputs.push(epoch_nullifier_str.clone());
     inputs.push(hashed_address);
     inputs.push(csca_merkle_root);
 
-    Ok(BaseInputs { inputs, epoch_nullifier: epoch_nullifier_str })
-}
-
-/// Compute the flat witness vector for the primary-tier circuit.
-///
-/// Returns `PrimaryInputs` with the full ordered flat array plus the deterministic
-/// `nullifier` as a decimal string for on-chain use.
-///
-/// Input order in circuit ABI:
-///   private: dg1_hash, sod_hash, nonce,
-///            signed_attrs[512], signed_attrs_len, signature[256],
-///            pubkey[256], redc_param[257], exponent,
-///            dsc_tbs[1536], dsc_tbs_len, dsc_pubkey_offset,
-///            csca_pubkey[512], csca_redc_param[513], csca_exponent, csca_signature[512],
-///            csca_merkle_siblings[9], csca_leaf_index
-///   public:  nullifier, hashed_address, csca_merkle_root
-#[uniffi::export]
-pub fn compute_primary_inputs(
-    dg1_hash: String,
-    sod_hash: String,
-    nonce: String,
-    signed_attrs: Vec<u8>,
-    signed_attrs_len: u32,
-    signature: Vec<u8>,
-    pubkey: Vec<u8>,
-    redc_param: Vec<u8>,
-    exponent: u32,
-    dsc_tbs: Vec<u8>,
-    dsc_tbs_len: u32,
-    dsc_pubkey_offset: u32,
-    csca_pubkey: Vec<u8>,
-    csca_redc_param: Vec<u8>,
-    csca_exponent: u32,
-    csca_signature: Vec<u8>,
-    csca_merkle_siblings: Vec<String>,
-    csca_leaf_index: u32,
-    hashed_address: String,
-    csca_merkle_root: String,
-) -> Result<PrimaryInputs, MoproError> {
-    let dg1 = parse_field(&dg1_hash)?;
-    let sod = parse_field(&sod_hash)?;
-    let n = parse_field(&nonce)?;
-
-    let passport_secret = poseidon2([dg1, sod])?;
-    let nullifier = poseidon2([passport_secret, n])?;
-
-    let nullifier_str = field_to_decimal(nullifier);
-
-    let mut inputs = Vec::new();
-
-    // Private field elements
-    inputs.push(dg1_hash);
-    inputs.push(sod_hash);
-    inputs.push(nonce);
-
-    // SOD RSA-2048 verification inputs
-    for &b in &signed_attrs { inputs.push(b.to_string()); }
-    inputs.push(signed_attrs_len.to_string());
-    for &b in &signature { inputs.push(b.to_string()); }
-    for &b in &pubkey { inputs.push(b.to_string()); }
-    for &b in &redc_param { inputs.push(b.to_string()); }
-    inputs.push(exponent.to_string());
-
-    // CSCA->DSC chain verification inputs (RSA-4096)
-    for &b in &dsc_tbs { inputs.push(b.to_string()); }
-    inputs.push(dsc_tbs_len.to_string());
-    inputs.push(dsc_pubkey_offset.to_string());
-    for &b in &csca_pubkey { inputs.push(b.to_string()); }
-    for &b in &csca_redc_param { inputs.push(b.to_string()); }
-    inputs.push(csca_exponent.to_string());
-    for &b in &csca_signature { inputs.push(b.to_string()); }
-
-    // CSCA Merkle proof (9 siblings + leaf index)
-    for sibling in &csca_merkle_siblings { inputs.push(sibling.clone()); }
-    inputs.push(csca_leaf_index.to_string());
-
-    // Public inputs
-    inputs.push(nullifier_str.clone());
-    inputs.push(hashed_address);
-    inputs.push(csca_merkle_root);
-
-    Ok(PrimaryInputs {
+    Ok(SigilInputs {
         inputs,
         nullifier: nullifier_str,
+        epoch_nullifier: epoch_nullifier_str,
     })
-}
-
-/// Compute just the nullifier for a given nonce (used for nonce recovery).
-///
-/// nullifier = Poseidon2([Poseidon2([dg1_hash, sod_hash]), nonce])
-///
-/// This avoids requiring RSA fields when we only need the nullifier.
-#[uniffi::export]
-pub fn compute_nullifier(
-    dg1_hash: String,
-    sod_hash: String,
-    nonce: String,
-) -> Result<String, MoproError> {
-    let dg1 = parse_field(&dg1_hash)?;
-    let sod = parse_field(&sod_hash)?;
-    let n = parse_field(&nonce)?;
-
-    let passport_secret = poseidon2([dg1, sod])?;
-    let nullifier = poseidon2([passport_secret, n])?;
-    Ok(field_to_decimal(nullifier))
 }
 
 /// Compute the Barrett reduction parameter for an RSA modulus.
@@ -315,7 +214,7 @@ pub fn compute_nullifier(
 /// `redc_param = floor(2^(2*bits + BARRETT_REDUCTION_OVERFLOW_BITS) / modulus)`
 ///
 /// `BARRETT_REDUCTION_OVERFLOW_BITS = 6` matches noir-bignum >= v0.9.x.
-/// (v0.7.3 used 4 — bumping noir-bignum changed this constant.)
+/// (v0.7.3 used 4 -- bumping noir-bignum changed this constant.)
 ///
 /// Returns N+1 bytes (big-endian): 257 bytes for 2048-bit, 513 bytes for 4096-bit.
 #[uniffi::export]
@@ -395,7 +294,7 @@ fn bytes_to_decimal(bytes: &[u8]) -> String {
 
 /// Fixed-length Poseidon2 sponge hash matching Noir stdlib's `Poseidon2::hash(inputs, len)`.
 /// Reimplemented locally since beta.19's bn254_blackbox_solver no longer exposes a high-level
-/// hash function — only the underlying `poseidon2_permutation` primitive.
+/// hash function -- only the underlying `poseidon2_permutation` primitive.
 fn poseidon2(inputs: impl IntoIterator<Item = FieldElement>) -> Result<FieldElement, MoproError> {
     let v: Vec<FieldElement> = inputs.into_iter().collect();
     poseidon2_hash(&v)
@@ -455,59 +354,44 @@ fn read_bytecode(circuit_path: &str) -> Result<String, MoproError> {
 }
 
 // ---------------------------------------------------------------------------
-// Tests — run with: cargo test (requires test-vectors/ to be populated)
+// Tests
 // ---------------------------------------------------------------------------
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use serial_test::serial;
 
-    const BASE_CIRCUIT: &str = "./test-vectors/noir/passport_base.json";
-    const PRIMARY_CIRCUIT: &str = "./test-vectors/noir/passport_primary.json";
-
-    // Expected public input values computed offline via helper Noir circuits.
-    // Base: dg1_hash=1, sod_hash=2, epoch_day=20000
+    // Expected nullifier and epoch_nullifier computed offline.
+    // dg1_hash=1, sod_hash=2, epoch_day=20000
+    //   nullifier       = Poseidon2([Poseidon2([1,2]), 1])
     //   epoch_nullifier = Poseidon2([Poseidon2([1,2]), 20000])
-    const BASE_EPOCH_NULLIFIER: &str =
+    const EXPECTED_NULLIFIER: &str =
+        "275412644495263924189939344395808058143324727273800689612812660018296150956";
+    const EXPECTED_EPOCH_NULLIFIER: &str =
         "10169623654123766754031260866998371876549336851110854689992825661941566564438";
 
-    // Primary: dg1_hash=1, sod_hash=2, nonce=1
-    //   nullifier = Poseidon2([Poseidon2([1,2]), 1])
-    const PRIMARY_NULLIFIER: &str =
-        "275412644495263924189939344395808058143324727273800689612812660018296150956";
-
-    // NOTE: Proof round-trip tests (test_base_proof_roundtrip, test_primary_proof_roundtrip)
-    // are commented out until test-vectors/ are updated with Phase 3b circuit artifacts
-    // that include RSA verification inputs. The old 6-7 input format no longer matches
-    // the circuit ABI.
-
-    /// Verify compute_nullifier derives the correct value.
+    /// Verify Poseidon2 derivations match the values used in the Solidity tests.
     #[test]
-    fn test_compute_nullifier_values() {
-        let nullifier = compute_nullifier(
-            "1".to_string(),
-            "2".to_string(),
-            "1".to_string(),
-        )
-        .expect("compute_nullifier failed");
+    fn test_poseidon2_derivations() {
+        let dg1 = FieldElement::from(1u128);
+        let sod = FieldElement::from(2u128);
+        let one = FieldElement::from(1u128);
+        let day = FieldElement::from(20000u128);
 
-        assert_eq!(nullifier, PRIMARY_NULLIFIER);
+        let s = poseidon2([dg1, sod]).unwrap();
+        assert_eq!(field_to_decimal(poseidon2([s, one]).unwrap()), EXPECTED_NULLIFIER);
+        assert_eq!(field_to_decimal(poseidon2([s, day]).unwrap()), EXPECTED_EPOCH_NULLIFIER);
     }
 
     /// Verify compute_redc_param produces 257 bytes and is non-zero.
     #[test]
     fn test_compute_redc_param() {
-        // A simple 256-byte modulus (just a big number with high bit set)
         let mut modulus = vec![0u8; 256];
-        modulus[0] = 0x80; // Set high bit
-        modulus[255] = 1;  // Make it odd
+        modulus[0] = 0x80;
+        modulus[255] = 1;
 
         let redc = compute_redc_param(modulus).expect("compute_redc_param failed");
         assert_eq!(redc.len(), 257);
-        // The result should be non-zero
         assert!(redc.iter().any(|&b| b != 0));
     }
-
-    // NOTE: test_base_proof_from_computed_inputs removed — needs Phase 3b circuit artifacts.
 }

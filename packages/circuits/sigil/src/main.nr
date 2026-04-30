@@ -8,25 +8,27 @@ global SIGNED_ATTRS_MAX_LEN: u32 = 512;
 /// Maximum length for DSC TBS (To-Be-Signed) certificate bytes (zero-padded).
 global DSC_TBS_MAX_LEN: u32 = 1536;
 
-/// Merkle tree depth for CSCA certificate inclusion proof.
-/// Reduced from 12 to 9 (512 leaves) - sufficient for 269 CSCA certs with headroom.
+/// Merkle tree depth for CSCA certificate inclusion proof. Depth 9 = 512 leaves;
+/// sufficient for ~269 CSCA certs with comfortable headroom.
 global MERKLE_DEPTH: u32 = 9;
 
-/// Phase 3c: Base-tier registration circuit with full certificate chain verification.
+/// Sigil -- single-tier passport verification circuit.
 ///
 /// Proves:
 ///   1. The SOD was signed by the DSC public key (RSA-2048/SHA-256/PKCS#1v1.5)
 ///   2. The DSC certificate was signed by a CSCA (RSA-4096/SHA-256/PKCS#1v1.5)
 ///   3. The DSC pubkey is bound to the CSCA-signed certificate (anti-substitution)
 ///   4. The CSCA public key is in the ICAO CSCA Merkle tree
-///   5. epoch_nullifier = Poseidon2([passport_secret, epoch_day])
+///   5. A stable per-passport nullifier (`Poseidon2(passport_secret, 1)`) -- sybil identifier
+///   6. A daily epoch nullifier (`Poseidon2(passport_secret, epoch_day)`) -- rate-limit key
 ///
-/// Trust chain: ICAO Master List -> CSCA -> signs DSC cert -> DSC signs SOD -> SOD covers DG1
+/// Trust chain: ICAO Master List -> CSCA -> signs DSC cert -> DSC signs SOD -> SOD covers DG1.
 ///
-/// Public inputs:
-///   epoch_nullifier    -- rate-limiting key (hash of secret + day)
-///   hashed_address     -- keccak256(wallet) as a Field (prevents proof replay)
-///   csca_merkle_root   -- current CSCA Merkle root from on-chain contract
+/// Public inputs (declaration order -- must match contract `verifyProof` marshalling):
+///   nullifier         -- stable sybil identifier per passport
+///   epoch_nullifier   -- daily rate-limit key
+///   hashed_address    -- keccak256(wallet) reduced mod p (prevents proof replay)
+///   csca_merkle_root  -- current CSCA Merkle root from on-chain registry
 fn main(
     // Private inputs (witness)
     dg1_hash: Field,
@@ -51,6 +53,7 @@ fn main(
     csca_merkle_siblings: [Field; MERKLE_DEPTH],
     csca_leaf_index: u32,
     // Public inputs
+    nullifier: pub Field,
     epoch_nullifier: pub Field,
     hashed_address: pub Field,
     csca_merkle_root: pub Field,
@@ -100,7 +103,8 @@ fn main(
     // 4. CSCA Merkle tree: CSCA pubkey is in the ICAO Master List
     // ---------------------------------------------------------------
     // Hash pubkey first to reduce bytes->Field conversion from 512 to 32 multiplies.
-    // SHA-256 is already used in-circuit for RSA verification, so this adds no new trust assumptions.
+    // SHA-256 is already used in-circuit for RSA verification, so this adds no new
+    // trust assumptions.
 
     let csca_pubkey_hash: [u8; 32] = sha256::sha256_var(csca_pubkey, 512);
     let csca_pubkey_as_field = bytes_to_field::<32>(csca_pubkey_hash);
@@ -111,14 +115,24 @@ fn main(
     assert(computed_root == csca_merkle_root, "CSCA Merkle proof failed");
 
     // ---------------------------------------------------------------
-    // 5. Derive passport secret and epoch nullifier
+    // 5. Derive passport secret + both nullifiers
     // ---------------------------------------------------------------
+    // Stable nullifier: deterministic per passport (nonce fixed at 1). The same passport
+    // always produces the same `nullifier`, so a user's multiple sigilized wallets share
+    // this value on-chain -- they are publicly linkable as belonging to one passport.
+    //
+    // Epoch nullifier: changes each day. Used by the contract to rate-limit the number
+    // of new wallets a single passport can sigilize per day.
 
     let passport_secret = Poseidon2::hash([dg1_hash, sod_hash], 2);
+
+    let computed_nullifier = Poseidon2::hash([passport_secret, 1], 2);
+    assert(computed_nullifier == nullifier);
+
     let computed_epoch_nullifier = Poseidon2::hash([passport_secret, epoch_day], 2);
     assert(computed_epoch_nullifier == epoch_nullifier);
 
-    // hashed_address binds this proof to a specific wallet - enforced on-chain via msg.sender.
+    // hashed_address binds this proof to a specific wallet -- enforced on-chain via msg.sender.
     let _ = hashed_address;
 }
 

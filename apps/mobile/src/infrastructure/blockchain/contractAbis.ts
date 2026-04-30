@@ -35,7 +35,7 @@ export const VERIFICATION_REGISTRY_ABI = [
   },
   {
     "type": "function",
-    "name": "getBaseExpiry",
+    "name": "getExpiry",
     "inputs": [
       {
         "name": "wallet",
@@ -54,7 +54,7 @@ export const VERIFICATION_REGISTRY_ABI = [
   },
   {
     "type": "function",
-    "name": "getPrimaryExpiry",
+    "name": "getRegisteredAt",
     "inputs": [
       {
         "name": "wallet",
@@ -73,38 +73,19 @@ export const VERIFICATION_REGISTRY_ABI = [
   },
   {
     "type": "function",
-    "name": "getPrimaryRegisteredAt",
+    "name": "getWallets",
     "inputs": [
       {
-        "name": "wallet",
-        "type": "address",
-        "internalType": "address"
+        "name": "nullifier",
+        "type": "bytes32",
+        "internalType": "bytes32"
       }
     ],
     "outputs": [
       {
         "name": "",
-        "type": "uint48",
-        "internalType": "uint48"
-      }
-    ],
-    "stateMutability": "view"
-  },
-  {
-    "type": "function",
-    "name": "isPrimaryVerified",
-    "inputs": [
-      {
-        "name": "wallet",
-        "type": "address",
-        "internalType": "address"
-      }
-    ],
-    "outputs": [
-      {
-        "name": "",
-        "type": "bool",
-        "internalType": "bool"
+        "type": "address[]",
+        "internalType": "address[]"
       }
     ],
     "stateMutability": "view"
@@ -124,6 +105,25 @@ export const VERIFICATION_REGISTRY_ABI = [
         "name": "",
         "type": "bool",
         "internalType": "bool"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "nullifierOf",
+    "inputs": [
+      {
+        "name": "wallet",
+        "type": "address",
+        "internalType": "address"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "",
+        "type": "bytes32",
+        "internalType": "bytes32"
       }
     ],
     "stateMutability": "view"
@@ -150,8 +150,13 @@ export const VERIFICATION_REGISTRY_ABI = [
   },
   {
     "type": "function",
-    "name": "registerBase",
+    "name": "register",
     "inputs": [
+      {
+        "name": "nullifier",
+        "type": "bytes32",
+        "internalType": "bytes32"
+      },
       {
         "name": "epochNullifier",
         "type": "bytes32",
@@ -173,7 +178,7 @@ export const VERIFICATION_REGISTRY_ABI = [
   },
   {
     "type": "function",
-    "name": "registerPrimary",
+    "name": "renew",
     "inputs": [
       {
         "name": "nullifier",
@@ -181,43 +186,7 @@ export const VERIFICATION_REGISTRY_ABI = [
         "internalType": "bytes32"
       },
       {
-        "name": "passportExpiry",
-        "type": "uint48",
-        "internalType": "uint48"
-      },
-      {
-        "name": "proof",
-        "type": "bytes",
-        "internalType": "bytes"
-      }
-    ],
-    "outputs": [],
-    "stateMutability": "nonpayable"
-  },
-  {
-    "type": "function",
-    "name": "renewBase",
-    "inputs": [
-      {
-        "name": "passportExpiry",
-        "type": "uint48",
-        "internalType": "uint48"
-      },
-      {
-        "name": "proof",
-        "type": "bytes",
-        "internalType": "bytes"
-      }
-    ],
-    "outputs": [],
-    "stateMutability": "nonpayable"
-  },
-  {
-    "type": "function",
-    "name": "renewPrimary",
-    "inputs": [
-      {
-        "name": "nullifier",
+        "name": "epochNullifier",
         "type": "bytes32",
         "internalType": "bytes32"
       },
@@ -276,26 +245,7 @@ export const VERIFICATION_REGISTRY_ABI = [
   },
   {
     "type": "function",
-    "name": "s_primaryNullifierByWallet",
-    "inputs": [
-      {
-        "name": "",
-        "type": "bytes32",
-        "internalType": "bytes32"
-      }
-    ],
-    "outputs": [
-      {
-        "name": "",
-        "type": "bytes32",
-        "internalType": "bytes32"
-      }
-    ],
-    "stateMutability": "view"
-  },
-  {
-    "type": "function",
-    "name": "s_primarySlots",
+    "name": "s_nullifierByWallet",
     "inputs": [
       {
         "name": "",
@@ -412,36 +362,10 @@ export const VERIFICATION_REGISTRY_ABI = [
   },
   {
     "type": "function",
-    "name": "unregisterBase",
+    "name": "unregister",
     "inputs": [],
     "outputs": [],
     "stateMutability": "nonpayable"
-  },
-  {
-    "type": "function",
-    "name": "unregisterPrimary",
-    "inputs": [],
-    "outputs": [],
-    "stateMutability": "nonpayable"
-  },
-  {
-    "type": "function",
-    "name": "wasNullifierUsed",
-    "inputs": [
-      {
-        "name": "nullifier",
-        "type": "bytes32",
-        "internalType": "bytes32"
-      }
-    ],
-    "outputs": [
-      {
-        "name": "",
-        "type": "bool",
-        "internalType": "bool"
-      }
-    ],
-    "stateMutability": "view"
   },
   {
     "type": "event",
@@ -598,11 +522,6 @@ export const VERIFICATION_REGISTRY_ABI = [
   },
   {
     "type": "error",
-    "name": "VerificationRegistry__NotAuthorized",
-    "inputs": []
-  },
-  {
-    "type": "error",
     "name": "VerificationRegistry__NotGovernor",
     "inputs": []
   },
@@ -613,17 +532,12 @@ export const VERIFICATION_REGISTRY_ABI = [
   },
   {
     "type": "error",
-    "name": "VerificationRegistry__NullifierAlreadyUsed",
+    "name": "VerificationRegistry__NullifierMismatch",
     "inputs": []
   },
   {
     "type": "error",
     "name": "VerificationRegistry__PassportExpired",
-    "inputs": []
-  },
-  {
-    "type": "error",
-    "name": "VerificationRegistry__PrimaryInCooldown",
     "inputs": []
   },
   {

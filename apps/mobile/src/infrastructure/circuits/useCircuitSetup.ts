@@ -2,11 +2,9 @@ import { useEffect, useState } from 'react';
 import * as FileSystem from 'expo-file-system/legacy';
 import { setCircuitPaths } from '../../features/verification/services/proofService';
 
-// Metro bundles these as inline JS modules (parsed JSON objects)
+// Metro bundles this as an inline JS module (parsed JSON object)
 // eslint-disable-next-line @typescript-eslint/no-require-imports
-const BASE_CIRCUIT = require('../../../assets/circuits/passport_base.json') as unknown;
-// eslint-disable-next-line @typescript-eslint/no-require-imports
-const PRIMARY_CIRCUIT = require('../../../assets/circuits/passport_primary.json') as unknown;
+const SIGIL_CIRCUIT = require('../../../assets/circuits/passport_sigil.json') as unknown;
 
 const CIRCUITS_DIR = `${FileSystem.documentDirectory ?? ''}circuits/`;
 const SRS_DIR = `${FileSystem.documentDirectory ?? ''}srs/`;
@@ -25,13 +23,12 @@ const SRS_URL = 'https://crs.aztec.network/g1.dat';
 async function needsWrite(dest: string, bundled: unknown): Promise<boolean> {
   const info = await FileSystem.getInfoAsync(dest);
   if (!info.exists) return true;
-  // Compare the `hash` field from the nargo-compiled JSON to detect recompilation
   const existing = await FileSystem.readAsStringAsync(dest);
   try {
     const existingHash = (JSON.parse(existing) as { hash?: string }).hash;
     const bundledHash = (bundled as { hash?: string }).hash;
     if (existingHash && bundledHash && existingHash !== bundledHash) {
-      console.log(`[CIRCUIT] Hash mismatch for ${dest} (${existingHash} → ${bundledHash}), overwriting`);
+      console.log(`[CIRCUIT] Hash mismatch for ${dest} (${existingHash} -> ${bundledHash}), overwriting`);
       return true;
     }
   } catch {
@@ -53,7 +50,6 @@ async function ensureSrs(): Promise<string | null> {
     return SRS_DEST.replace(/^file:\/\//, '');
   }
 
-  // Delete partial/corrupt file if present
   if (info.exists) {
     await FileSystem.deleteAsync(SRS_DEST, { idempotent: true });
   }
@@ -94,41 +90,34 @@ async function ensureSrs(): Promise<string | null> {
 async function setupCircuits(): Promise<void> {
   await FileSystem.makeDirectoryAsync(CIRCUITS_DIR, { intermediates: true });
 
-  const baseDest = `${CIRCUITS_DIR}passport_base.json`;
-  const primaryDest = `${CIRCUITS_DIR}passport_primary.json`;
+  const sigilDest = `${CIRCUITS_DIR}passport_sigil.json`;
 
   // Write circuit JSON to writable FS so native Mopro code can read them by path.
-  // Always overwrite when the bundled circuit hash differs from what's on disk —
+  // Always overwrite when the bundled circuit hash differs from what's on disk -
   // a stale bytecode causes Barretenberg to abort with a foreign exception.
-  if (await needsWrite(baseDest, BASE_CIRCUIT)) {
-    await FileSystem.writeAsStringAsync(baseDest, JSON.stringify(BASE_CIRCUIT));
-    console.log('[CIRCUIT] Wrote passport_base.json to', baseDest);
+  if (await needsWrite(sigilDest, SIGIL_CIRCUIT)) {
+    await FileSystem.writeAsStringAsync(sigilDest, JSON.stringify(SIGIL_CIRCUIT));
+    console.log('[CIRCUIT] Wrote passport_sigil.json to', sigilDest);
   }
 
-  if (await needsWrite(primaryDest, PRIMARY_CIRCUIT)) {
-    await FileSystem.writeAsStringAsync(primaryDest, JSON.stringify(PRIMARY_CIRCUIT));
-    console.log('[CIRCUIT] Wrote passport_primary.json to', primaryDest);
-  }
-
-  // Download SRS if not already cached
   const srsPath = await ensureSrs();
   if (srsPath) {
     console.log('[SRS] Using local SRS at:', srsPath);
   } else {
-    console.warn('[SRS] SRS not available — proof generation will attempt network download (may be slow/fail)');
+    console.warn('[SRS] SRS not available - proof generation will attempt network download');
   }
 
   // expo-file-system returns file:// URIs; Rust fs::read_to_string needs plain POSIX paths
   const toFsPath = (uri: string) => uri.replace(/^file:\/\//, '');
 
-  setCircuitPaths(toFsPath(baseDest), toFsPath(primaryDest), srsPath ?? undefined);
-  console.log('[CIRCUIT] Circuit paths set:', toFsPath(baseDest));
+  setCircuitPaths(toFsPath(sigilDest), srsPath ?? undefined);
+  console.log('[CIRCUIT] Circuit path set:', toFsPath(sigilDest));
 }
 
 /**
- * Call once at app startup. Copies circuit JSONs from the bundled JS module
+ * Call once at app startup. Copies circuit JSON from the bundled JS module
  * to the writable filesystem, downloads the SRS if needed, and registers
- * paths with proofService.
+ * the path with proofService.
  */
 export function useCircuitSetup(): { srsReady: boolean } {
   const [srsReady, setSrsReady] = useState(false);

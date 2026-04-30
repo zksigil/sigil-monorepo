@@ -9,10 +9,10 @@ import {
   Linking,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useNavigation, useRoute } from '@react-navigation/native';
+import { useNavigation } from '@react-navigation/native';
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import TextRecognition from '@react-native-ml-kit/text-recognition';
-import type { RootStackNavigationProp, RootStackRouteProp } from '../../../app/navigation/types';
+import type { RootStackNavigationProp } from '../../../app/navigation/types';
 import { useNFCReader } from '../hooks/useNFCReader';
 import type { NFCReadResult, NFCError } from '../../../infrastructure/nfc';
 
@@ -193,8 +193,6 @@ function getErrorMessage(error: NFCError): string {
 
 export function PassportScanScreen(): React.JSX.Element {
   const navigation = useNavigation<RootStackNavigationProp<'PassportScan'>>();
-  const route = useRoute<RootStackRouteProp<'PassportScan'>>();
-  const { tier } = route.params;
   const { readPassport, isScanning, cancelScan } = useNFCReader();
   const [cameraPermission, requestCameraPermission] = useCameraPermissions();
   const cameraRef = useRef<CameraView>(null);
@@ -340,7 +338,6 @@ export function PassportScanScreen(): React.JSX.Element {
 
   const handleDevSkip = useCallback(() => {
     navigation.navigate('ProofGeneration', {
-      tier,
       passportData: {
         documentNumber: 'AB1234567',
         dateOfBirth: '900101',
@@ -350,12 +347,11 @@ export function PassportScanScreen(): React.JSX.Element {
         rawSODHex: 'deadbeef' + '00'.repeat(252),
       },
     });
-  }, [navigation, tier]);
+  }, [navigation]);
 
   const handleContinueToProof = useCallback(() => {
     if (!nfcResult) return;
     navigation.navigate('ProofGeneration', {
-      tier,
       passportData: {
         documentNumber: nfcResult.data.documentNumber,
         dateOfBirth: nfcResult.data.dateOfBirth,
@@ -365,7 +361,7 @@ export function PassportScanScreen(): React.JSX.Element {
         rawSODHex: nfcResult.rawSODHex ?? '',
       },
     });
-  }, [navigation, nfcResult, tier]);
+  }, [navigation, nfcResult]);
 
   const handleBackToMRZ = useCallback(() => {
     setStep('mrz-entry');

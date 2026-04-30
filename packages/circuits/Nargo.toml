@@ -1,2 +1,2 @@
 [workspace]
-members = ["base", "primary"]
+members = ["sigil"]

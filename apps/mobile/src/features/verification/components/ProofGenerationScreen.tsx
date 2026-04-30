@@ -19,7 +19,7 @@ import { anvil, sepolia, mainnet } from 'viem/chains';
 import { RPC_URLS } from '../../../infrastructure/blockchain/appKitConfig';
 import type { RootStackRouteProp, RootStackNavigationProp } from '../../../app/navigation/types';
 import { useProofGeneration } from '../hooks/useProofGeneration';
-import type { BaseProofOutput, PrimaryProofOutput } from '../services/proofService';
+import type { SigilProofOutput } from '../services/proofService';
 import { VERIFICATION_REGISTRY_ABI } from '../../../infrastructure/blockchain/contractAbis';
 import { CONTRACT_ADDRESSES } from '../../../infrastructure/blockchain/contracts';
 import type { SupportedChainId } from '../../../shared/constants/chains';
@@ -35,28 +35,16 @@ type FlowStep = 'generating' | 'proof_ready' | 'submitting' | 'done' | 'error';
 // Contract error → user-friendly message
 // ---------------------------------------------------------------------------
 
-/** Maps error name OR 4-byte selector to a user-friendly message. */
 const CONTRACT_ERRORS: { name: string; selector: string; message: string }[] = [
   {
     name: 'VerificationRegistry__AlreadyRegistered',
     selector: '0x88eed74a',
-    message: 'This address is already registered.',
-  },
-  {
-    name: 'VerificationRegistry__PrimaryInCooldown',
-    selector: '0xa80eb1f4',
-    message:
-      'Your primary registration is in a cooldown period. You must wait 7 days after unregistering before you can re-register.',
-  },
-  {
-    name: 'VerificationRegistry__NullifierAlreadyUsed',
-    selector: '0x85b930aa',
-    message: 'This passport is already registered for primary verification. Unregister first.',
+    message: 'This wallet is already sigilized.',
   },
   {
     name: 'VerificationRegistry__PassportExpired',
     selector: '0xe6a693bc',
-    message: 'Your passport has expired. A valid passport is required for verification.',
+    message: 'Your passport has expired. A valid passport is required to sigilize.',
   },
   {
     name: 'VerificationRegistry__RateLimitExceeded',
@@ -74,11 +62,10 @@ const CONTRACT_ERRORS: { name: string; selector: string; message: string }[] = [
     message: 'No active registration found for this address.',
   },
   {
-    name: 'VerificationRegistry__NotAuthorized',
-    selector: '0x129696e4',
-    message: 'You are not authorized for this action.',
+    name: 'VerificationRegistry__NullifierMismatch',
+    selector: '',
+    message: 'The passport does not match the existing registration.',
   },
-  // UltraHonk verifier errors (zkmopro-honk-zk template)
   {
     name: 'SumcheckFailed',
     selector: '0x9fc3a218',
@@ -113,7 +100,6 @@ const CONTRACT_ERRORS: { name: string; selector: string; message: string }[] = [
 
 function parseContractError(err: unknown): string {
   const raw = (err as BaseError)?.shortMessage ?? (err as BaseError)?.message ?? '';
-  // Log the full error shape so we can extract the raw revert data (selector)
   try {
     const anyErr = err as any;
     const cand =
@@ -128,7 +114,7 @@ function parseContractError(err: unknown): string {
     console.log('[TX-ERR] metaMessages:', anyErr?.metaMessages);
   } catch {}
   for (const { name, selector, message } of CONTRACT_ERRORS) {
-    if (raw.includes(name) || raw.includes(selector)) return message;
+    if (raw.includes(name) || (selector && raw.includes(selector))) return message;
   }
   return raw || 'Transaction simulation failed. Please try again.';
 }
@@ -147,11 +133,7 @@ function mrzExpiryToUnix(yymmdd: string): number {
   return Math.floor(new Date(Date.UTC(year, mm - 1, dd)).getTime() / 1000);
 }
 
-/**
- * Convert a field element to a bytes32 hex value (zero-padded, 0x-prefixed).
- * Accepts both decimal strings (from real Mopro) and 0x-prefixed hex strings (from stub).
- * BigInt() handles both forms natively.
- */
+/** Convert a field element decimal string OR 0x-prefixed hex to bytes32. */
 function decimalOrHexToBytes32(value: string): `0x${string}` {
   const hex = BigInt(value).toString(16);
   return `0x${hex.padStart(64, '0')}` as `0x${string}`;
@@ -181,23 +163,19 @@ function getPublicClient(chainId: number) {
 export function ProofGenerationScreen(): React.JSX.Element {
   const route = useRoute<RootStackRouteProp<'ProofGeneration'>>();
   const navigation = useNavigation<RootStackNavigationProp<'ProofGeneration'>>();
-  const { passportData, tier } = route.params;
+  const { passportData } = route.params;
 
-  // The contract uses msg.sender — the tx must come from the connected address.
   const { address } = useAccount();
   const chainId = useChainId();
   const { generate, isGenerating, error: proofError } = useProofGeneration();
 
   const [step, setStep] = useState<FlowStep>('generating');
-  const [proofResult, setProofResult] = useState<BaseProofOutput | PrimaryProofOutput | null>(null);
+  const [proofResult, setProofResult] = useState<SigilProofOutput | null>(null);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const hasStarted = useRef(false);
 
-  // Fires on every render so we can verify in device logs that the screen
-  // mounted and what state branch is being taken.
   console.log('[PROOF-UI-RENDER] step=', step, 'isGenerating=', isGenerating, 'address=', address ? 'set' : 'unset');
 
-  // wagmi writeContract hook
   const {
     writeContract,
     data: txHash,
@@ -205,14 +183,12 @@ export function ProofGenerationScreen(): React.JSX.Element {
     error: writeError,
   } = useWriteContract();
 
-  // Wait for tx confirmation
   const {
     isLoading: isConfirming,
     isSuccess: isConfirmed,
     error: receiptError,
   } = useWaitForTransactionReceipt({ hash: txHash, pollingInterval: 1000 });
 
-  // Prevent back navigation during generation / submission
   useEffect(() => {
     const sub = BackHandler.addEventListener('hardwareBackPress', () => true);
     return () => sub.remove();
@@ -222,22 +198,14 @@ export function ProofGenerationScreen(): React.JSX.Element {
     navigation.setOptions({ headerBackVisible: false, gestureEnabled: false });
   }, [navigation]);
 
-  // Run proof generation once — wait for a real wallet address first.
-  //
-  // We defer the actual call by ~250ms (one nav animation frame) so the
-  // navigation slide can finish and the loading-state modal can paint BEFORE
-  // the heavy synchronous work in generate() (SHA-256 hashing, RSA-2048
-  // signature verification, SOD ASN.1 parsing) blocks the JS thread.
-  // setTimeout is used over InteractionManager because the new-arch nav stack
-  // doesn't always register its animation as an InteractionManager handle.
+  // Defer the heavy synchronous work (SHA-256 hashing, RSA verification, SOD parsing)
+  // by ~250ms so the loading-state modal can paint before the JS thread blocks.
   useEffect(() => {
     if (hasStarted.current) return;
     if (!address) return;
     hasStarted.current = true;
 
-    console.log('[PROOF-UI] effect armed — deferring generate() by 250ms');
     const timer = setTimeout(() => {
-      console.log('[PROOF-UI] deferred timer fired — starting generate()');
       void (async () => {
         try {
           const output = await generate({
@@ -245,12 +213,9 @@ export function ProofGenerationScreen(): React.JSX.Element {
             rawSODHex: passportData.rawSODHex,
             walletAddress: address,
             passportExpiryUnix: mrzExpiryToUnix(passportData.dateOfExpiry),
-          }, tier);
-          if (output.type === 'base') {
-            console.log('[PROOF] epochNullifier:', output.epochNullifier);
-          } else {
-            console.log('[PROOF] nullifier:', output.nullifier);
-          }
+          });
+          console.log('[PROOF] nullifier:', output.nullifier);
+          console.log('[PROOF] epoch_nullifier:', output.epochNullifier);
           setProofResult(output);
           setStep('proof_ready');
         } catch {
@@ -259,20 +224,17 @@ export function ProofGenerationScreen(): React.JSX.Element {
       })();
     }, 250);
     return () => clearTimeout(timer);
-  }, [address, generate, passportData, tier]);
+  }, [address, generate, passportData]);
 
-  // Navigate to success when tx is confirmed
   const navigatedRef = useRef(false);
   const navigateToSuccess = useCallback((hash: `0x${string}`, wallet: `0x${string}`) => {
     if (navigatedRef.current) return;
     navigatedRef.current = true;
     navigation.navigate('VerificationSuccess', {
       txHash: hash,
-      groupSize: 1,
       verifiedAddress: wallet,
-      tier,
     });
-  }, [navigation, tier]);
+  }, [navigation]);
 
   useEffect(() => {
     if (isConfirmed && txHash && address) {
@@ -280,9 +242,8 @@ export function ProofGenerationScreen(): React.JSX.Element {
     }
   }, [isConfirmed, txHash, address, navigateToSuccess]);
 
-  // When the app returns from background (e.g. after MetaMask approval), wagmi's
-  // useWaitForTransactionReceipt may not resume polling on React Native. Manually
-  // check the receipt using the standalone viem client as a fallback.
+  // Foreground listener: useWaitForTransactionReceipt may not resume polling on RN
+  // when the app backgrounds for MetaMask. Manually poll on foreground return.
   useEffect(() => {
     if (!txHash || !address) return;
     const sub = AppState.addEventListener('change', (state) => {
@@ -294,14 +255,11 @@ export function ProofGenerationScreen(): React.JSX.Element {
           console.log('[TX] Receipt found on foreground return');
           navigateToSuccess(txHash, address);
         }
-      }).catch(() => {
-        // tx may not be mined yet — wagmi hook will keep polling
-      });
+      }).catch(() => { /* tx may not be mined yet */ });
     });
     return () => sub.remove();
   }, [txHash, address, chainId, navigateToSuccess]);
 
-  // Surface write/receipt errors
   useEffect(() => {
     const err = writeError ?? receiptError;
     if (err) {
@@ -332,9 +290,6 @@ export function ProofGenerationScreen(): React.JSX.Element {
     setStep('submitting');
     setSubmitError(null);
 
-    // Use a standalone viem publicClient for simulation so the RPC call
-    // doesn't go through wagmi's WalletConnect transport (which fails when
-    // the app backgrounds during a WC session check).
     const publicClient = getPublicClient(chainId);
     if (!publicClient) {
       setSubmitError(`No RPC configured for chain ${chainId}.`);
@@ -342,74 +297,37 @@ export function ProofGenerationScreen(): React.JSX.Element {
       return;
     }
 
-    if (proofResult.type === 'primary') {
-      const primaryCall = {
-        address: registryAddress,
-        abi: VERIFICATION_REGISTRY_ABI,
-        functionName: 'registerPrimary' as const,
-        args: [
-          decimalOrHexToBytes32(proofResult.nullifier),
-          Number(proofResult.zkProof.passportExpiry),
-          proofResult.zkProof.proof,
-        ] as const,
-      };
+    const call = {
+      address: registryAddress,
+      abi: VERIFICATION_REGISTRY_ABI,
+      functionName: 'register' as const,
+      args: [
+        decimalOrHexToBytes32(proofResult.nullifier),
+        decimalOrHexToBytes32(proofResult.epochNullifier),
+        Number(proofResult.zkProof.passportExpiry),
+        proofResult.zkProof.proof,
+      ] as const,
+    };
 
-      console.log('[PROOF SUBMIT] Input args:', {
+    try {
+      console.log('[TX] Simulating register to', registryAddress);
+      console.log('[TX-CAST-ARGS]', JSON.stringify({
+        registry: registryAddress,
         nullifier: decimalOrHexToBytes32(proofResult.nullifier),
+        epochNullifier: decimalOrHexToBytes32(proofResult.epochNullifier),
         passportExpiry: Number(proofResult.zkProof.passportExpiry),
-        proofLength: proofResult.zkProof.proof.length,
-      });
-
-      try {
-        console.log('[TX] Simulating registerPrimary to', registryAddress);
-        await publicClient.simulateContract({ ...primaryCall, account: address });
-      } catch (simError) {
-        console.error('[TX] Simulation failed:', simError);
-        const friendly = parseContractError(simError);
-        setSubmitError(friendly);
-        setStep('error');
-        return;
-      }
-
-      console.log('[TX] Simulation passed, submitting registerPrimary');
-      writeContract(primaryCall);
-    } else {
-      const baseCall = {
-        address: registryAddress,
-        abi: VERIFICATION_REGISTRY_ABI,
-        functionName: 'registerBase' as const,
-        args: [
-          decimalOrHexToBytes32(proofResult.epochNullifier),
-          Number(proofResult.zkProof.passportExpiry),
-          proofResult.zkProof.proof,
-        ] as const,
-      };
-
-      try {
-        console.log('[TX] Simulating registerBase to', registryAddress);
-        const proofHex = proofResult.zkProof.proof;
-        console.log('[TX-PROOF] bytes:', (proofHex.length - 2) / 2);
-        console.log('[TX-PROOF-FULL]', proofHex);
-        console.log('[TX-CAST-ARGS]', JSON.stringify({
-          registry: registryAddress,
-          epochNullifier: decimalOrHexToBytes32(proofResult.epochNullifier),
-          passportExpiry: Number(proofResult.zkProof.passportExpiry),
-          hashedAddress: proofResult.zkProof.hashedAddress,
-          cscaMerkleRoot: proofResult.cscaMerkleRoot,
-          sender: address,
-        }));
-        await publicClient.simulateContract({ ...baseCall, account: address });
-      } catch (simError) {
-        console.error('[TX] Simulation failed:', simError);
-        const friendly = parseContractError(simError);
-        setSubmitError(friendly);
-        setStep('error');
-        return;
-      }
-
-      console.log('[TX] Simulation passed, submitting registerBase');
-      writeContract(baseCall);
+        sender: address,
+      }));
+      await publicClient.simulateContract({ ...call, account: address });
+    } catch (simError) {
+      console.error('[TX] Simulation failed:', simError);
+      setSubmitError(parseContractError(simError));
+      setStep('error');
+      return;
     }
+
+    console.log('[TX] Simulation passed, submitting register');
+    writeContract(call);
   }, [proofResult, address, chainId, writeContract]);
 
   // -------------------------------------------------------------------------
@@ -417,11 +335,8 @@ export function ProofGenerationScreen(): React.JSX.Element {
   // -------------------------------------------------------------------------
 
   if (step === 'generating' || isGenerating) {
-    console.log('[PROOF-UI] rendering loading state — step:', step, 'isGenerating:', isGenerating);
     return (
       <SafeAreaView className="flex-1 bg-dracula-bg" edges={['bottom']}>
-        {/* Visible content underneath the modal so even if Modal is broken, the
-            user still sees the spinner and label. */}
         <View className="flex-1 px-6 py-8 justify-center items-center">
           <View
             style={{
@@ -493,7 +408,6 @@ export function ProofGenerationScreen(): React.JSX.Element {
               {txHash.slice(0, 18)}...{txHash.slice(-8)}
             </Text>
           )}
-          {/* Step indicator — step 3 active */}
           <View className="flex-row gap-x-2 mb-4 w-full mt-8">
             <View className="h-1.5 rounded-full flex-1 bg-dracula-purple" />
             <View className="h-1.5 rounded-full flex-1 bg-dracula-purple" />
@@ -533,15 +447,12 @@ export function ProofGenerationScreen(): React.JSX.Element {
   }
 
   // -------------------------------------------------------------------------
-  // Proof ready state — show debug panel + submit button
+  // Proof ready state
   // -------------------------------------------------------------------------
-
-  const isPrimary = proofResult?.type === 'primary';
 
   return (
     <SafeAreaView className="flex-1 bg-dracula-bg" edges={['bottom']}>
       <ScrollView className="flex-1 px-6 py-6" contentContainerClassName="pb-8">
-        {/* Success indicator */}
         <View className="items-center mb-6">
           <View className="w-20 h-20 rounded-full bg-dracula-green/20 items-center justify-center mb-4">
             <Text className="text-4xl">✓</Text>
@@ -552,20 +463,17 @@ export function ProofGenerationScreen(): React.JSX.Element {
           </Text>
         </View>
 
-        {/* Step indicator — step 2 active */}
         <View className="flex-row gap-x-2 mb-6">
           <View className="h-1.5 rounded-full flex-1 bg-dracula-purple" />
           <View className="h-1.5 rounded-full flex-1 bg-dracula-purple" />
           <View className="h-1.5 rounded-full flex-1 bg-dracula-surface/70" />
         </View>
 
-        {/* DEBUG PANEL */}
         <View className="bg-dracula-surface rounded-2xl p-4 mb-6">
           <Text className="text-dracula-orange text-xs font-bold uppercase tracking-wider mb-3">
             === Generated Proof Debug ===
           </Text>
 
-          <DebugRow label="Action" value={tier === 'unique' ? 'Sigilize (sybil-resistant)' : 'Verify (proof of personhood)'} />
           <DebugRow label="Wallet Address" value={address ?? '(not connected)'} mono />
           <DebugRow label="Chain ID" value={String(chainId)} mono />
           <DebugRow label="Doc Number" value={passportData.documentNumber} mono />
@@ -590,11 +498,8 @@ export function ProofGenerationScreen(): React.JSX.Element {
               <Text className="text-dracula-purple text-xs font-bold uppercase tracking-wider mb-2">
                 Proof Values
               </Text>
-              {isPrimary && proofResult.type === 'primary' ? (
-                <DebugRow label="Nullifier" value={proofResult.nullifier} mono />
-              ) : proofResult.type === 'base' ? (
-                <DebugRow label="Epoch Nullifier" value={proofResult.epochNullifier} mono />
-              ) : null}
+              <DebugRow label="Nullifier" value={proofResult.nullifier} mono />
+              <DebugRow label="Epoch Nullifier" value={proofResult.epochNullifier} mono />
               <DebugRow
                 label="Passport Expiry"
                 value={proofResult.zkProof.passportExpiry}
@@ -609,13 +514,12 @@ export function ProofGenerationScreen(): React.JSX.Element {
           )}
         </View>
 
-        {/* Submit button */}
         <Pressable
           onPress={handleSubmit}
           className="w-full rounded-2xl py-4 items-center bg-dracula-purple active:bg-dracula-purple/80"
         >
           <Text className="text-dracula-fg text-base font-semibold">
-            Submit Verification
+            Submit Sigilization
           </Text>
         </Pressable>
       </ScrollView>
@@ -654,10 +558,6 @@ function DebugRow({
 // Proof loading visuals
 // ---------------------------------------------------------------------------
 
-/**
- * Spinner inside a circle, with two pulsing rings expanding outward to give
- * a sense of motion while Mopro generates the proof on-device (~5–15s).
- */
 function ProofLoadingIndicator(): React.JSX.Element {
   const pulseA = useRef(new Animated.Value(0)).current;
   const pulseB = useRef(new Animated.Value(0)).current;
@@ -674,7 +574,6 @@ function ProofLoadingIndicator(): React.JSX.Element {
     const animA = make(pulseA);
     const animB = make(pulseB);
     animA.start();
-    // Stagger so the two rings don't overlap
     const delay = setTimeout(() => animB.start(), 900);
     return () => {
       clearTimeout(delay);
@@ -683,11 +582,8 @@ function ProofLoadingIndicator(): React.JSX.Element {
     };
   }, [pulseA, pulseB]);
 
-  // Inline styles for the rings — NativeWind classNames don't always compose
-  // with Animated.View's style prop, especially for border colors. Hardcoding
-  // here guarantees the rings render.
   const RING_SIZE = 96;
-  const RING_COLOR = '#bd93f9'; // dracula-purple
+  const RING_COLOR = '#bd93f9';
 
   const ringStyle = (value: Animated.Value) => ({
     position: 'absolute' as const,
@@ -723,11 +619,6 @@ function ProofLoadingIndicator(): React.JSX.Element {
   );
 }
 
-/**
- * Cycles through friendly status messages while the proof is being generated.
- * Mopro doesn't expose progress callbacks, so the messages are timed; they
- * give the user a sense of motion without claiming real progress.
- */
 function ProofLoadingStatus(): React.JSX.Element {
   const messages = useMemo(
     () => [
@@ -748,7 +639,6 @@ function ProofLoadingStatus(): React.JSX.Element {
         Animated.timing(opacity, { toValue: 0, duration: 250, useNativeDriver: true }),
         Animated.timing(opacity, { toValue: 1, duration: 250, useNativeDriver: true }),
       ]).start();
-      // Swap message at the midpoint of the fade
       setTimeout(() => {
         setIndex((i) => (i + 1 < messages.length ? i + 1 : i));
       }, 250);

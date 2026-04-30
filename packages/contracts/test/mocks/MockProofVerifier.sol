@@ -17,17 +17,8 @@ contract MockProofVerifier is IProofVerifier {
         shouldRevert = _revert;
     }
 
-    function verifyBaseProof(
+    function verifyProof(
         bytes32,
-        bytes32,
-        bytes32,
-        bytes calldata
-    ) external view override returns (bool) {
-        if (shouldRevert) revert("MockProofVerifier: forced revert");
-        return !shouldReject;
-    }
-
-    function verifyPrimaryProof(
         bytes32,
         bytes32,
         bytes32,
