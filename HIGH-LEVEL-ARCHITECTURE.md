@@ -93,10 +93,10 @@ Mobile app for verifying Ethereum wallets against government-issued passports us
 │  │                                                                 │  │
 │  │  isVerified(wallet) / nullifierOf(wallet) / getWallets(null)   │  │
 │  │                                                                 │  │
-│  │  Delegates to:                                                  │  │
+│  │  Delegates to (all immutables, set in constructor, frozen):    │  │
 │  │  ├── ProofVerifier        → SigilUltraHonkVerifier (generated) │  │
-│  │  ├── ProtocolConfig       → registrationTTL, maxDailyRegs      │  │
-│  │  └── CSCAMerkleTree       → ICAO Master List Merkle root       │  │
+│  │  ├── CSCAMerkleTree       → ICAO Master List Merkle root       │  │
+│  │  └── i_registrationTTL, i_maxDailyRegistrations (uint params)  │  │
 │  │                                                                 │  │
 │  │  State:                                                         │  │
 │  │  ├── s_registrations[hashedAddr] → {expiresAt, registeredAt}   │  │
@@ -128,10 +128,9 @@ Mobile app for verifying Ethereum wallets against government-issued passports us
 │                                                                          │
 │  packages/contracts/                                                      │
 │  ├── src/                                                                 │
-│  │   ├── VerificationRegistry.sol                                         │
+│  │   ├── VerificationRegistry.sol  (immutable, no governor)               │
 │  │   ├── ProofVerifier.sol                                                │
-│  │   ├── ProtocolConfig.sol                                               │
-│  │   ├── CSCAMerkleTree.sol                                               │
+│  │   ├── CSCAMerkleTree.sol         (Ownable2Step — only setRoot)         │
 │  │   └── verifiers/SigilUltraHonkVerifier.sol (regenerated)               │
 │  └── test/                                                                │
 │                                                                          │
@@ -212,7 +211,7 @@ User opens app
 | | poseidon | v0.2.6 | Poseidon2 hash in-circuit |
 | | sha256 | v0.3.0 | SHA-256 in-circuit |
 | **Contracts** | Foundry | — | Build/test framework |
-| | @openzeppelin/contracts | v5 | ReentrancyGuard, Pausable |
+| | @openzeppelin/contracts | v5 | ReentrancyGuard, Ownable2Step |
 
 ---
 
@@ -277,4 +276,5 @@ make anvil-deploy          # deploy with MockProofVerifier + write registry addr
 - ✅ **Phase 2:** NFC scan, MRZ OCR, stub proof generation
 - ✅ **Phase 3a/b/c:** Real RSA verification + DSC↔CSCA chain + CSCA Merkle inclusion in-circuit; UltraHonk on-chain verification working end-to-end on anvil
 - ✅ **Phase 4:** Single-tier sigil model (this document) — contracts + circuit + Mopro + app refactored. E2E with physical device pending.
-- 🚧 **Pending:** TimelockController governance, renewal prompts, optional cooldownPeriod cleanup
+- ✅ **Phase 4b:** Stripped governance from registry — contract is immutable post-deploy. Only privileged action in the system is `CSCAMerkleTree.setRoot` (Ownable2Step).
+- 🚧 **Pending:** Transfer `CSCAMerkleTree` ownership to multisig / `TimelockController`; renewal prompts in app.

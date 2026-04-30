@@ -11,6 +11,15 @@ pragma solidity ^0.8.28;
 ///      - Protocols call `isVerified(wallet)` for proof of personhood.
 ///        Protocols call `nullifierOf(wallet)` to dedupe per-protocol (sybil resistance).
 ///
+///      Trust model:
+///      - The registry contract is immutable: no governor, no setters, no pause, no successor.
+///      - Parameters (`registrationTTL`, `maxDailyRegistrations`) are immutables, set in
+///        the constructor with hard bounds enforced at deploy time.
+///      - The proof verifier and CSCA Merkle tree contract addresses are also immutables.
+///      - The only ongoing privileged action in the system is rotating the CSCA Merkle root,
+///        which lives on `CSCAMerkleTree` (Ownable2Step). It cannot affect existing
+///        registrations, only which proofs new registrations will accept.
+///
 ///      Privacy:
 ///      - All addresses sigilized under the same passport are publicly linkable via the
 ///        shared nullifier. Users opt-in per wallet — non-sigilized wallets stay anonymous.
@@ -36,21 +45,6 @@ interface IVerificationRegistry {
     /// @dev NO nullifier — that level of detail belongs in storage (publicly readable),
     ///      not in indexed event topics.
     event WalletVerified(address indexed wallet);
-
-    /// @notice Emitted when the governor address changes.
-    event GovernanceTransferred(address indexed oldGovernor, address indexed newGovernor);
-
-    /// @notice Emitted when the ProtocolConfig contract is updated.
-    event ConfigUpdated(address indexed oldConfig, address indexed newConfig);
-
-    /// @notice Emitted when the ProofVerifier contract is updated.
-    event VerifierUpdated(address indexed oldVerifier, address indexed newVerifier);
-
-    /// @notice Emitted when the CSCA Merkle Tree contract is updated.
-    event CSCAMerkleTreeUpdated(address indexed oldTree, address indexed newTree);
-
-    /// @notice Emitted when a successor registry is designated.
-    event SuccessorSet(address indexed successor);
 
     // =========================================================================
     // Mutations

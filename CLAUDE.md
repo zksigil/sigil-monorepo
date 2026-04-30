@@ -141,30 +141,39 @@ Passport expiry rounded UP to the next 90-day boundary anchored to the Unix epoc
 
 ### Rate limiting
 To limit damage from a stolen passport being used to mass-sigilize wallets:
-- Max **10 new registrations per passport per day** (default; bounded 1–50 via ProtocolConfig)
+- Max **10 new registrations per passport per day** (default; bounded 1–50 by the registry's constructor)
 - Enforced via an epoch nullifier: `epochNullifier = Poseidon2(s, epoch_day)` where `epoch_day = floor(block.timestamp / 1 days)`
 - Contract stores a count per epoch nullifier; rejects registration when `count >= maxDailyRegistrations`
 - Renewals are exempt — the contract still passes the real epoch nullifier through to the verifier (the circuit always constrains it) but does not increment the counter
 
-### Governance Architecture
+### Trust Model — Immutable Registry
 ```
-TimelockController          ← governor (multisig proposer initially, DAO later)
-ProtocolConfig              ← tunable parameters (with hard bounds)
-ProofVerifier               ← ZK proof verification logic (swappable for circuit upgrades)
-CSCAMerkleTree              ← ICAO Master List Merkle root (separate oracle role)
-VerificationRegistry        ← immutable core logic, reads from all of the above
+VerificationRegistry  ← immutable: no governor, no setters, no pause, no successor.
+       │                  Parameters baked in as immutables at deploy time.
+       │ reads root from
+       ▼
+CSCAMerkleTree        ← Ownable2Step. Single privileged action: setRoot(newRoot).
+       ▲                Initial owner = deployer EOA; MUST be transferred before mainnet.
+       │ owner is
+       │
+   <external address>  ← only on-chain power: rotate the CSCA root.
+                         Cannot affect existing registrations or change verifier rules.
+                         There is NO Sigil-owned governor contract. The owner is just
+                         an external address — see "Production deploy procedure" below.
 ```
 
-Governor pattern: `transferGovernance`, `setConfig`, `setVerifier`, `setCSCAMerkleTree`, `setSuccessor`, `pause`/`unpause`.
+**There is no governor contract in this repo.** The "governance" is just whoever owns
+`CSCAMerkleTree`'s `Ownable2Step` role. That address is set in the deploy script's
+constructor call and can be transferred after deploy. See the production deploy
+procedure below for the three concrete options (Safe, TimelockController, EOA-for-dev).
 
-**ProtocolConfig parameters (with hard bounds enforced in contract):**
-| Parameter | Default | Min | Max |
-|---|---|---|---|
-| `registrationTTL` | 180 days | 30 days | 365 days |
-| `maxDailyRegistrations` | 10 | 1 | 50 |
-| `cooldownPeriod` | 7 days | 1 day | 90 days | _(reserved — was used by the old primary tier; kept on the interface for ABI stability)_
+The registry contract has no governance surface. Every parameter is set in the constructor and frozen:
+- `i_verifier` (`IProofVerifier`) — frozen
+- `i_cscaMerkleTree` (`ICSCAMerkleTree`) — frozen (CSCA tree's OWN `setRoot` handles updates)
+- `i_registrationTTL` (uint256) — frozen, bounded `[30 days, 365 days]` in constructor
+- `i_maxDailyRegistrations` (uint8) — frozen, bounded `[1, 50]` in constructor
 
-**Successor / migration:** all read functions (`isVerified`, `nullifierOf`, `getExpiry`, `getRegisteredAt`, `getWallets`) delegate to `s_successor` when set. Integrating protocols need zero changes.
+If parameters or the verifier ever need to change, the path is "deploy v2 and let integrators choose to migrate" — there is no `setSuccessor` back-door.
 
 ### Contract Interface
 ```solidity
@@ -184,6 +193,12 @@ function nullifierOf(address wallet) external view returns (bytes32);  // public
 function getExpiry(address wallet) external view returns (uint48);
 function getRegisteredAt(address wallet) external view returns (uint48);
 function getWallets(bytes32 nullifier) external view returns (address[] memory);
+
+// Constructor immutables (read-only)
+function i_verifier() external view returns (IProofVerifier);
+function i_cscaMerkleTree() external view returns (ICSCAMerkleTree);
+function i_registrationTTL() external view returns (uint256);
+function i_maxDailyRegistrations() external view returns (uint8);
 ```
 
 **Standard protocol integration:**
@@ -193,6 +208,42 @@ bytes32 nullifier = sigil.nullifierOf(msg.sender);
 if (seen[nullifier]) revert AlreadyParticipated();
 seen[nullifier] = true;
 ```
+
+### Production deploy procedure (CSCA ownership)
+
+The registry is fully deployed by `Deploy.s.sol`, but the CSCAMerkleTree's owner
+starts as the **deployer EOA**. Before any production / mainnet deployment is
+considered live, the owner MUST be transferred to one of the following:
+
+| Option | What it is | Pros | Cons |
+|---|---|---|---|
+| Gnosis Safe (multisig) | Deployed via the Safe UI (https://safe.global), not in this repo | M-of-N signers, instant updates, well understood | No on-chain delay — captured signers can rotate root immediately |
+| `TimelockController` (OpenZeppelin) | Could be added to `Deploy.s.sol` | Forced N-day delay → updates are observable + reactable | Slower; need a proposer (an EOA or Safe) on top |
+| Safe **+** Timelock (proposer = Safe, executor = anyone) | Combines both | Best of both: M-of-N approval + observable delay | Two contracts to manage |
+
+Whichever you pick, the procedure is:
+
+```bash
+# 1. Deploy contracts
+forge script script/Deploy.s.sol:Deploy --rpc-url sepolia --broadcast --verify
+
+# 2. From the deployer wallet, propose ownership transfer
+cast send <CSCATree> 'transferOwnership(address)' <newOwner> --rpc-url sepolia ...
+
+# 3. From newOwner, accept ownership (Ownable2Step requires this — guards typos)
+cast send <CSCATree> 'acceptOwnership()' --rpc-url sepolia ...
+
+# 4. Verify
+cast call <CSCATree> 'owner()(address)' --rpc-url sepolia
+```
+
+**Until step 3 completes, the deployer EOA still owns the tree** — `Ownable2Step` only
+changes ownership on accept, not on transfer. This is intentional: it prevents accidentally
+transferring to a wrong/dead address.
+
+We have NOT picked one of the three options yet — that's a production-deployment
+decision, not a contract-architecture decision. For dev / anvil, the deployer EOA is
+fine and `DeployDev.s.sol` leaves it that way.
 
 ### Privacy Properties
 - No name, DOB, nationality, or any passport-derived data on-chain — just an opaque hash
@@ -207,6 +258,6 @@ seen[nullifier] = true;
 - [x] Regenerate `SigilUltraHonkVerifier.sol` from the unified circuit
 - [x] Update Mopro `compute_sigil_inputs` to emit both `nullifier` and `epoch_nullifier`
 - [x] Refactor mobile app: single `Sigilize` CTA, first-sigilize education modal, `useTrackedAccounts` reads `isVerified` + `nullifierOf`
-- [ ] Deploy `TimelockController` as governor (multisig as proposer)
+- [x] Strip governance from registry — registry is immutable; only `CSCAMerkleTree.setRoot` is privileged
+- [ ] Transfer `CSCAMerkleTree` ownership to a multisig (or `TimelockController`) after deploy
 - [ ] App prompts renewal when registration is within 30 days of expiry
-- [ ] Remove unused `cooldownPeriod` from `ProtocolConfig` (or leave as reserved for ABI stability)

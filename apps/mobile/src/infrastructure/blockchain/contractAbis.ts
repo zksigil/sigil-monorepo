@@ -11,16 +11,6 @@ export const VERIFICATION_REGISTRY_ABI = [
     "type": "constructor",
     "inputs": [
       {
-        "name": "governor_",
-        "type": "address",
-        "internalType": "address"
-      },
-      {
-        "name": "config_",
-        "type": "address",
-        "internalType": "contract IProtocolConfig"
-      },
-      {
         "name": "verifier_",
         "type": "address",
         "internalType": "contract IProofVerifier"
@@ -29,6 +19,16 @@ export const VERIFICATION_REGISTRY_ABI = [
         "name": "cscaMerkleTree_",
         "type": "address",
         "internalType": "address"
+      },
+      {
+        "name": "registrationTTL_",
+        "type": "uint256",
+        "internalType": "uint256"
+      },
+      {
+        "name": "maxDailyRegistrations_",
+        "type": "uint8",
+        "internalType": "uint8"
       }
     ],
     "stateMutability": "nonpayable"
@@ -92,6 +92,58 @@ export const VERIFICATION_REGISTRY_ABI = [
   },
   {
     "type": "function",
+    "name": "i_cscaMerkleTree",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "address",
+        "internalType": "contract ICSCAMerkleTree"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "i_maxDailyRegistrations",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "uint8",
+        "internalType": "uint8"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "i_registrationTTL",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "i_verifier",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "address",
+        "internalType": "contract IProofVerifier"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
     "name": "isVerified",
     "inputs": [
       {
@@ -124,26 +176,6 @@ export const VERIFICATION_REGISTRY_ABI = [
         "name": "",
         "type": "bytes32",
         "internalType": "bytes32"
-      }
-    ],
-    "stateMutability": "view"
-  },
-  {
-    "type": "function",
-    "name": "pause",
-    "inputs": [],
-    "outputs": [],
-    "stateMutability": "nonpayable"
-  },
-  {
-    "type": "function",
-    "name": "paused",
-    "inputs": [],
-    "outputs": [
-      {
-        "name": "",
-        "type": "bool",
-        "internalType": "bool"
       }
     ],
     "stateMutability": "view"
@@ -206,45 +238,6 @@ export const VERIFICATION_REGISTRY_ABI = [
   },
   {
     "type": "function",
-    "name": "s_config",
-    "inputs": [],
-    "outputs": [
-      {
-        "name": "",
-        "type": "address",
-        "internalType": "contract IProtocolConfig"
-      }
-    ],
-    "stateMutability": "view"
-  },
-  {
-    "type": "function",
-    "name": "s_cscaMerkleTree",
-    "inputs": [],
-    "outputs": [
-      {
-        "name": "",
-        "type": "address",
-        "internalType": "contract ICSCAMerkleTree"
-      }
-    ],
-    "stateMutability": "view"
-  },
-  {
-    "type": "function",
-    "name": "s_governor",
-    "inputs": [],
-    "outputs": [
-      {
-        "name": "",
-        "type": "address",
-        "internalType": "address"
-      }
-    ],
-    "stateMutability": "view"
-  },
-  {
-    "type": "function",
     "name": "s_nullifierByWallet",
     "inputs": [
       {
@@ -264,223 +257,10 @@ export const VERIFICATION_REGISTRY_ABI = [
   },
   {
     "type": "function",
-    "name": "s_successor",
-    "inputs": [],
-    "outputs": [
-      {
-        "name": "",
-        "type": "address",
-        "internalType": "address"
-      }
-    ],
-    "stateMutability": "view"
-  },
-  {
-    "type": "function",
-    "name": "s_verifier",
-    "inputs": [],
-    "outputs": [
-      {
-        "name": "",
-        "type": "address",
-        "internalType": "contract IProofVerifier"
-      }
-    ],
-    "stateMutability": "view"
-  },
-  {
-    "type": "function",
-    "name": "setCSCAMerkleTree",
-    "inputs": [
-      {
-        "name": "newTree",
-        "type": "address",
-        "internalType": "contract ICSCAMerkleTree"
-      }
-    ],
-    "outputs": [],
-    "stateMutability": "nonpayable"
-  },
-  {
-    "type": "function",
-    "name": "setConfig",
-    "inputs": [
-      {
-        "name": "newConfig",
-        "type": "address",
-        "internalType": "contract IProtocolConfig"
-      }
-    ],
-    "outputs": [],
-    "stateMutability": "nonpayable"
-  },
-  {
-    "type": "function",
-    "name": "setSuccessor",
-    "inputs": [
-      {
-        "name": "newSuccessor",
-        "type": "address",
-        "internalType": "address"
-      }
-    ],
-    "outputs": [],
-    "stateMutability": "nonpayable"
-  },
-  {
-    "type": "function",
-    "name": "setVerifier",
-    "inputs": [
-      {
-        "name": "newVerifier",
-        "type": "address",
-        "internalType": "contract IProofVerifier"
-      }
-    ],
-    "outputs": [],
-    "stateMutability": "nonpayable"
-  },
-  {
-    "type": "function",
-    "name": "transferGovernance",
-    "inputs": [
-      {
-        "name": "newGovernor",
-        "type": "address",
-        "internalType": "address"
-      }
-    ],
-    "outputs": [],
-    "stateMutability": "nonpayable"
-  },
-  {
-    "type": "function",
-    "name": "unpause",
-    "inputs": [],
-    "outputs": [],
-    "stateMutability": "nonpayable"
-  },
-  {
-    "type": "function",
     "name": "unregister",
     "inputs": [],
     "outputs": [],
     "stateMutability": "nonpayable"
-  },
-  {
-    "type": "event",
-    "name": "CSCAMerkleTreeUpdated",
-    "inputs": [
-      {
-        "name": "oldTree",
-        "type": "address",
-        "indexed": true,
-        "internalType": "address"
-      },
-      {
-        "name": "newTree",
-        "type": "address",
-        "indexed": true,
-        "internalType": "address"
-      }
-    ],
-    "anonymous": false
-  },
-  {
-    "type": "event",
-    "name": "ConfigUpdated",
-    "inputs": [
-      {
-        "name": "oldConfig",
-        "type": "address",
-        "indexed": true,
-        "internalType": "address"
-      },
-      {
-        "name": "newConfig",
-        "type": "address",
-        "indexed": true,
-        "internalType": "address"
-      }
-    ],
-    "anonymous": false
-  },
-  {
-    "type": "event",
-    "name": "GovernanceTransferred",
-    "inputs": [
-      {
-        "name": "oldGovernor",
-        "type": "address",
-        "indexed": true,
-        "internalType": "address"
-      },
-      {
-        "name": "newGovernor",
-        "type": "address",
-        "indexed": true,
-        "internalType": "address"
-      }
-    ],
-    "anonymous": false
-  },
-  {
-    "type": "event",
-    "name": "Paused",
-    "inputs": [
-      {
-        "name": "account",
-        "type": "address",
-        "indexed": false,
-        "internalType": "address"
-      }
-    ],
-    "anonymous": false
-  },
-  {
-    "type": "event",
-    "name": "SuccessorSet",
-    "inputs": [
-      {
-        "name": "successor",
-        "type": "address",
-        "indexed": true,
-        "internalType": "address"
-      }
-    ],
-    "anonymous": false
-  },
-  {
-    "type": "event",
-    "name": "Unpaused",
-    "inputs": [
-      {
-        "name": "account",
-        "type": "address",
-        "indexed": false,
-        "internalType": "address"
-      }
-    ],
-    "anonymous": false
-  },
-  {
-    "type": "event",
-    "name": "VerifierUpdated",
-    "inputs": [
-      {
-        "name": "oldVerifier",
-        "type": "address",
-        "indexed": true,
-        "internalType": "address"
-      },
-      {
-        "name": "newVerifier",
-        "type": "address",
-        "indexed": true,
-        "internalType": "address"
-      }
-    ],
-    "anonymous": false
   },
   {
     "type": "event",
@@ -497,16 +277,6 @@ export const VERIFICATION_REGISTRY_ABI = [
   },
   {
     "type": "error",
-    "name": "EnforcedPause",
-    "inputs": []
-  },
-  {
-    "type": "error",
-    "name": "ExpectedPause",
-    "inputs": []
-  },
-  {
-    "type": "error",
     "name": "ReentrancyGuardReentrantCall",
     "inputs": []
   },
@@ -517,12 +287,12 @@ export const VERIFICATION_REGISTRY_ABI = [
   },
   {
     "type": "error",
-    "name": "VerificationRegistry__InvalidProof",
+    "name": "VerificationRegistry__InvalidConfig",
     "inputs": []
   },
   {
     "type": "error",
-    "name": "VerificationRegistry__NotGovernor",
+    "name": "VerificationRegistry__InvalidProof",
     "inputs": []
   },
   {

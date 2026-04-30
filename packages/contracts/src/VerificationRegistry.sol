@@ -2,35 +2,35 @@
 pragma solidity ^0.8.28;
 
 import {IVerificationRegistry} from "./interfaces/IVerificationRegistry.sol";
-import {IProtocolConfig} from "./interfaces/IProtocolConfig.sol";
 import {IProofVerifier} from "./interfaces/IProofVerifier.sol";
 import {ICSCAMerkleTree} from "./interfaces/ICSCAMerkleTree.sol";
 import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
-import {Pausable} from "@openzeppelin/contracts/utils/Pausable.sol";
 
 /// @title VerificationRegistry
-/// @notice Single-tier ZK passport identity registry for Sigil.
+/// @notice Single-tier ZK passport identity registry for Sigil. Immutable after deploy.
 ///
 /// @dev One stable nullifier per passport. Multiple wallets can register under the same
 ///      nullifier — they are publicly linkable on-chain via the shared `nullifierByWallet`
 ///      mapping and the `walletsByNullifier` array.
 ///
-///      Architecture:
-///        - Core logic is immutable. Tunables live in ProtocolConfig (swappable).
-///        - ZK verifier is swappable for circuit upgrades.
-///        - Governor starts as a multisig; transfer to DAO via `transferGovernance()`.
-///        - If core logic must change, set a successor and read functions delegate to it.
+///      No governor. No setters. No pause. No successor. Once deployed, the contract's
+///      behavior is fixed — only the CSCA Merkle root (held in a separate contract,
+///      Ownable2Step) can change, which affects only which proofs new registrations
+///      will accept; existing registrations are unaffected.
+///
+///      Parameters (`i_registrationTTL`, `i_maxDailyRegistrations`) are immutables with
+///      hard bounds enforced in the constructor.
 ///
 ///      Privacy invariants enforced here (not in circuit):
 ///        - hashedAddress == keccak256(msg.sender) checked on every write.
 ///        - No nullifier in any event.
-contract VerificationRegistry is IVerificationRegistry, ReentrancyGuard, Pausable {
+contract VerificationRegistry is IVerificationRegistry, ReentrancyGuard {
     // =========================================================================
     // Errors
     // =========================================================================
 
-    error VerificationRegistry__NotGovernor();
     error VerificationRegistry__ZeroAddress();
+    error VerificationRegistry__InvalidConfig();
     error VerificationRegistry__AlreadyRegistered();
     error VerificationRegistry__NotRegistered();
     error VerificationRegistry__PassportExpired();
@@ -39,11 +39,25 @@ contract VerificationRegistry is IVerificationRegistry, ReentrancyGuard, Pausabl
     error VerificationRegistry__NullifierMismatch();
 
     // =========================================================================
+    // Constants — hard bounds for constructor parameters
+    // =========================================================================
+
+    /// @dev Min/max registration TTL. Bounds the privacy/UX trade-off: shorter TTL means
+    ///      more frequent re-taps; longer TTL means staler proofs.
+    uint256 private constant MIN_TTL = 30 days;
+    uint256 private constant MAX_TTL = 365 days;
+
+    /// @dev Min/max daily registration cap per passport. Min 1 keeps the system functional;
+    ///      max 50 prevents a stolen passport from being used to mass-sigilize wallets.
+    uint8 private constant MIN_DAILY_REGISTRATIONS = 1;
+    uint8 private constant MAX_DAILY_REGISTRATIONS = 50;
+
+    // =========================================================================
     // Structs
     // =========================================================================
 
     /// @dev Tracks expiry and registration time for a single registered wallet.
-    ///      `expiresAt = min(now + registrationTTL, ceil(passportExpiry / 90 days) * 90 days)`
+    ///      `expiresAt = min(now + i_registrationTTL, ceil(passportExpiry / 90 days) * 90 days)`
     ///      `registeredAt` is set on first `register` and preserved across `renew`.
     struct Registration {
         uint48 expiresAt;
@@ -51,14 +65,13 @@ contract VerificationRegistry is IVerificationRegistry, ReentrancyGuard, Pausabl
     }
 
     // =========================================================================
-    // Governance
+    // Immutables
     // =========================================================================
 
-    address public s_governor;
-    IProtocolConfig public s_config;
-    IProofVerifier public s_verifier;
-    ICSCAMerkleTree public s_cscaMerkleTree;
-    address public s_successor;
+    IProofVerifier public immutable i_verifier;
+    ICSCAMerkleTree public immutable i_cscaMerkleTree;
+    uint256 public immutable i_registrationTTL;
+    uint8 public immutable i_maxDailyRegistrations;
 
     // =========================================================================
     // Registration State
@@ -88,25 +101,28 @@ contract VerificationRegistry is IVerificationRegistry, ReentrancyGuard, Pausabl
     // Constructor
     // =========================================================================
 
-    constructor(address governor_, IProtocolConfig config_, IProofVerifier verifier_, address cscaMerkleTree_) {
-        if (governor_ == address(0)) revert VerificationRegistry__ZeroAddress();
-        if (address(config_) == address(0)) revert VerificationRegistry__ZeroAddress();
+    constructor(
+        IProofVerifier verifier_,
+        address cscaMerkleTree_,
+        uint256 registrationTTL_,
+        uint8 maxDailyRegistrations_
+    ) {
         if (address(verifier_) == address(0)) revert VerificationRegistry__ZeroAddress();
         if (cscaMerkleTree_ == address(0)) revert VerificationRegistry__ZeroAddress();
+        if (registrationTTL_ < MIN_TTL || registrationTTL_ > MAX_TTL) {
+            revert VerificationRegistry__InvalidConfig();
+        }
+        if (
+            maxDailyRegistrations_ < MIN_DAILY_REGISTRATIONS ||
+            maxDailyRegistrations_ > MAX_DAILY_REGISTRATIONS
+        ) {
+            revert VerificationRegistry__InvalidConfig();
+        }
 
-        s_governor = governor_;
-        s_config = config_;
-        s_verifier = verifier_;
-        s_cscaMerkleTree = ICSCAMerkleTree(cscaMerkleTree_);
-    }
-
-    // =========================================================================
-    // Modifiers
-    // =========================================================================
-
-    modifier onlyGovernor() {
-        if (msg.sender != s_governor) revert VerificationRegistry__NotGovernor();
-        _;
+        i_verifier = verifier_;
+        i_cscaMerkleTree = ICSCAMerkleTree(cscaMerkleTree_);
+        i_registrationTTL = registrationTTL_;
+        i_maxDailyRegistrations = maxDailyRegistrations_;
     }
 
     // =========================================================================
@@ -119,7 +135,7 @@ contract VerificationRegistry is IVerificationRegistry, ReentrancyGuard, Pausabl
         bytes32 epochNullifier,
         uint48 passportExpiry,
         bytes calldata proof
-    ) external override whenNotPaused nonReentrant {
+    ) external override nonReentrant {
         bytes32 hashedAddress = keccak256(abi.encodePacked(msg.sender));
 
         // Checks
@@ -127,9 +143,9 @@ contract VerificationRegistry is IVerificationRegistry, ReentrancyGuard, Pausabl
         if (s_registrations[hashedAddress].expiresAt > block.timestamp) revert VerificationRegistry__AlreadyRegistered();
 
         uint8 count = s_epochCounts[epochNullifier];
-        if (count >= s_config.maxDailyRegistrations()) revert VerificationRegistry__RateLimitExceeded();
+        if (count >= i_maxDailyRegistrations) revert VerificationRegistry__RateLimitExceeded();
 
-        if (!s_verifier.verifyProof(hashedAddress, nullifier, epochNullifier, s_cscaMerkleTree.getRoot(), proof)) {
+        if (!i_verifier.verifyProof(hashedAddress, nullifier, epochNullifier, i_cscaMerkleTree.getRoot(), proof)) {
             revert VerificationRegistry__InvalidProof();
         }
 
@@ -164,7 +180,7 @@ contract VerificationRegistry is IVerificationRegistry, ReentrancyGuard, Pausabl
         bytes32 epochNullifier,
         uint48 passportExpiry,
         bytes calldata proof
-    ) external override whenNotPaused nonReentrant {
+    ) external override nonReentrant {
         bytes32 hashedAddress = keccak256(abi.encodePacked(msg.sender));
 
         // Checks — must already be registered, and renewal must use the same nullifier.
@@ -175,7 +191,7 @@ contract VerificationRegistry is IVerificationRegistry, ReentrancyGuard, Pausabl
 
         // The real epochNullifier is passed through to the verifier (the circuit always
         // constrains it). Rate limiting is NOT applied on renewals — `s_epochCounts` stays put.
-        if (!s_verifier.verifyProof(hashedAddress, nullifier, epochNullifier, s_cscaMerkleTree.getRoot(), proof)) {
+        if (!i_verifier.verifyProof(hashedAddress, nullifier, epochNullifier, i_cscaMerkleTree.getRoot(), proof)) {
             revert VerificationRegistry__InvalidProof();
         }
 
@@ -184,7 +200,7 @@ contract VerificationRegistry is IVerificationRegistry, ReentrancyGuard, Pausabl
     }
 
     /// @inheritdoc IVerificationRegistry
-    function unregister() external override whenNotPaused nonReentrant {
+    function unregister() external override nonReentrant {
         bytes32 hashedAddress = keccak256(abi.encodePacked(msg.sender));
         if (s_registrations[hashedAddress].expiresAt == 0) revert VerificationRegistry__NotRegistered();
 
@@ -202,84 +218,27 @@ contract VerificationRegistry is IVerificationRegistry, ReentrancyGuard, Pausabl
 
     /// @inheritdoc IVerificationRegistry
     function isVerified(address wallet) external view override returns (bool) {
-        if (s_successor != address(0)) {
-            return IVerificationRegistry(s_successor).isVerified(wallet);
-        }
         return s_registrations[keccak256(abi.encodePacked(wallet))].expiresAt > block.timestamp;
     }
 
     /// @inheritdoc IVerificationRegistry
     function nullifierOf(address wallet) external view override returns (bytes32) {
-        if (s_successor != address(0)) {
-            return IVerificationRegistry(s_successor).nullifierOf(wallet);
-        }
         return s_nullifierByWallet[keccak256(abi.encodePacked(wallet))];
     }
 
     /// @inheritdoc IVerificationRegistry
     function getExpiry(address wallet) external view override returns (uint48) {
-        if (s_successor != address(0)) {
-            return IVerificationRegistry(s_successor).getExpiry(wallet);
-        }
         return s_registrations[keccak256(abi.encodePacked(wallet))].expiresAt;
     }
 
     /// @inheritdoc IVerificationRegistry
     function getRegisteredAt(address wallet) external view override returns (uint48) {
-        if (s_successor != address(0)) {
-            return IVerificationRegistry(s_successor).getRegisteredAt(wallet);
-        }
         return s_registrations[keccak256(abi.encodePacked(wallet))].registeredAt;
     }
 
     /// @inheritdoc IVerificationRegistry
     function getWallets(bytes32 nullifier) external view override returns (address[] memory) {
-        if (s_successor != address(0)) {
-            return IVerificationRegistry(s_successor).getWallets(nullifier);
-        }
         return s_walletsByNullifier[nullifier];
-    }
-
-    // =========================================================================
-    // Governance
-    // =========================================================================
-
-    function transferGovernance(address newGovernor) external onlyGovernor {
-        if (newGovernor == address(0)) revert VerificationRegistry__ZeroAddress();
-        emit GovernanceTransferred(s_governor, newGovernor);
-        s_governor = newGovernor;
-    }
-
-    function setConfig(IProtocolConfig newConfig) external onlyGovernor {
-        if (address(newConfig) == address(0)) revert VerificationRegistry__ZeroAddress();
-        emit ConfigUpdated(address(s_config), address(newConfig));
-        s_config = newConfig;
-    }
-
-    function setVerifier(IProofVerifier newVerifier) external onlyGovernor {
-        if (address(newVerifier) == address(0)) revert VerificationRegistry__ZeroAddress();
-        emit VerifierUpdated(address(s_verifier), address(newVerifier));
-        s_verifier = newVerifier;
-    }
-
-    function setCSCAMerkleTree(ICSCAMerkleTree newTree) external onlyGovernor {
-        if (address(newTree) == address(0)) revert VerificationRegistry__ZeroAddress();
-        emit CSCAMerkleTreeUpdated(address(s_cscaMerkleTree), address(newTree));
-        s_cscaMerkleTree = newTree;
-    }
-
-    function setSuccessor(address newSuccessor) external onlyGovernor {
-        if (newSuccessor == address(0)) revert VerificationRegistry__ZeroAddress();
-        emit SuccessorSet(newSuccessor);
-        s_successor = newSuccessor;
-    }
-
-    function pause() external onlyGovernor {
-        _pause();
-    }
-
-    function unpause() external onlyGovernor {
-        _unpause();
     }
 
     // =========================================================================
@@ -305,7 +264,7 @@ contract VerificationRegistry is IVerificationRegistry, ReentrancyGuard, Pausabl
     }
 
     /// @dev Computes effective `expiresAt`:
-    ///        `min(now + registrationTTL, ceil(passportExpiry / 90 days) * 90 days)`
+    ///        `min(now + i_registrationTTL, ceil(passportExpiry / 90 days) * 90 days)`
     ///
     ///      The passport-expiry component is rounded UP to the next 90-day boundary anchored
     ///      to the Unix epoch (NOT calendar quarters). This collapses ~365 distinguishable
@@ -320,7 +279,7 @@ contract VerificationRegistry is IVerificationRegistry, ReentrancyGuard, Pausabl
         uint48 roundedExpiry = passportExpiry <= type(uint48).max - (QUARTER - 1)
             ? ((passportExpiry + QUARTER - 1) / QUARTER) * QUARTER
             : passportExpiry;
-        uint48 ttlExpiry = uint48(block.timestamp) + uint48(s_config.registrationTTL());
+        uint48 ttlExpiry = uint48(block.timestamp) + uint48(i_registrationTTL);
         return ttlExpiry < roundedExpiry ? ttlExpiry : roundedExpiry;
     }
 }

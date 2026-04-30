@@ -2,7 +2,6 @@
 pragma solidity ^0.8.28;
 
 import {Script, console2} from "forge-std/Script.sol";
-import {ProtocolConfig} from "../src/ProtocolConfig.sol";
 import {VerificationRegistry} from "../src/VerificationRegistry.sol";
 import {CSCAMerkleTree} from "../src/CSCAMerkleTree.sol";
 import {MockProofVerifier} from "../test/mocks/MockProofVerifier.sol";
@@ -19,8 +18,10 @@ contract DeployDev is Script {
     // CSCA Merkle root — must match certs/tree-root.ts (built by certs/build-tree.ts)
     bytes32 public constant CSCA_MERKLE_ROOT = 0x2d656797b947d09105dcde4480bde0e03e9b7e6b02984c40d6391a91835580ef;
 
+    uint256 public constant REGISTRATION_TTL = 180 days;
+    uint8 public constant MAX_DAILY_REGISTRATIONS = 10;
+
     function run() public returns (
-        ProtocolConfig config,
         MockProofVerifier verifier,
         CSCAMerkleTree cscaTree,
         VerificationRegistry registry
@@ -33,16 +34,18 @@ contract DeployDev is Script {
 
         vm.startBroadcast();
 
-        config = new ProtocolConfig(deployer);
-        console2.log("ProtocolConfig:       ", address(config));
-
         cscaTree = new CSCAMerkleTree(CSCA_MERKLE_ROOT, deployer);
         console2.log("CSCAMerkleTree:       ", address(cscaTree));
 
         verifier = new MockProofVerifier();
         console2.log("MockProofVerifier:    ", address(verifier));
 
-        registry = new VerificationRegistry(deployer, config, verifier, address(cscaTree));
+        registry = new VerificationRegistry(
+            verifier,
+            address(cscaTree),
+            REGISTRATION_TTL,
+            MAX_DAILY_REGISTRATIONS
+        );
         console2.log("VerificationRegistry: ", address(registry));
 
         vm.stopBroadcast();
