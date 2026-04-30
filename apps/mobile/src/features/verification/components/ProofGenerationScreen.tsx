@@ -1,10 +1,12 @@
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   View,
   Text,
   ActivityIndicator,
+  Animated,
   AppState,
   BackHandler,
+  Modal,
   ScrollView,
   Pressable,
 } from 'react-native';
@@ -191,6 +193,10 @@ export function ProofGenerationScreen(): React.JSX.Element {
   const [submitError, setSubmitError] = useState<string | null>(null);
   const hasStarted = useRef(false);
 
+  // Fires on every render so we can verify in device logs that the screen
+  // mounted and what state branch is being taken.
+  console.log('[PROOF-UI-RENDER] step=', step, 'isGenerating=', isGenerating, 'address=', address ? 'set' : 'unset');
+
   // wagmi writeContract hook
   const {
     writeContract,
@@ -216,31 +222,43 @@ export function ProofGenerationScreen(): React.JSX.Element {
     navigation.setOptions({ headerBackVisible: false, gestureEnabled: false });
   }, [navigation]);
 
-  // Run proof generation once — wait for a real wallet address first
+  // Run proof generation once — wait for a real wallet address first.
+  //
+  // We defer the actual call by ~250ms (one nav animation frame) so the
+  // navigation slide can finish and the loading-state modal can paint BEFORE
+  // the heavy synchronous work in generate() (SHA-256 hashing, RSA-2048
+  // signature verification, SOD ASN.1 parsing) blocks the JS thread.
+  // setTimeout is used over InteractionManager because the new-arch nav stack
+  // doesn't always register its animation as an InteractionManager handle.
   useEffect(() => {
     if (hasStarted.current) return;
     if (!address) return;
     hasStarted.current = true;
 
-    (async () => {
-      try {
-        const output = await generate({
-          rawDG1Hex: passportData.rawDG1Hex,
-          rawSODHex: passportData.rawSODHex,
-          walletAddress: address,
-          passportExpiryUnix: mrzExpiryToUnix(passportData.dateOfExpiry),
-        }, tier);
-        if (output.type === 'base') {
-          console.log('[PROOF] epochNullifier:', output.epochNullifier);
-        } else {
-          console.log('[PROOF] nullifier:', output.nullifier);
+    console.log('[PROOF-UI] effect armed — deferring generate() by 250ms');
+    const timer = setTimeout(() => {
+      console.log('[PROOF-UI] deferred timer fired — starting generate()');
+      void (async () => {
+        try {
+          const output = await generate({
+            rawDG1Hex: passportData.rawDG1Hex,
+            rawSODHex: passportData.rawSODHex,
+            walletAddress: address,
+            passportExpiryUnix: mrzExpiryToUnix(passportData.dateOfExpiry),
+          }, tier);
+          if (output.type === 'base') {
+            console.log('[PROOF] epochNullifier:', output.epochNullifier);
+          } else {
+            console.log('[PROOF] nullifier:', output.nullifier);
+          }
+          setProofResult(output);
+          setStep('proof_ready');
+        } catch {
+          setStep('error');
         }
-        setProofResult(output);
-        setStep('proof_ready');
-      } catch {
-        setStep('error');
-      }
-    })();
+      })();
+    }, 250);
+    return () => clearTimeout(timer);
   }, [address, generate, passportData, tier]);
 
   // Navigate to success when tx is confirmed
@@ -399,32 +417,54 @@ export function ProofGenerationScreen(): React.JSX.Element {
   // -------------------------------------------------------------------------
 
   if (step === 'generating' || isGenerating) {
+    console.log('[PROOF-UI] rendering loading state — step:', step, 'isGenerating:', isGenerating);
     return (
       <SafeAreaView className="flex-1 bg-dracula-bg" edges={['bottom']}>
+        {/* Visible content underneath the modal so even if Modal is broken, the
+            user still sees the spinner and label. */}
         <View className="flex-1 px-6 py-8 justify-center items-center">
-          <View className="w-24 h-24 rounded-full bg-dracula-purple/20 items-center justify-center mb-8">
-            <ActivityIndicator size="large" color="#818CF8" />
+          <View
+            style={{
+              width: 96,
+              height: 96,
+              borderRadius: 48,
+              backgroundColor: 'rgba(189, 147, 249, 0.2)',
+              alignItems: 'center',
+              justifyContent: 'center',
+              marginBottom: 24,
+            }}
+          >
+            <ActivityIndicator size="large" color="#bd93f9" />
           </View>
           <Text className="text-dracula-fg text-xl font-bold text-center mb-2">
             Generating ZK Proof
           </Text>
-          <Text className="text-dracula-comment text-sm text-center max-w-xs mb-8">
-            Creating a zero-knowledge proof from your passport data...
+          <Text className="text-dracula-comment text-sm text-center max-w-xs">
+            Hashing passport data and building zero-knowledge proof…
           </Text>
-          {/* Step indicator */}
-          <View className="flex-row gap-x-2 mb-4 w-full">
-            <View className="h-1.5 rounded-full flex-1 bg-dracula-purple" />
-            <View className="h-1.5 rounded-full flex-1 bg-dracula-surface/70" />
-            <View className="h-1.5 rounded-full flex-1 bg-dracula-surface/70" />
-          </View>
-          <Text className="text-dracula-comment/70 text-xs">Step 1 of 3</Text>
-          <View className="mt-auto">
-            <Text className="text-dracula-comment/50 text-xs text-center leading-5">
-              Please do not close the app.{'\n'}
-              This process cannot be interrupted.
-            </Text>
-          </View>
         </View>
+
+        <Modal visible transparent animationType="fade" statusBarTranslucent>
+          <View className="flex-1 bg-black/70 items-center justify-center px-8">
+            <View className="bg-dracula-surface rounded-3xl px-8 pt-8 pb-7 items-center w-full max-w-sm">
+              <ProofLoadingIndicator />
+              <Text className="text-dracula-fg text-lg font-bold text-center mb-2">
+                Generating ZK Proof
+              </Text>
+              <ProofLoadingStatus />
+              <View className="flex-row gap-x-2 mb-3 w-full">
+                <View className="h-1.5 rounded-full flex-1 bg-dracula-purple" />
+                <View className="h-1.5 rounded-full flex-1 bg-dracula-surface/70" />
+                <View className="h-1.5 rounded-full flex-1 bg-dracula-surface/70" />
+              </View>
+              <Text className="text-dracula-comment/70 text-xs mb-4">Step 1 of 3</Text>
+              <Text className="text-dracula-comment/60 text-xs text-center leading-5">
+                Please do not close the app.{'\n'}
+                This process cannot be interrupted.
+              </Text>
+            </View>
+          </View>
+        </Modal>
       </SafeAreaView>
     );
   }
@@ -607,5 +647,121 @@ function DebugRow({
         {value}
       </Text>
     </View>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Proof loading visuals
+// ---------------------------------------------------------------------------
+
+/**
+ * Spinner inside a circle, with two pulsing rings expanding outward to give
+ * a sense of motion while Mopro generates the proof on-device (~5–15s).
+ */
+function ProofLoadingIndicator(): React.JSX.Element {
+  const pulseA = useRef(new Animated.Value(0)).current;
+  const pulseB = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    const make = (value: Animated.Value) =>
+      Animated.loop(
+        Animated.timing(value, {
+          toValue: 1,
+          duration: 1800,
+          useNativeDriver: true,
+        }),
+      );
+    const animA = make(pulseA);
+    const animB = make(pulseB);
+    animA.start();
+    // Stagger so the two rings don't overlap
+    const delay = setTimeout(() => animB.start(), 900);
+    return () => {
+      clearTimeout(delay);
+      animA.stop();
+      animB.stop();
+    };
+  }, [pulseA, pulseB]);
+
+  // Inline styles for the rings — NativeWind classNames don't always compose
+  // with Animated.View's style prop, especially for border colors. Hardcoding
+  // here guarantees the rings render.
+  const RING_SIZE = 96;
+  const RING_COLOR = '#bd93f9'; // dracula-purple
+
+  const ringStyle = (value: Animated.Value) => ({
+    position: 'absolute' as const,
+    width: RING_SIZE,
+    height: RING_SIZE,
+    borderRadius: RING_SIZE / 2,
+    borderWidth: 2,
+    borderColor: RING_COLOR,
+    transform: [
+      {
+        scale: value.interpolate({ inputRange: [0, 1], outputRange: [1, 1.6] }),
+      },
+    ],
+    opacity: value.interpolate({ inputRange: [0, 1], outputRange: [0.6, 0] }),
+  });
+
+  return (
+    <View
+      style={{
+        width: RING_SIZE,
+        height: RING_SIZE,
+        marginBottom: 32,
+        alignItems: 'center',
+        justifyContent: 'center',
+      }}
+    >
+      <Animated.View pointerEvents="none" style={ringStyle(pulseA)} />
+      <Animated.View pointerEvents="none" style={ringStyle(pulseB)} />
+      <View className="w-24 h-24 rounded-full bg-dracula-purple/20 items-center justify-center">
+        <ActivityIndicator size="large" color="#818CF8" />
+      </View>
+    </View>
+  );
+}
+
+/**
+ * Cycles through friendly status messages while the proof is being generated.
+ * Mopro doesn't expose progress callbacks, so the messages are timed; they
+ * give the user a sense of motion without claiming real progress.
+ */
+function ProofLoadingStatus(): React.JSX.Element {
+  const messages = useMemo(
+    () => [
+      'Hashing passport data…',
+      'Verifying certificate chain…',
+      'Computing nullifier…',
+      'Building zero-knowledge proof…',
+      'Almost there…',
+    ],
+    [],
+  );
+  const [index, setIndex] = useState(0);
+  const opacity = useRef(new Animated.Value(1)).current;
+
+  useEffect(() => {
+    const interval = setInterval(() => {
+      Animated.sequence([
+        Animated.timing(opacity, { toValue: 0, duration: 250, useNativeDriver: true }),
+        Animated.timing(opacity, { toValue: 1, duration: 250, useNativeDriver: true }),
+      ]).start();
+      // Swap message at the midpoint of the fade
+      setTimeout(() => {
+        setIndex((i) => (i + 1 < messages.length ? i + 1 : i));
+      }, 250);
+    }, 2800);
+    return () => clearInterval(interval);
+  }, [messages.length, opacity]);
+
+  return (
+    <Animated.Text
+      style={{ opacity }}
+      className="text-dracula-comment text-sm text-center max-w-xs mb-8"
+    >
+      {messages[index]}
+    </Animated.Text>
   );
 }
