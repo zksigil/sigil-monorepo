@@ -35,7 +35,7 @@ try {
   artifact = JSON.parse(readFileSync(FOUNDRY_OUTPUT, 'utf8'));
 } catch (err) {
   console.error(
-    `[sync-abi] Could not read Foundry artifact at:\n  ${FOUNDRY_OUTPUT}\n\nRun "pnpm contracts:build" first.\n`,
+    `[sync-abi] Could not read Foundry artifact at:\n  ${FOUNDRY_OUTPUT}\n\nRun "make contracts" first.\n`,
   );
   process.exit(1);
 }

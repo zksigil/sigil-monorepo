@@ -171,8 +171,6 @@ importers:
         specifier: ^5.5.0
         version: 5.9.3
 
-  packages/contracts: {}
-
 packages:
 
   '@0no-co/graphql.web@1.2.0':
