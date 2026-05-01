@@ -31,6 +31,32 @@ module.exports = {
           red: '#ff5555',
           yellow: '#f1fa8c',
         },
+
+        canvas: '#282a36',
+        surface: '#373947',
+        elevated: '#44475a',
+
+        text: {
+          primary: '#f8f8f2',
+          secondary: '#c8cad6',
+          muted: '#8a92b2',
+        },
+        border: {
+          subtle: 'rgba(98,114,164,0.25)',
+        },
+        accent: {
+          primary: '#bd93f9',
+          success: '#50fa7b',
+          danger: '#ff5555',
+          warning: '#ffb86c',
+        },
+      },
+      fontSize: {
+        display: ['34px', { lineHeight: '40px', letterSpacing: '-0.5px' }],
+        title: ['22px', { lineHeight: '28px', letterSpacing: '-0.2px' }],
+        body: ['15px', { lineHeight: '22px' }],
+        caption: ['13px', { lineHeight: '18px' }],
+        micro: ['11px', { lineHeight: '14px', letterSpacing: '0.4px' }],
       },
     },
   },

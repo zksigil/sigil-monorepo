@@ -10,6 +10,7 @@ import { useChainGuard } from '../hooks/useChainGuard';
 import { useTrackedAccounts } from '../hooks/useTrackedAccounts';
 import { useOpenWallet } from '../hooks/useOpenWallet';
 import { AccountRow } from './AccountRow';
+import { PreConnectInfo } from './PreConnectInfo';
 import { CHAIN_DISPLAY_NAMES } from '../../../shared/constants/chains';
 
 const FIRST_SIGILIZE_DISMISSED_KEY = 'sigil:first-sigilize-dismissed:v1';
@@ -126,35 +127,41 @@ export function HomeScreen(): React.JSX.Element {
           </Pressable>
         )}
 
-        <View className="gap-y-3">
-          <Text className="text-dracula-comment/70 text-xs font-semibold uppercase tracking-widest">
-            Accounts
+        {!isConnected && <PreConnectInfo />}
+
+        {isConnected && (
+          <View className="gap-y-3">
+            <Text className="text-dracula-comment/70 text-xs font-semibold uppercase tracking-widest">
+              Accounts
+            </Text>
+
+            {isLoading ? (
+              <ActivityIndicator color="#6272a4" />
+            ) : accounts.length === 0 ? (
+              <View className="bg-dracula-surface/50 rounded-2xl px-4 py-6 items-center">
+                <Text className="text-dracula-comment/50 text-sm">
+                  No accounts found in wallet
+                </Text>
+              </View>
+            ) : (
+              accounts.map((account) => (
+                <AccountRow
+                  key={account.address}
+                  account={account}
+                  linkedSiblings={accounts}
+                  onSigilize={handleSigilize}
+                  onUnregistered={refetch}
+                />
+              ))
+            )}
+          </View>
+        )}
+
+        {isConnected && (
+          <Text className="text-dracula-comment/40 text-xs text-center leading-5">
+            Your passport data never leaves your device.{'\n'}ZK proofs are generated locally.
           </Text>
-
-          {isLoading ? (
-            <ActivityIndicator color="#6272a4" />
-          ) : accounts.length === 0 ? (
-            <View className="bg-dracula-surface/50 rounded-2xl px-4 py-6 items-center">
-              <Text className="text-dracula-comment/50 text-sm">
-                {isConnected ? 'No accounts found in wallet' : 'Connect a wallet to get started'}
-              </Text>
-            </View>
-          ) : (
-            accounts.map((account) => (
-              <AccountRow
-                key={account.address}
-                account={account}
-                linkedSiblings={accounts}
-                onSigilize={handleSigilize}
-                onUnregistered={refetch}
-              />
-            ))
-          )}
-        </View>
-
-        <Text className="text-dracula-comment/40 text-xs text-center leading-5">
-          Your passport data never leaves your device.{'\n'}ZK proofs are generated locally.
-        </Text>
+        )}
 
         {isConnected ? (
           <Pressable
