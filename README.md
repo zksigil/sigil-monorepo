@@ -4,16 +4,14 @@ Mobile app for verifying Ethereum wallets with government-issued passports using
 
 ## What it does
 
-You tap your passport to your phone, the app reads it over NFC, generates a ZK proof locally, and registers your wallet on-chain. Protocols can then do a single mapping lookup to check if a wallet is verified — no passport data on-chain, no way to link wallets back to a person.
+You tap your passport to your phone, the app reads it over NFC, generates a ZK proof locally, and registers your wallet on-chain. Protocols can then do a single mapping lookup to check if a wallet is verified — no passport data on-chain, no way to link a wallet back to a person.
 
-Two verification tiers:
-- **Base tier** — proof of personhood. Multiple wallets per passport allowed, fully unlinkable.
-- **Primary tier** — sybil resistance. One wallet per passport globally, enforced via nullifier.
+Single-tier sigil model: one stable nullifier per passport. A user can sigilize multiple wallets — they share that nullifier on-chain and are publicly linkable as belonging to one passport. Wallets the user does NOT sigilize stay anonymous. Protocols read `isVerified(wallet)` for personhood and `nullifierOf(wallet)` for per-protocol sybil dedup.
 
 ## Stack
 
-- **Mobile**: React Native 0.81 / Expo SDK 54 (bare workflow), TypeScript strict
-- **Contracts**: Foundry / Solidity 0.8.24, deployed on Base Sepolia → Base mainnet
+- **Mobile**: React Native 0.81.5 / Expo SDK 54 (bare workflow), TypeScript strict
+- **Contracts**: Foundry / Solidity 0.8.28, deployed on Base Sepolia (84532) → Base mainnet (8453)
 - **Web3**: Reown AppKit + wagmi v2 + viem v2
 - **ZK**: Noir circuits, Mopro prover (runs on-device, ~5–15s)
 
@@ -39,14 +37,19 @@ For iOS physical device, building in Release mode via Xcode is the most reliable
 ## Contract development
 
 ```bash
-pnpm contracts:build
-pnpm contracts:test
+make contracts          # forge build + sync ABI to mobile app
+make contracts-test     # forge test -vvv
 ```
 
-After deploying, update `EXPO_PUBLIC_VERIFICATION_REGISTRY_ADDRESS` in `.env`.
+After deploying, update the chain-specific registry env var
+(`EXPO_PUBLIC_BASE_SEPOLIA_REGISTRY_ADDRESS`, `EXPO_PUBLIC_BASE_REGISTRY_ADDRESS`,
+or `EXPO_PUBLIC_ANVIL_REGISTRY_ADDRESS`) in both `.env` and `apps/mobile/.env`,
+then rebuild the app — env vars are baked into the JS bundle.
 
 ## Status
 
 - Phase 1 ✅ — wallet connection (MetaMask / WC wallets via AppKit)
 - Phase 2 ✅ — MRZ entry, camera OCR, NFC + BAC auth, stub proof generation
-- Phase 3 🚧 — real ZK circuit, Mopro integration, two-tier registry redesign, SOD-based passport secret
+- Phase 3 ✅ — real Noir circuit, Mopro integration, in-circuit RSA + DSC↔CSCA chain + CSCA Merkle inclusion, UltraHonk on-chain verification
+- Phase 4 ✅ — single-tier sigil model + immutable registry (no governor)
+- Pending — transfer `CSCAMerkleTree` ownership to a multisig before mainnet; in-app renewal prompts within 30 days of expiry. See [HIGH-LEVEL-ARCHITECTURE.md](HIGH-LEVEL-ARCHITECTURE.md) for details.

@@ -1,5 +1,14 @@
 # Phase 3C Progress — Session Summary
 
+> **HISTORICAL — kept for archaeology.** End-of-session summary from the Phase 3C work.
+> Multiple details have since been superseded by Phase 4:
+>   - `compute_base_inputs` / `compute_primary_inputs` were unified into `compute_sigil_inputs`.
+>   - `verifyBaseProof` / `verifyPrimaryProof` were unified into `verifyProof`.
+>   - `BaseProofOutput` / `PrimaryProofOutput` were unified into `SigilProofOutput`.
+>   - `setCSCAMerkleTree()` and `CSCAMerkleTreeUpdated` were removed — the registry is now immutable.
+>   - Merkle tree depth was changed from 12 to 9.
+> See `HIGH-LEVEL-ARCHITECTURE.md` and `packages/circuits/README.md` for the live design.
+
 > Generated at end of session. Use this as context for the next chat continuation.
 
 ## Status: Full Stack Integration Complete ✓

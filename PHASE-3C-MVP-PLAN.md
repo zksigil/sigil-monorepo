@@ -1,3 +1,9 @@
+> **HISTORICAL — kept for archaeology.** This document is the original MVP plan for the
+> CSCA Merkle tree work. The plan shipped (with depth changed from 12 → 9 in the final
+> implementation). The two-tier base/primary references are obsolete: Phase 4 collapsed
+> them into one `sigil/` circuit. See `HIGH-LEVEL-ARCHITECTURE.md` for the current
+> architecture.
+
 # Phase 3C — CSCA Registry + Verification (MVP Plan)
 
 ## Goal

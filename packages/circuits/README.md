@@ -1,96 +1,82 @@
-# Passport Nullifier Circuit (Phase 3a)
+# Sigil Circuit (Phase 4 — single-tier)
 
-Noir circuit for deriving a `passportNullifier` from passport data in zero knowledge.
+Noir circuit (`sigil/`) that proves a passport is signed up the ICAO trust chain
+and derives both a stable per-passport nullifier and a daily epoch nullifier.
 
-## Trust Model
+The circuit lives at [`sigil/src/main.nr`](sigil/src/main.nr). Source of truth
+for the public-input order, witness layout, and constants — all other packages
+(Mopro Rust FFI, mobile `proofService.ts`, Solidity `ProofVerifier.sol`) must
+mirror it.
 
-**Phase 3a (current):** Trust-the-device model. The mobile app reads DG1 and SOD from the passport via NFC, verifies the SOD signature locally, and feeds SHA256 hashes into the prover. The circuit only proves correct nullifier derivation — it does NOT verify the SOD/CSCA signature chain.
+## What the circuit proves
 
-**Phase 3b (future):** In-circuit SOD verification. The RSA/ECDSA signature check moves inside the circuit, removing the need to trust the device.
+1. **SOD signature** — DSC public key (RSA-2048 / SHA-256 / PKCS#1 v1.5) signed the SOD's `signedAttrs`
+2. **DSC pubkey binding** — the DSC pubkey embedded in the proof matches the bytes inside the CSCA-signed TBS certificate (anti-substitution)
+3. **CSCA signature** — CSCA pubkey (RSA-4096) signed the DSC's TBS certificate
+4. **CSCA inclusion** — CSCA pubkey is a leaf in the on-chain CSCA Merkle tree (depth 9, ICAO Master List)
+5. **Stable nullifier** — `nullifier == Poseidon2([passport_secret, 1], 2)` where `passport_secret = Poseidon2([dg1_hash, sod_hash], 2)`
+6. **Epoch nullifier** — `epoch_nullifier == Poseidon2([passport_secret, epoch_day], 2)` (daily rate-limit key)
 
-## Circuit Logic
+Passport expiry is NOT a circuit input — it's enforced on-chain at the `register` / `renew` entrypoints.
 
-```
-passport_secret    = Poseidon2(dg1_hash, sod_hash)
-passport_nullifier = Poseidon2(passport_secret)
-```
+## Public inputs (declaration order)
 
-### Inputs
+The Solidity verifier marshals these in this exact order — see `packages/contracts/src/ProofVerifier.sol`:
 
-| Name                 | Visibility | Description                                      |
-| -------------------- | ---------- | ------------------------------------------------ |
-| `dg1_hash`           | private    | SHA256 of raw DG1 bytes, truncated to BN254 field |
-| `sod_hash`           | private    | SHA256 of raw SOD bytes, truncated to BN254 field |
-| `passport_nullifier` | public     | Derived nullifier, stored on-chain               |
-| `wallet_address`     | public     | Connected wallet address (uint160 as Field)      |
+| Index | Name               | Description                                           |
+|-------|--------------------|-------------------------------------------------------|
+| 0     | `nullifier`        | Stable per-passport sybil identifier                  |
+| 1     | `epoch_nullifier`  | Daily rate-limit key                                  |
+| 2     | `hashed_address`   | `keccak256(wallet) mod p` (binds proof to caller)     |
+| 3     | `csca_merkle_root` | Current CSCA Merkle root from on-chain `CSCAMerkleTree` |
 
-### Constraints
-
-1. `passport_secret == Poseidon2(dg1_hash, sod_hash)`
-2. `passport_nullifier == Poseidon2(passport_secret)`
-
-`wallet_address` is a public input that binds the proof to a specific address. The smart contract checks `wallet_address == msg.sender`.
-
-## Mobile App: Pre-Prover Computation
-
-Before calling the Mopro prover, the app must compute:
-
-### 1. Truncate SHA256 to BN254 field
-
-SHA256 produces 256 bits but the BN254 scalar field is ~254 bits. To fit:
-
-```typescript
-function truncateToBN254Field(sha256Hash: Uint8Array): bigint {
-  // Mask top 3 bits of the first byte to ensure value < BN254 field order
-  const truncated = new Uint8Array(sha256Hash);
-  truncated[0] &= 0x1f; // Clear bits 7, 6, 5
-  // Convert big-endian bytes to bigint
-  return truncated.reduce((acc, byte) => (acc << 8n) | BigInt(byte), 0n);
-}
-```
-
-### 2. Compute inputs
-
-```typescript
-import { sha256 } from '@noble/hashes/sha256';
-
-const dg1Hash = truncateToBN254Field(sha256(rawDG1Bytes));
-const sodHash = truncateToBN254Field(sha256(rawSODBytes));
-const walletAddress = BigInt(connectedWalletAddress); // 0x... -> uint160
-```
-
-### 3. Generate proof (via Mopro SDK)
-
-```typescript
-const { proof, publicInputs } = await moproProve({
-  dg1_hash: dg1Hash,
-  sod_hash: sodHash,
-  passport_nullifier: expectedNullifier,
-  wallet_address: walletAddress,
-});
-```
-
-The `passport_nullifier` and `wallet_address` are the public outputs submitted to the contract's `register()` function.
-
-## Chain Domain Separation
-
-In Phase 3a, `walletAddress` implicitly binds the proof to the deployment chain because the contract checks `wallet_address == msg.sender` on a specific chain.
-
-For multi-chain deployments (Phase 3b), the nullifier derivation should incorporate `chainId` and `contractAddress`:
+## Private inputs (witness)
 
 ```
-passport_nullifier = Poseidon2(passport_secret, chain_id, contract_address)
+dg1_hash, sod_hash, epoch_day
+signed_attrs[512], signed_attrs_len
+signature[256], pubkey[256], redc_param[257], exponent
+dsc_tbs[1536], dsc_tbs_len, dsc_pubkey_offset
+csca_pubkey[512], csca_redc_param[513], csca_exponent, csca_signature[512]
+csca_merkle_siblings[9], csca_leaf_index
 ```
 
-This prevents cross-chain linkability of the same passport.
+`dg1_hash` and `sod_hash` are SHA-256 outputs reduced mod the BN254 prime (the Mopro
+prover does the reduction; the on-chain verifier mirrors it for `hashed_address`).
 
-## Build & Test
+## Trust model
 
-Requires [Nargo](https://noir-lang.org/docs/getting_started/installation/) v0.36.0+.
+- **In circuit:** SOD ← DSC (RSA-2048), DSC ← CSCA (RSA-4096), CSCA ∈ Merkle tree.
+  No need to trust the device for the cryptographic chain.
+- **Off circuit (mobile):** the app reads DG1 + SOD over NFC after BAC, parses out
+  signedAttrs / DSC TBS / CSCA pubkey, looks up the CSCA Merkle proof, and feeds
+  everything into the prover. The CSCA Merkle root is fetched from the on-chain
+  `CSCAMerkleTree` so the proof can only succeed against the deployed registry's
+  current root.
+- **On chain:** `VerificationRegistry.register` enforces `passport_expiry > now`
+  before calling the verifier; `hashed_address == keccak256(msg.sender)` is the
+  binding that prevents cross-wallet proof replay.
+
+## Build & test
+
+Requires nargo at the version pinned in `Nargo.toml`.
 
 ```bash
-cd packages/circuits
-nargo check    # Validate circuit
-nargo compile  # Compile to ACIR
-nargo test     # Run circuit tests (if any)
+make circuits         # nargo compile + copy passport_sigil.json + tree-data.json to apps/mobile/assets/circuits/
+make bb-verifier      # regenerate packages/contracts/src/verifiers/SigilUltraHonkVerifier.sol from the VK
+make circuits-test    # nargo test --workspace
+make bb-prove         # local proof generation (requires witness file)
+make bb-verify        # local proof verification
 ```
+
+The `bb` CLI version must match `barretenberg-rs` (Mopro pins `4.2.0-aztecnr-rc.2`).
+Run `make install-bb` once to install the matching binary at `~/.bb-4.2/bb`.
+Mismatch → `ProofLengthWrong` revert from `PAIRING_POINTS_SIZE` differences.
+
+## Constants
+
+| Constant | Value | Notes |
+|----------|-------|-------|
+| `SIGNED_ATTRS_MAX_LEN` | 512 | DER-encoded signedAttributes, zero-padded |
+| `DSC_TBS_MAX_LEN`      | 1536 | DSC TBS bytes, zero-padded |
+| `MERKLE_DEPTH`         | 9    | 512 leaves; ~269 CSCAs in current tree |

@@ -572,9 +572,9 @@ async function performBAC(
     console.log('[NFC-BAC] M.IFD:', toHex(mifd), `(${mifd.length} bytes)`);
 
     // Step 6: EXTERNAL AUTHENTICATE
-    const extAuthData = [...eifd, ...mifd]; // 32 + 8 = 40 bytes
-    // Command: 00 82 00 00 Lc=28 <data> Le=28 (expect 40 bytes response: E.IC || M.IC)
-    const extAuthCmd = [0x00, 0x82, 0x00, 0x00, 0x28, ...extAuthData, 0x28];
+    // extAuthData = E.IFD (32) || M.IFD (8) = 40 bytes; expected response: E.IC || M.IC (40 bytes).
+    const extAuthData = [...eifd, ...mifd];
+    const extAuthCmd = [0x00, 0x82, 0x00, 0x00, extAuthData.length, ...extAuthData, extAuthData.length];
     const extAuthResp = await transceiveFn(extAuthCmd);
     console.log('[NFC-BAC] EXTERNAL_AUTHENTICATE response:', toHex(extAuthResp));
 
@@ -689,11 +689,8 @@ function wrapSelectFileAPDU(
 ): { command: number[]; newSSC: number[] } {
   const ssc = incrementSSC(session.ssc);
 
-  // CLA byte for SM: try 0x0C (standard), but passport might expect 0x84 or 0x8C
-  // 0x0C = bit 3 set (secure messaging)
-  // 0x84 = bit 7 + bit 2 set (command chaining + secure messaging)  
-  // 0x8C = bit 7 + bit 3 set (command chaining + secure messaging)
-  const claForSM = 0x0c; // Standard ICAO 9303-11
+  // CLA = 0x0C: bit 3 set (secure messaging, no command chaining) per ICAO 9303-11 §9.8.
+  const claForSM = 0x0c;
   const cmdHeader = [claForSM, 0xa4, 0x02, 0x0c];
 
   // ICAO 9303-11 Step 1: Encrypt file ID in DO'87'
@@ -949,6 +946,12 @@ function parseDG1(data: number[]): PassportMRZData | null {
 // DG1 reading — plain or Secure Messaging
 // ---------------------------------------------------------------------------
 
+/**
+ * READ BINARY chunk size (bytes). 200 is a safe ceiling well under the
+ * common eMRTD APDU response cap (~256 bytes after SM overhead).
+ */
+const READ_BINARY_CHUNK_SIZE = 200;
+
 async function readDG1Plain(): Promise<NFCReadResult> {
   // Select DG1 (EF.DG1 = 0x0101)
   const selectDG1Resp = await transceive(buildSelectFile([0x01, 0x01]));
@@ -984,7 +987,7 @@ async function readDG1Plain(): Promise<NFCReadResult> {
     };
   }
 
-  // Read EF.SOD (0x011D) — required for Phase 3 proof generation
+  // Read EF.SOD (0x011D) — required for ZK proof generation (DSC signature + cert chain)
   const selectSODResp = await transceive(buildSelectFile([0x01, 0x1d]));
   console.log('[NFC] SELECT EF.SOD response:', toHex(selectSODResp));
 
@@ -1054,12 +1057,11 @@ async function readDG1SecureMessaging(session: SessionKeys): Promise<NFCReadResu
   console.log('[NFC-SM] DG1 total length:', totalLength);
 
   // Read entire DG1 in chunks with SM
-  const chunkSize = 200;
   const allData: number[] = [];
   let offset = 0;
 
   while (offset < totalLength) {
-    const readLen = Math.min(chunkSize, totalLength - offset);
+    const readLen = Math.min(READ_BINARY_CHUNK_SIZE, totalLength - offset);
     const { command: readCmd, newSSC: readSSC } = wrapReadBinaryAPDU(offset, readLen, {
       ...session,
       ssc: currentSSC,
@@ -1079,7 +1081,7 @@ async function readDG1SecureMessaging(session: SessionKeys): Promise<NFCReadResu
 
   console.log('[NFC-SM] DG1 read complete, total bytes:', allData.length);
 
-  // Read EF.SOD (0x011D) — required for Phase 3 proof generation
+  // Read EF.SOD (0x011D) — required for ZK proof generation (DSC signature + cert chain)
   const { command: selectSODCmd, newSSC: sodSSC1 } = wrapSelectFileAPDU([0x01, 0x1d], {
     ...session,
     ssc: currentSSC,
@@ -1119,7 +1121,7 @@ async function readDG1SecureMessaging(session: SessionKeys): Promise<NFCReadResu
   let sodOffset = 0;
 
   while (sodOffset < sodTotalLength) {
-    const readLen = Math.min(chunkSize, sodTotalLength - sodOffset);
+    const readLen = Math.min(READ_BINARY_CHUNK_SIZE, sodTotalLength - sodOffset);
     const { command: readCmd, newSSC: readSSC } = wrapReadBinaryAPDU(sodOffset, readLen, {
       ...session,
       ssc: sodSSC,
@@ -1158,12 +1160,11 @@ async function readBinaryChunked(
   totalLength: number,
   _session: SessionKeys | null,
 ): Promise<number[] | null> {
-  const chunkSize = 200;
   const allData: number[] = [];
   let offset = startOffset;
 
   while (offset < totalLength) {
-    const readLen = Math.min(chunkSize, totalLength - offset);
+    const readLen = Math.min(READ_BINARY_CHUNK_SIZE, totalLength - offset);
     const chunk = await transceive(buildReadBinary(offset, readLen));
     if (!isSuccess(chunk)) {
       return null;

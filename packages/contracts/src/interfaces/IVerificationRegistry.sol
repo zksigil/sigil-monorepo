@@ -35,7 +35,7 @@ pragma solidity ^0.8.28;
 ///
 ///      Rate limiting:
 ///      - Max `maxDailyRegistrations` new wallets per passport per day, enforced via an
-///        epoch nullifier (`hash(s, "epoch", day)`). Renewals are exempt.
+///        epoch nullifier (`Poseidon2(passport_secret, epoch_day)`). Renewals are exempt.
 interface IVerificationRegistry {
     // =========================================================================
     // Events
@@ -53,8 +53,8 @@ interface IVerificationRegistry {
     /// @notice Sigilize the caller's wallet — link it to the passport identified by `nullifier`.
     /// @param nullifier      Stable per-passport nullifier (Poseidon2(s, 1)). Multiple wallets
     ///                       may share this nullifier.
-    /// @param epochNullifier Rate-limiting nullifier: hash(s, "epoch", day). New registrations
-    ///                       per epoch are capped at `maxDailyRegistrations`.
+    /// @param epochNullifier Rate-limiting nullifier: Poseidon2(passport_secret, epoch_day).
+    ///                       New registrations per epoch are capped at `maxDailyRegistrations`.
     /// @param passportExpiry Passport expiry timestamp.
     /// @param proof          ZK proof bytes.
     function register(
