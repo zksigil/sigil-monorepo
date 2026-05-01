@@ -221,19 +221,28 @@ considered live, the owner MUST be transferred to one of the following:
 | `TimelockController` (OpenZeppelin) | Could be added to `Deploy.s.sol` | Forced N-day delay → updates are observable + reactable | Slower; need a proposer (an EOA or Safe) on top |
 | Safe **+** Timelock (proposer = Safe, executor = anyone) | Combines both | Best of both: M-of-N approval + observable delay | Two contracts to manage |
 
-Whichever you pick, the procedure is:
+**Key management.** Use Foundry keystores (`cast wallet import <name> --interactive`) — the
+encrypted keystore lives at `~/.foundry/keystores/<name>` and is unlocked at deploy time
+with a password prompt. No raw private keys in env vars or shell history. The deploy
+script uses `msg.sender` (which Forge sets from `--account`), so no `DEPLOYER_ADDRESS`
+env var is needed either.
+
+Whichever ownership target you pick, the procedure is:
 
 ```bash
-# 1. Deploy contracts
-forge script script/Deploy.s.sol:Deploy --rpc-url base_sepolia --broadcast --verify
+# 1. Deploy contracts (BASE_SEPOLIA_RPC_URL + BASESCAN_API_KEY exported in shell)
+forge script script/Deploy.s.sol:Deploy \
+  --rpc-url base_sepolia --account base_sepolia --broadcast --verify
 
-# 2. From the deployer wallet, propose ownership transfer
-cast send <CSCATree> 'transferOwnership(address)' <newOwner> --rpc-url base_sepolia ...
+# 2. From the deployer keystore, propose ownership transfer
+cast send <CSCATree> 'transferOwnership(address)' <newOwner> \
+  --account base_sepolia --rpc-url base_sepolia
 
 # 3. From newOwner, accept ownership (Ownable2Step requires this — guards typos)
-cast send <CSCATree> 'acceptOwnership()' --rpc-url base_sepolia ...
+cast send <CSCATree> 'acceptOwnership()' \
+  --account <newOwnerAccount> --rpc-url base_sepolia
 
-# 4. Verify
+# 4. Verify the transfer
 cast call <CSCATree> 'owner()(address)' --rpc-url base_sepolia
 ```
 

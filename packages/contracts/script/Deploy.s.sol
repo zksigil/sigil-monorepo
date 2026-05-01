@@ -11,23 +11,29 @@ import {SigilUltraHonkVerifier} from "../src/verifiers/SigilUltraHonkVerifier.so
 ///
 /// The registry is immutable after deploy: no governor, no setters, no pause.
 /// The only ongoing privileged action in the system is rotating the CSCA Merkle root,
-/// which lives on `CSCAMerkleTree` (Ownable2Step). Initial owner is the deployer;
-/// transfer to a multisig / TimelockController immediately after deployment.
+/// which lives on `CSCAMerkleTree` (Ownable2Step). Initial owner is the deployer
+/// (resolved from `msg.sender`); transfer to a multisig / TimelockController
+/// immediately after deployment.
 ///
 /// Prerequisites:
-///   export PRIVATE_KEY=<deployer_private_key>
-///   export DEPLOYER_ADDRESS=<deployer_address>
-///   export BASE_SEPOLIA_RPC_URL=<rpc_url>          # for testnet
-///   export BASE_RPC_URL=<rpc_url>                  # for mainnet
-///   export BASESCAN_API_KEY=<api_key>              # for contract verification
+///   - A Foundry keystore created via `cast wallet import` (e.g. `cast wallet import
+///     base_sepolia --interactive`). The keystore lives at ~/.foundry/keystores/<name>
+///     and is encrypted with a password — no raw private keys in env vars or shell history.
+///   - export BASE_SEPOLIA_RPC_URL=<rpc_url>     # for testnet
+///   - export BASE_RPC_URL=<rpc_url>             # for mainnet
+///   - export BASESCAN_API_KEY=<api_key>         # for contract verification
 ///
 /// Usage (Base Sepolia testnet):
 ///   forge script script/Deploy.s.sol:Deploy \
-///     --rpc-url base_sepolia --broadcast --verify -vvvv
+///     --rpc-url base_sepolia --account base_sepolia --broadcast --verify -vvvv
 ///
 /// Usage (Base mainnet):
 ///   forge script script/Deploy.s.sol:Deploy \
-///     --rpc-url base --broadcast --verify -vvvv
+///     --rpc-url base --account base_mainnet --broadcast --verify -vvvv
+///
+/// Dry-run (simulate without broadcasting):
+///   forge script script/Deploy.s.sol:Deploy \
+///     --rpc-url base_sepolia --sender <your_keystore_address> -vvvv
 ///
 /// After deployment:
 ///   1. Update EXPO_PUBLIC_BASE_SEPOLIA_REGISTRY_ADDRESS (or EXPO_PUBLIC_BASE_REGISTRY_ADDRESS)
@@ -50,7 +56,9 @@ contract Deploy is Script {
             VerificationRegistry registry
         )
     {
-        address deployer = vm.envAddress("DEPLOYER_ADDRESS");
+        // Forge sets msg.sender from --account / --sender, so this resolves to the
+        // keystore-derived address with no DEPLOYER_ADDRESS env var needed.
+        address deployer = msg.sender;
 
         console2.log("=== Sigil Deployment ===");
         console2.log("Deployer:  ", deployer);
@@ -87,7 +95,17 @@ contract Deploy is Script {
 
         console2.log("");
         console2.log("Next steps:");
-        console2.log("  1. Update EXPO_PUBLIC_VERIFICATION_REGISTRY_ADDRESS in apps/mobile/.env");
-        console2.log("  2. Transfer CSCAMerkleTree ownership to a multisig via transferOwnership()");
+        if (block.chainid == 84532) {
+            console2.log("  1. Update EXPO_PUBLIC_BASE_SEPOLIA_REGISTRY_ADDRESS in apps/mobile/.env");
+        } else if (block.chainid == 8453) {
+            console2.log("  1. Update EXPO_PUBLIC_BASE_REGISTRY_ADDRESS in apps/mobile/.env");
+        } else {
+            console2.log("  1. Update the registry address in apps/mobile/.env for chain", block.chainid);
+        }
+        console2.log("  2. Transfer CSCAMerkleTree ownership to a multisig:");
+        console2.log("       cast send <CSCATree> 'transferOwnership(address)' <newOwner> \\");
+        console2.log("         --account base_sepolia --rpc-url base_sepolia");
+        console2.log("       cast send <CSCATree> 'acceptOwnership()' \\");
+        console2.log("         --account <newOwnerAccount> --rpc-url base_sepolia");
     }
 }
