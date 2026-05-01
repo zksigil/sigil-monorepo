@@ -7,7 +7,7 @@ import {VerificationRegistry} from "../src/VerificationRegistry.sol";
 import {CSCAMerkleTree} from "../src/CSCAMerkleTree.sol";
 import {SigilUltraHonkVerifier} from "../src/verifiers/SigilUltraHonkVerifier.sol";
 
-/// @notice Full deployment script for Sigil contracts on Sepolia / Ethereum Mainnet.
+/// @notice Full deployment script for Sigil contracts on Base Sepolia / Base mainnet.
 ///
 /// The registry is immutable after deploy: no governor, no setters, no pause.
 /// The only ongoing privileged action in the system is rotating the CSCA Merkle root,
@@ -17,16 +17,23 @@ import {SigilUltraHonkVerifier} from "../src/verifiers/SigilUltraHonkVerifier.so
 /// Prerequisites:
 ///   export PRIVATE_KEY=<deployer_private_key>
 ///   export DEPLOYER_ADDRESS=<deployer_address>
-///   export SEPOLIA_RPC_URL=<rpc_url>
-///   export ETHERSCAN_API_KEY=<api_key>
+///   export BASE_SEPOLIA_RPC_URL=<rpc_url>          # for testnet
+///   export BASE_RPC_URL=<rpc_url>                  # for mainnet
+///   export BASESCAN_API_KEY=<api_key>              # for contract verification
 ///
-/// Usage:
+/// Usage (Base Sepolia testnet):
 ///   forge script script/Deploy.s.sol:Deploy \
-///     --rpc-url sepolia --broadcast --verify -vvvv
+///     --rpc-url base_sepolia --broadcast --verify -vvvv
+///
+/// Usage (Base mainnet):
+///   forge script script/Deploy.s.sol:Deploy \
+///     --rpc-url base --broadcast --verify -vvvv
 ///
 /// After deployment:
-///   1. Update EXPO_PUBLIC_VERIFICATION_REGISTRY_ADDRESS in apps/mobile/.env
-///   2. Transfer CSCAMerkleTree ownership to a multisig via transferOwnership()
+///   1. Update EXPO_PUBLIC_BASE_SEPOLIA_REGISTRY_ADDRESS (or EXPO_PUBLIC_BASE_REGISTRY_ADDRESS)
+///      in apps/mobile/.env, then rebuild the app — env vars are baked into the JS bundle.
+///   2. Transfer CSCAMerkleTree ownership to a multisig via transferOwnership() →
+///      acceptOwnership(). See CLAUDE.md "Production deploy procedure" for details.
 contract Deploy is Script {
     // CSCA Merkle root from certs/tree-root.ts (269 certs, depth 9)
     bytes32 public constant CSCA_MERKLE_ROOT = 0x2d656797b947d09105dcde4480bde0e03e9b7e6b02984c40d6391a91835580ef;

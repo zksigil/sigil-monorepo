@@ -16,7 +16,7 @@ const FIRST_SIGILIZE_DISMISSED_KEY = 'sigil:first-sigilize-dismissed:v1';
 export function HomeScreen(): React.JSX.Element {
   const navigation = useNavigation<RootStackNavigationProp<'Home'>>();
   const { isConnected, isConnecting, connect, disconnect } = useWalletConnection();
-  const { isWrongChain, switchToSepolia, switchToAnvil } = useChainGuard();
+  const { isWrongChain, switchToBaseSepolia, switchToAnvil } = useChainGuard();
   const { accounts, isLoading, refetch } = useTrackedAccounts();
   const { address: activeAddress } = useAccount();
   const openWallet = useOpenWallet();
@@ -97,11 +97,11 @@ export function HomeScreen(): React.JSX.Element {
 
         {isConnected && isWrongChain && (
           <Pressable
-            onPress={switchToSepolia}
+            onPress={switchToBaseSepolia}
             className="bg-dracula-yellow/20 border border-dracula-yellow rounded-2xl p-4 items-center active:bg-dracula-yellow/30"
           >
             <Text className="text-dracula-yellow text-sm font-medium">Wrong Network</Text>
-            <Text className="text-dracula-yellow/80 text-xs mt-1">Tap to switch to Sepolia</Text>
+            <Text className="text-dracula-yellow/80 text-xs mt-1">Tap to switch to Base Sepolia</Text>
           </Pressable>
         )}
 

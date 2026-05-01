@@ -2,20 +2,29 @@ import React, { useCallback } from 'react';
 import { View, Text, Pressable, Linking } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRoute, useNavigation, CommonActions } from '@react-navigation/native';
+import { useChainId } from 'wagmi';
 import type { RootStackRouteProp, RootStackNavigationProp } from '../../../app/navigation/types';
 
-const SEPOLIA_TX_URL = 'https://sepolia.etherscan.io/tx/';
+/** Block-explorer base URLs (transaction view) and human label per chain. */
+const EXPLORER: Record<number, { txBase: string; label: string }> = {
+  84532: { txBase: 'https://sepolia.basescan.org/tx/', label: 'Base Sepolia' },
+  8453:  { txBase: 'https://basescan.org/tx/',          label: 'Base' },
+  31337: { txBase: '',                                  label: 'Anvil (local)' },
+};
 
 export function VerificationSuccessScreen(): React.JSX.Element {
   const route = useRoute<RootStackRouteProp<'VerificationSuccess'>>();
   const navigation = useNavigation<RootStackNavigationProp<'VerificationSuccess'>>();
   const { txHash } = route.params;
+  const chainId = useChainId();
 
+  const explorer = EXPLORER[chainId] ?? { txBase: '', label: `Chain ${chainId}` };
   const shortTxHash = `${txHash.slice(0, 10)}...${txHash.slice(-8)}`;
 
   const handleViewOnExplorer = useCallback(() => {
-    void Linking.openURL(`${SEPOLIA_TX_URL}${txHash}`);
-  }, [txHash]);
+    if (!explorer.txBase) return; // local anvil — nothing to open
+    void Linking.openURL(`${explorer.txBase}${txHash}`);
+  }, [txHash, explorer.txBase]);
 
   const handleDone = useCallback(() => {
     navigation.dispatch(
@@ -45,23 +54,27 @@ export function VerificationSuccessScreen(): React.JSX.Element {
           <View className="w-full bg-dracula-surface rounded-2xl p-5 gap-y-4 mt-4">
             <View className="flex-row justify-between items-center">
               <Text className="text-dracula-comment text-xs">Transaction</Text>
-              <Pressable onPress={handleViewOnExplorer}>
-                <Text className="text-dracula-purple text-xs font-medium">{shortTxHash}</Text>
+              <Pressable onPress={handleViewOnExplorer} disabled={!explorer.txBase}>
+                <Text className={`text-xs font-medium ${explorer.txBase ? 'text-dracula-purple' : 'text-dracula-comment/50'}`}>
+                  {shortTxHash}
+                </Text>
               </Pressable>
             </View>
 
             <View className="flex-row justify-between items-center">
               <Text className="text-dracula-comment text-xs">Network</Text>
-              <Text className="text-dracula-fg text-xs font-medium">Sepolia</Text>
+              <Text className="text-dracula-fg text-xs font-medium">{explorer.label}</Text>
             </View>
           </View>
 
-          <Pressable
-            onPress={handleViewOnExplorer}
-            className="w-full rounded-2xl py-4 items-center bg-dracula-surface/70 active:bg-dracula-comment/40"
-          >
-            <Text className="text-dracula-purple text-base font-semibold">View on Explorer</Text>
-          </Pressable>
+          {explorer.txBase && (
+            <Pressable
+              onPress={handleViewOnExplorer}
+              className="w-full rounded-2xl py-4 items-center bg-dracula-surface/70 active:bg-dracula-comment/40"
+            >
+              <Text className="text-dracula-purple text-base font-semibold">View on Explorer</Text>
+            </Pressable>
+          )}
 
           <Pressable
             onPress={handleDone}

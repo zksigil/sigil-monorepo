@@ -2,7 +2,7 @@ import { createAppKit } from '@reown/appkit-react-native';
 import { ApiController, AssetController, OptionsController } from '@reown/appkit-core-react-native';
 import { WagmiAdapter } from '@reown/appkit-wagmi-react-native';
 import { http } from 'wagmi';
-import { sepolia, mainnet, anvil as anvilDefault } from 'wagmi/chains';
+import { baseSepolia, base, anvil as anvilDefault } from 'wagmi/chains';
 import { defineChain } from 'viem';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { subscribeKey } from 'valtio/utils';
@@ -71,8 +71,8 @@ export const appKitStorage: Storage = {
 // ---------------------------------------------------------------------------
 export const RPC_URLS = {
   [anvil.id]: process.env['EXPO_PUBLIC_ANVIL_RPC_URL'] ?? 'http://192.168.45.10:8545',
-  [sepolia.id]: process.env['EXPO_PUBLIC_SEPOLIA_RPC_URL'] ?? 'https://rpc.sepolia.org',
-  [mainnet.id]: process.env['EXPO_PUBLIC_MAINNET_RPC_URL'] ?? 'https://ethereum.publicnode.com',
+  [baseSepolia.id]: process.env['EXPO_PUBLIC_BASE_SEPOLIA_RPC_URL'] ?? 'https://sepolia.base.org',
+  [base.id]: process.env['EXPO_PUBLIC_BASE_RPC_URL'] ?? 'https://mainnet.base.org',
 } as const;
 
 // ---------------------------------------------------------------------------
@@ -80,10 +80,10 @@ export const RPC_URLS = {
 // ---------------------------------------------------------------------------
 export const wagmiAdapter = new WagmiAdapter({
   projectId,
-  networks: [sepolia, mainnet, anvil] as const,
+  networks: [baseSepolia, base, anvil] as const,
   transports: {
-    [sepolia.id]: http(RPC_URLS[sepolia.id]),
-    [mainnet.id]: http(RPC_URLS[mainnet.id]),
+    [baseSepolia.id]: http(RPC_URLS[baseSepolia.id]),
+    [base.id]: http(RPC_URLS[base.id]),
     [anvil.id]: http(RPC_URLS[anvil.id]),
   },
 });
@@ -94,7 +94,7 @@ export const wagmiAdapter = new WagmiAdapter({
 export const appKit = createAppKit({
   projectId,
   // wagmi Chain objects are structurally compatible with AppKit's Network type
-  networks: [sepolia, mainnet, anvil] as unknown as Parameters<typeof createAppKit>[0]['networks'],
+  networks: [baseSepolia, base, anvil] as unknown as Parameters<typeof createAppKit>[0]['networks'],
   defaultNetwork: anvil,
   adapters: [wagmiAdapter],
   storage: appKitStorage,

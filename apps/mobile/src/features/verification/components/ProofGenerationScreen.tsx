@@ -15,7 +15,7 @@ import { useRoute, useNavigation } from '@react-navigation/native';
 import { useAccount, useChainId, useWriteContract, useWaitForTransactionReceipt } from 'wagmi';
 import type { BaseError } from 'wagmi';
 import { createPublicClient, http } from 'viem';
-import { anvil, sepolia, mainnet } from 'viem/chains';
+import { anvil, baseSepolia, base } from 'viem/chains';
 import { RPC_URLS } from '../../../infrastructure/blockchain/appKitConfig';
 import type { RootStackRouteProp, RootStackNavigationProp } from '../../../app/navigation/types';
 import { useProofGeneration } from '../hooks/useProofGeneration';
@@ -146,8 +146,8 @@ function decimalOrHexToBytes32(value: string): `0x${string}` {
 
 const CHAIN_CONFIG = {
   31337: { chain: anvil, rpc: RPC_URLS[anvil.id] },
-  11155111: { chain: sepolia, rpc: RPC_URLS[sepolia.id] },
-  1: { chain: mainnet, rpc: RPC_URLS[mainnet.id] },
+  84532: { chain: baseSepolia, rpc: RPC_URLS[baseSepolia.id] },
+  8453: { chain: base, rpc: RPC_URLS[base.id] },
 } as const;
 
 function getPublicClient(chainId: number) {

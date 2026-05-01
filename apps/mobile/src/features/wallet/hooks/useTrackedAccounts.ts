@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { AppState } from 'react-native';
 import { useChainId, useAccount } from 'wagmi';
 import { createPublicClient, http } from 'viem';
-import { anvil, sepolia, mainnet } from 'viem/chains';
+import { anvil, baseSepolia, base } from 'viem/chains';
 import { RPC_URLS } from '../../../infrastructure/blockchain/appKitConfig';
 import { VERIFICATION_REGISTRY_ABI } from '../../../infrastructure/blockchain/contractAbis';
 import { CONTRACT_ADDRESSES } from '../../../infrastructure/blockchain/contracts';
@@ -40,8 +40,8 @@ const ZERO_NULLIFIER = '0x000000000000000000000000000000000000000000000000000000
 
 const CHAIN_CONFIG = {
   31337: { chain: anvil, rpc: RPC_URLS[anvil.id] },
-  11155111: { chain: sepolia, rpc: RPC_URLS[sepolia.id] },
-  1: { chain: mainnet, rpc: RPC_URLS[mainnet.id] },
+  84532: { chain: baseSepolia, rpc: RPC_URLS[baseSepolia.id] },
+  8453: { chain: base, rpc: RPC_URLS[base.id] },
 } as const;
 
 function getPublicClient(chainId: number) {

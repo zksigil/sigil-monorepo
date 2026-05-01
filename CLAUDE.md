@@ -225,16 +225,16 @@ Whichever you pick, the procedure is:
 
 ```bash
 # 1. Deploy contracts
-forge script script/Deploy.s.sol:Deploy --rpc-url sepolia --broadcast --verify
+forge script script/Deploy.s.sol:Deploy --rpc-url base_sepolia --broadcast --verify
 
 # 2. From the deployer wallet, propose ownership transfer
-cast send <CSCATree> 'transferOwnership(address)' <newOwner> --rpc-url sepolia ...
+cast send <CSCATree> 'transferOwnership(address)' <newOwner> --rpc-url base_sepolia ...
 
 # 3. From newOwner, accept ownership (Ownable2Step requires this — guards typos)
-cast send <CSCATree> 'acceptOwnership()' --rpc-url sepolia ...
+cast send <CSCATree> 'acceptOwnership()' --rpc-url base_sepolia ...
 
 # 4. Verify
-cast call <CSCATree> 'owner()(address)' --rpc-url sepolia
+cast call <CSCATree> 'owner()(address)' --rpc-url base_sepolia
 ```
 
 **Until step 3 completes, the deployer EOA still owns the tree** — `Ownable2Step` only

@@ -82,7 +82,7 @@ Mobile app for verifying Ethereum wallets against government-issued passports us
 │  └─────────────────────────────────────────────────────────────────┘ │
 │                                                                       │
 ├───────────────────────────────────────────────────────────────────────┤
-│                       ON-CHAIN (Sepolia / Mainnet)                    │
+│                    ON-CHAIN (Base Sepolia / Base)                     │
 │                                                                       │
 │  ┌────────────────────────────────────────────────────────────────┐  │
 │  │                    VerificationRegistry.sol                     │  │
