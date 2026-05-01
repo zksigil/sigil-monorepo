@@ -21,19 +21,22 @@ import {SigilUltraHonkVerifier} from "../src/verifiers/SigilUltraHonkVerifier.so
 ///     and is encrypted with a password — no raw private keys in env vars or shell history.
 ///   - export BASE_SEPOLIA_RPC_URL=<rpc_url>     # for testnet
 ///   - export BASE_RPC_URL=<rpc_url>             # for mainnet
-///   - export BASESCAN_API_KEY=<api_key>         # for contract verification
 ///
 /// Usage (Base Sepolia testnet):
 ///   forge script script/Deploy.s.sol:Deploy \
-///     --rpc-url base_sepolia --account base_sepolia --broadcast --verify -vvvv
+///     --rpc-url base_sepolia --account base_sepolia --broadcast -vvvv
 ///
 /// Usage (Base mainnet):
 ///   forge script script/Deploy.s.sol:Deploy \
-///     --rpc-url base --account base_mainnet --broadcast --verify -vvvv
+///     --rpc-url base --account base_mainnet --broadcast -vvvv
 ///
 /// Dry-run (simulate without broadcasting):
 ///   forge script script/Deploy.s.sol:Deploy \
 ///     --rpc-url base_sepolia --sender <your_keystore_address> -vvvv
+///
+/// Optional Basescan source verification: append `--verify` and `export BASESCAN_API_KEY=...`
+/// (free key at https://basescan.org/myapikey). Verification adds Solidity source on
+/// Basescan — purely cosmetic for end users; integrators reading bytecode don't need it.
 ///
 /// After deployment:
 ///   1. Update EXPO_PUBLIC_BASE_SEPOLIA_REGISTRY_ADDRESS (or EXPO_PUBLIC_BASE_REGISTRY_ADDRESS)

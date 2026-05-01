@@ -230,9 +230,10 @@ env var is needed either.
 Whichever ownership target you pick, the procedure is:
 
 ```bash
-# 1. Deploy contracts (BASE_SEPOLIA_RPC_URL + BASESCAN_API_KEY exported in shell)
+# 1. Deploy contracts (BASE_SEPOLIA_RPC_URL exported in shell).
+#    Optionally append `--verify` and export BASESCAN_API_KEY=... to publish source on Basescan.
 forge script script/Deploy.s.sol:Deploy \
-  --rpc-url base_sepolia --account base_sepolia --broadcast --verify
+  --rpc-url base_sepolia --account base_sepolia --broadcast
 
 # 2. From the deployer keystore, propose ownership transfer
 cast send <CSCATree> 'transferOwnership(address)' <newOwner> \
