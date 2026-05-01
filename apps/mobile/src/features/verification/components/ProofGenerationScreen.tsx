@@ -297,6 +297,11 @@ export function ProofGenerationScreen(): React.JSX.Element {
       return;
     }
 
+    // chainId is REQUIRED here. The new multi-chain MetaMask doesn't have a single
+    // "active chain" — without an explicit chainId, the wallet defaults to Ethereum
+    // mainnet and the tx ends up on the wrong chain. wagmi sends a
+    // wallet_switchEthereumChain RPC first when chainId is set, so MetaMask flips
+    // to Base Sepolia before signing.
     const call = {
       address: registryAddress,
       abi: VERIFICATION_REGISTRY_ABI,
@@ -307,6 +312,7 @@ export function ProofGenerationScreen(): React.JSX.Element {
         Number(proofResult.zkProof.passportExpiry),
         proofResult.zkProof.proof,
       ] as const,
+      chainId: supportedChainId,
     };
 
     try {

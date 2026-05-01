@@ -45,15 +45,18 @@ export function AccountRow({ account, linkedSiblings, onSigilize, onUnregistered
     : null;
 
   const submitUnregister = useCallback(() => {
-    if (!contractAddress) return;
+    if (!contractAddress || !isSupportedChain(chainId)) return;
+    // chainId is REQUIRED — see ProofGenerationScreen for the multi-chain
+    // MetaMask gotcha that makes this necessary.
     writeContractAsync({
       address: contractAddress,
       abi: VERIFICATION_REGISTRY_ABI,
       functionName: 'unregister',
+      chainId,
     }).then(setTxHash).catch(() => {
       Alert.alert('Error', 'Transaction failed. Please try again.');
     });
-  }, [contractAddress, writeContractAsync]);
+  }, [contractAddress, chainId, writeContractAsync]);
 
   const promptUnregisterConfirm = useCallback(() => {
     Alert.alert(
