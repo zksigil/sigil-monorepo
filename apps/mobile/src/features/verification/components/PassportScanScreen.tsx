@@ -337,6 +337,11 @@ export function PassportScanScreen(): React.JSX.Element {
   }, []);
 
   const handleDevSkip = useCallback(() => {
+    // Dev-only "skip NFC" path. The DG1/SOD bytes here are intentionally invalid
+    // — parseSod() will fail on them, which routes useProofGeneration to the
+    // stub fallback. The stub produces a deterministic-but-fake nullifier that
+    // the real Solidity verifier rejects, so this path is ONLY usable against
+    // MockProofVerifier on anvil.
     navigation.navigate('ProofGeneration', {
       passportData: {
         documentNumber: 'AB1234567',

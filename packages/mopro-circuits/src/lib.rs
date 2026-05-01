@@ -3,6 +3,7 @@ pub use error::MoproError;
 
 mod noir;
 pub use noir::{
+    compute_redc_param,
     compute_sigil_inputs,
     generate_noir_proof, get_noir_verification_key, verify_noir_proof,
     SigilInputs,

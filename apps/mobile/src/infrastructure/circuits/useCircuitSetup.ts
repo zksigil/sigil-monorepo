@@ -72,7 +72,9 @@ async function ensureSrs(): Promise<string | null> {
     );
 
     const result = await download.downloadAsync();
-    if (!result || result.status !== 206) {
+    // Accept 206 (Partial Content, when Range is honored) or 200 (some
+    // CDN configurations ignore Range and return the full file with 200 OK).
+    if (!result || (result.status !== 200 && result.status !== 206)) {
       console.warn('[SRS] Download failed with status:', result?.status);
       await FileSystem.deleteAsync(SRS_DEST, { idempotent: true });
       return null;

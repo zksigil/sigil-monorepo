@@ -766,57 +766,6 @@ function extractCountryCodeFromDN(derBytes: Uint8Array): string | null {
 }
 
 /**
- * Build a DER-encoded SubjectPublicKeyInfo for an RSA public key.
- * Needed to import the key into Web Crypto for signature verification.
- */
-/** Encode a DER length (handles lengths > 127 with multi-byte encoding). */
-function derEncodeLength(length: number): Uint8Array {
-  if (length < 0x80) return new Uint8Array([length]);
-  if (length < 0x100) return new Uint8Array([0x81, length]);
-  return new Uint8Array([0x82, (length >> 8) & 0xff, length & 0xff]);
-}
-
-/** Wrap content bytes in a DER TLV (tag + length + content). */
-function derWrap(tag: number, content: Uint8Array): Uint8Array {
-  const len = derEncodeLength(content.length);
-  return concatUint8Arrays([new Uint8Array([tag]), len, content]);
-}
-
-function buildSPKIForRSA(modulus: Uint8Array, exponent: number): ArrayBuffer {
-  // OID: 1.2.840.113549.1.1.1 (rsaEncryption)
-  const rsaOid = new Uint8Array([0x06, 0x09, 0x2a, 0x86, 0x48, 0x86, 0xf7, 0x0d, 0x01, 0x01, 0x01]);
-  const nullParam = new Uint8Array([0x05, 0x00]);
-  const algIdTlv = derWrap(TAG_SEQUENCE, concatUint8Arrays([rsaOid, nullParam]));
-
-  // RSAPublicKey SEQUENCE: SEQUENCE { INTEGER modulus, INTEGER exponent }
-  let modBytes = modulus;
-  if (modBytes[0]! >= 0x80) modBytes = concatUint8Arrays([new Uint8Array([0x00]), modBytes]);
-  const modInt = derWrap(TAG_INTEGER, modBytes);
-
-  let expVal = exponent;
-  const expBytesArr: number[] = [];
-  do { expBytesArr.unshift(expVal & 0xff); expVal = expVal >> 8; } while (expVal > 0);
-  if (expBytesArr[0]! >= 0x80) expBytesArr.unshift(0);
-  const expInt = derWrap(TAG_INTEGER, new Uint8Array(expBytesArr));
-
-  const rsaPubKeyTlv = derWrap(TAG_SEQUENCE, concatUint8Arrays([modInt, expInt]));
-
-  // BIT STRING wrapping the RSAPublicKey (0x00 unused-bits prefix)
-  const bitString = derWrap(TAG_BIT_STRING, concatUint8Arrays([new Uint8Array([0x00]), rsaPubKeyTlv]));
-
-  const spkiTlv = derWrap(TAG_SEQUENCE, concatUint8Arrays([algIdTlv, bitString]));
-  return spkiTlv.buffer as ArrayBuffer;
-}
-
-function concatUint8Arrays(arrays: Uint8Array[]): Uint8Array {
-  const total = arrays.reduce((s, a) => s + a.length, 0);
-  const result = new Uint8Array(total);
-  let off = 0;
-  for (const a of arrays) { result.set(a, off); off += a.length; }
-  return result;
-}
-
-/**
  * Verify the DSC cert chains to a known CSCA.
  *
  * 1. Parse DSC cert and extract its Authority Key Identifier (AKI)
@@ -869,7 +818,13 @@ export async function verifyDSCChain(
     console.log('[CHAIN] DSC has no AKI extension — falling back to country-based trial verify');
   }
 
-  // Step 4: Fallback — filter by country code and trial-verify
+  // Step 4: Fallback — filter by country code and trial-verify.
+  // INTENTIONAL: even if the AKI/SKI lookup hit but signature verification failed,
+  // we fall back to trial-verifying every CSCA in the issuing country. Real-world
+  // passports can carry AKI values that no longer match their issuing CSCA after
+  // a CSCA rotation (the chip's stored AKI is fixed at issuance). UX wins over
+  // strict "AKI must verify" enforcement, since the trial verify is bounded by
+  // country and the cryptographic check is identical.
   const countryCode = dscParsed.issuer ? extractCountryCodeFromDN(dscParsed.issuer) : null;
   const candidates = countryCode ? (getCscasByCountry().get(countryCode) || []) : [];
   const toTry = candidates.length > 0 ? candidates : Array.from(getCscaByModulus().values());

@@ -98,20 +98,38 @@ const CONTRACT_ERRORS: { name: string; selector: string; message: string }[] = [
   },
 ];
 
+/**
+ * Shape of viem/wagmi error objects we read from. Not all fields exist on every
+ * error, hence the `unknown` types; we only access via optional chaining.
+ */
+interface ViemErrorShape {
+  shortMessage?: string;
+  message?: string;
+  data?: unknown;
+  details?: unknown;
+  metaMessages?: unknown;
+  cause?: {
+    name?: string;
+    data?: unknown;
+    raw?: unknown;
+    cause?: { data?: unknown };
+  };
+}
+
 function parseContractError(err: unknown): string {
-  const raw = (err as BaseError)?.shortMessage ?? (err as BaseError)?.message ?? '';
+  const e = err as ViemErrorShape;
+  const raw = e?.shortMessage ?? e?.message ?? (err as BaseError)?.message ?? '';
   try {
-    const anyErr = err as any;
     const cand =
-      anyErr?.cause?.data ??
-      anyErr?.data ??
-      anyErr?.cause?.cause?.data ??
-      anyErr?.cause?.raw ??
-      anyErr?.details;
-    console.log('[TX-ERR] shortMessage:', anyErr?.shortMessage);
+      e?.cause?.data ??
+      e?.data ??
+      e?.cause?.cause?.data ??
+      e?.cause?.raw ??
+      e?.details;
+    console.log('[TX-ERR] shortMessage:', e?.shortMessage);
     console.log('[TX-ERR] raw data field:', cand);
-    console.log('[TX-ERR] cause.name:', anyErr?.cause?.name);
-    console.log('[TX-ERR] metaMessages:', anyErr?.metaMessages);
+    console.log('[TX-ERR] cause.name:', e?.cause?.name);
+    console.log('[TX-ERR] metaMessages:', e?.metaMessages);
   } catch {}
   for (const { name, selector, message } of CONTRACT_ERRORS) {
     if (raw.includes(name) || (selector && raw.includes(selector))) return message;
@@ -302,6 +320,8 @@ export function ProofGenerationScreen(): React.JSX.Element {
     // mainnet and the tx ends up on the wrong chain. wagmi sends a
     // wallet_switchEthereumChain RPC first when chainId is set, so MetaMask flips
     // to Base Sepolia before signing.
+    // passportExpiry is uint48 — viem types this as `number` in the generated ABI;
+    // a unix-second uint48 fits comfortably in Number.MAX_SAFE_INTEGER (2^53-1).
     const call = {
       address: registryAddress,
       abi: VERIFICATION_REGISTRY_ABI,
