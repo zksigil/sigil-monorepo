@@ -5,19 +5,20 @@ Mobile app (iOS + Android) for verifying Ethereum wallets with government-issued
 
 ## Monorepo Structure
 - `apps/mobile/` — React Native (Expo SDK 54, bare workflow)
-- `packages/contracts/` — Foundry smart contracts (Solidity 0.8.24)
-- `packages/shared-types/` — TypeScript types shared between packages
+- `packages/contracts/` — Foundry smart contracts (Solidity 0.8.28)
+- `packages/circuits/` — Noir circuit (`sigil/`) — single unified circuit
+- `packages/mopro-circuits/` — Rust FFI bindings (Mopro) for the Noir prover
 
 ## Tech Stack
 - **Package manager**: pnpm (workspace-aware). Always use `pnpm` not `npm` or `yarn`.
-- **Mobile**: React Native 0.76, Expo SDK 54, TypeScript strict mode
+- **Mobile**: React Native 0.81.5, Expo SDK 54, TypeScript strict mode
 - **Navigation**: React Navigation v6 (native-stack)
 - **State**: Zustand v5 (wagmi is source of truth for on-chain state)
 - **Data fetching**: TanStack Query v5
 - **Styling**: NativeWind v4 (Tailwind for React Native) — use `className` prop
 - **Web3 (mobile)**: Reown AppKit (`@reown/appkit-react-native`) + wagmi v2 + viem v2
-- **Chain**: Base Sepolia (testnet, chain ID 84532) → Base mainnet (8453)
-- **Contracts**: Foundry (forge), Solidity 0.8.24, OpenZeppelin v5
+- **Chain**: Base Sepolia (testnet, chain ID 84532) and Base mainnet (8453); anvil (31337) for local dev
+- **Contracts**: Foundry (forge), Solidity 0.8.28 (foundry.toml-pinned), OpenZeppelin v5
 
 ## Critical Setup Notes
 - Run `pnpm install` from the repo root (not inside apps/mobile)
@@ -39,18 +40,25 @@ Mobile app (iOS + Android) for verifying Ethereum wallets with government-issued
 pnpm mobile              # Start Expo dev server
 pnpm mobile:ios          # Run on iOS simulator
 pnpm mobile:android      # Run on Android emulator
-pnpm contracts:build     # forge build
-pnpm contracts:test      # forge test -vvv
-pnpm typecheck           # TypeScript check all packages
+pnpm typecheck           # TypeScript check (mobile)
+pnpm contracts:sync-abi  # Copy compiled ABIs to apps/mobile/src/infrastructure/blockchain
+make contracts           # forge build + sync ABI
+make contracts-test      # forge test -vvv
+make circuits            # nargo compile + copy JSON to app assets
+make bb-verifier         # Regenerate SigilUltraHonkVerifier.sol from VK
+make ios                 # Rebuild Mopro Rust FFI for iOS + copy bindings
 ```
 
 ## Contract Deployment
 ```bash
 cd packages/contracts
-forge script script/DeployVerificationRegistry.s.sol \
-  --rpc-url base_sepolia --broadcast --verify -vvvv
+forge script script/Deploy.s.sol:Deploy \
+  --rpc-url base_sepolia --account base_sepolia --broadcast -vvvv
 ```
-Then update `EXPO_PUBLIC_VERIFICATION_REGISTRY_ADDRESS` in `.env`.
+Then update `EXPO_PUBLIC_BASE_SEPOLIA_REGISTRY_ADDRESS` (or `EXPO_PUBLIC_BASE_REGISTRY_ADDRESS`
+for mainnet) in BOTH `.env` and `apps/mobile/.env`, and rebuild the app — env vars are
+baked into the JS bundle. See "Production deploy procedure" below for keystore setup
+and CSCA ownership transfer.
 
 ## Code Conventions
 - TypeScript strict mode everywhere — no `any` types
@@ -61,18 +69,11 @@ Then update `EXPO_PUBLIC_VERIFICATION_REGISTRY_ADDRESS` in `.env`.
 - CEI pattern in all Solidity functions: Checks → Effects → Interactions
 - Test files: `*.t.sol` for Foundry, `*.test.tsx` for React Native
 
-## Phase 2 TODO (Not in Phase 1)
-- NFC passport reading (requires Apple entitlement + react-native-nfc-manager)
-- zkPassport circuit integration + proof generation
-- Real groth16 proof verification in VerificationRegistry.sol
-- Gas estimation UI before tx submission
-- Verification status screen
-
-## iOS NFC Entitlement (Phase 2 Prerequisite)
-Before implementing NFC:
+## iOS NFC Entitlement (already configured)
+Reference for re-configuring after a new Apple Developer Portal session:
 1. Apple Developer Portal: enable NFC Tag Reading capability
-2. `ios/mobile/mobile.entitlements`: add `com.apple.developer.nfc.readersession.formats`
-3. Info.plist: `NFCReaderUsageDescription` (already in app.json)
+2. `apps/mobile/ios/mobile/mobile.entitlements`: includes `com.apple.developer.nfc.readersession.formats` and the eMRTD AID `com.apple.developer.nfc.readersession.iso7816.select-identifiers`
+3. `Info.plist`: `NFCReaderUsageDescription` (also declared in `app.json`)
 4. Minimum iOS 16.0 (set in app.json)
 
 ## Phase 4 Sigil Architecture — Single-Tier Identity-Anchored Sybil Resistance

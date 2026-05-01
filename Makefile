@@ -165,9 +165,11 @@ anvil-deploy: anvil-env contracts ## Deploy with MockProofVerifier to local anvi
 		--private-key $(ANVIL_KEY) -vvv
 	@$(MAKE) anvil-update-env SCRIPT=DeployDev.s.sol
 
-anvil-deploy-real: anvil-env bb-verifier contracts ## Deploy with real UltraHonk verifiers to local anvil
+anvil-deploy-real: anvil-env bb-verifier contracts ## Deploy with real UltraHonk verifier to local anvil
 	@echo "━━━ Deploying (real verifier) to anvil ━━━"
-	cd $(CONTRACTS) && DEPLOYER_ADDRESS=$(ANVIL_DEPLOYER) forge script script/Deploy.s.sol:Deploy \
+	# Forge resolves msg.sender from --private-key, so no DEPLOYER_ADDRESS env var is needed
+	# (Deploy.s.sol reads `address deployer = msg.sender`).
+	cd $(CONTRACTS) && forge script script/Deploy.s.sol:Deploy \
 		--rpc-url http://127.0.0.1:8545 --broadcast \
 		--private-key $(ANVIL_KEY) -vvv
 	@$(MAKE) anvil-update-env SCRIPT=Deploy.s.sol
@@ -187,7 +189,7 @@ clean-xcode-cache: ## Clear Xcode DerivedData
 # ─── Clean ────────────────────────────────────────────────────────────
 clean-circuits: ## Clean compiled circuits
 	rm -rf $(CIRCUITS_TARGET)/
-	rm -rf $(APP_ASSETS)/passport_base.json $(APP_ASSETS)/passport_primary.json
+	rm -f $(APP_ASSETS)/passport_sigil.json
 	@echo "✅ Circuits cleaned"
 
 clean-ios: ## Clean iOS framework copy
@@ -213,14 +215,14 @@ clean: clean-circuits clean-ios clean-contracts clean-rust clean-nargo clean-xco
 # ─── Verification ─────────────────────────────────────────────────────
 verify-sync: ## Verify that circuit JSON and xcframework are in sync with sources
 	@echo "━━━ Verifying circuit sync ━━━"
-	@if [ -f "$(CIRCUITS_TARGET)/passport_base.json" ] && [ -f "$(APP_ASSETS)/passport_base.json" ]; then \
-		SRC_HASH=$$(node -e "console.log(JSON.parse(require('fs').readFileSync('$(CIRCUITS_TARGET)/passport_base.json')).hash)"); \
-		DST_HASH=$$(node -e "console.log(JSON.parse(require('fs').readFileSync('$(APP_ASSETS)/passport_base.json')).hash)"); \
+	@if [ -f "$(CIRCUITS_TARGET)/passport_sigil.json" ] && [ -f "$(APP_ASSETS)/passport_sigil.json" ]; then \
+		SRC_HASH=$$(node -e "console.log(JSON.parse(require('fs').readFileSync('$(CIRCUITS_TARGET)/passport_sigil.json')).hash)"); \
+		DST_HASH=$$(node -e "console.log(JSON.parse(require('fs').readFileSync('$(APP_ASSETS)/passport_sigil.json')).hash)"); \
 		if [ "$$SRC_HASH" != "$$DST_HASH" ]; then \
 			echo "❌ Circuit JSON out of sync! Run 'make circuits'"; \
 			exit 1; \
 		fi; \
-		echo "✅ Base circuit in sync (hash: $$SRC_HASH)"; \
+		echo "✅ Sigil circuit in sync (hash: $$SRC_HASH)"; \
 	else \
 		echo "⚠️  Circuit JSON not found — run 'make circuits'"; \
 	fi

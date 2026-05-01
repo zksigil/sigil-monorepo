@@ -94,7 +94,8 @@ contract VerificationRegistry is IVerificationRegistry, ReentrancyGuard {
     mapping(bytes32 => mapping(address => uint256)) private s_walletIndex;
 
     /// @dev epochNullifier => number of new registrations this epoch.
-    ///      `epochNullifier = hash(s, "epoch", floor(block.timestamp / 1 days))`.
+    ///      `epochNullifier = Poseidon2(passport_secret, epoch_day)` where
+    ///      `epoch_day = floor(block.timestamp / 1 days)`.
     mapping(bytes32 => uint8) private s_epochCounts;
 
     // =========================================================================

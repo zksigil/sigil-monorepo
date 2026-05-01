@@ -1,3 +1,9 @@
+> **HISTORICAL — kept for archaeology.** This document describes the design exploration
+> for Phase 3C (CSCA Merkle tree). The chosen design (Option C) shipped and was later
+> consolidated under the Phase 4 single-tier model. See `HIGH-LEVEL-ARCHITECTURE.md`
+> and `packages/circuits/README.md` for the current architecture; this file may
+> mention since-removed concepts (two-tier base/primary circuits, Groth16, etc.).
+
 # Phase 3C — ICAO PKD Verification: Architecture Comparison
 
 ## Problem

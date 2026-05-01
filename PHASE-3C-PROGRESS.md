@@ -1,3 +1,12 @@
+> **HISTORICAL — kept for archaeology.** This is the in-flight progress log from the
+> Phase 3C CSCA Merkle work. Several details below were superseded:
+>   - The two-tier base/primary circuits were collapsed into a single `sigil/` circuit (Phase 4).
+>   - Merkle tree depth was changed from 12 to 9.
+>   - The CSCA Merkle root cited here predates the current root (see `Deploy.s.sol`).
+>   - References to `setCSCAMerkleTree()` / `CSCAMerkleTreeUpdated` and other governance
+>     setters are stale — the registry is now immutable.
+> See `HIGH-LEVEL-ARCHITECTURE.md` and `packages/circuits/README.md` for the live design.
+
 # Phase 3C Progress — CSCA Merkle Tree
 
 ## Status: On-Chain + Circuit Integration ✓

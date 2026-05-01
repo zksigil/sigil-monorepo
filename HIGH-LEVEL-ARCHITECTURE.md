@@ -45,7 +45,7 @@ Mobile app for verifying Ethereum wallets against government-issued passports us
 │  │  │  │       → signedAttrs, signature, pubkey, certs       │  │    │ │
 │  │  │  │   2. verifyDSCChain() — off-circuit DSC<-CSCA       │  │    │ │
 │  │  │  │   3. Mopro.computeRedcParam(pubkey)                 │  │    │ │
-│  │  │  │   4. Mopro.computeSigilInputs(...) → 4375 inputs    │  │    │ │
+│  │  │  │   4. Mopro.computeSigilInputs(...) → 4376 inputs    │  │    │ │
 │  │  │  │       + nullifier + epoch_nullifier                 │  │    │ │
 │  │  │  │   5. Mopro.generateNoirProof(...) → ~16KB proof     │  │    │ │
 │  │  │  └────────────────────────┬────────────────────────────┘  │    │ │
@@ -245,9 +245,9 @@ pnpm install         # CRITICAL: refresh hoisted node_modules/mopro-ffi/
 ### 4. Smart Contracts (`packages/contracts/`)
 
 ```bash
-pnpm contracts:build       # forge build
+make contracts             # forge build + pnpm contracts:sync-abi
+make contracts-test        # forge test -vvv
 pnpm contracts:sync-abi    # regenerate apps/mobile/.../contractAbis.ts
-pnpm contracts:test        # forge test
 ```
 
 ### 5. Anvil end-to-end
