@@ -1,6 +1,6 @@
 import '../../global.css';
 
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import { StatusBar } from 'expo-status-bar';
 import { AppKit } from '@reown/appkit-react-native';
 import { AppProviders } from './providers/AppProviders';
@@ -27,10 +27,10 @@ export default function App(): React.JSX.Element {
     testMoproModuleLoading();
   }, []);
 
-  const handleSplashDone = (): void => {
+  const handleSplashDone = useCallback((): void => {
     splashHasPlayed = true;
     setSplashDone(true);
-  };
+  }, []);
 
   return (
     <AppProviders>
