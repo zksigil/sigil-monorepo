@@ -2,7 +2,7 @@ import React, { useCallback, useState } from 'react';
 import { View, Text, Pressable, ScrollView, ActivityIndicator, Alert, Modal } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
-import { useAccount } from 'wagmi';
+import { useAccount, useChainId } from 'wagmi';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import type { RootStackNavigationProp } from '../../../app/navigation/types';
 import { useWalletConnection } from '../hooks/useWalletConnection';
@@ -10,6 +10,7 @@ import { useChainGuard } from '../hooks/useChainGuard';
 import { useTrackedAccounts } from '../hooks/useTrackedAccounts';
 import { useOpenWallet } from '../hooks/useOpenWallet';
 import { AccountRow } from './AccountRow';
+import { CHAIN_DISPLAY_NAMES } from '../../../shared/constants/chains';
 
 const FIRST_SIGILIZE_DISMISSED_KEY = 'sigil:first-sigilize-dismissed:v1';
 
@@ -19,6 +20,8 @@ export function HomeScreen(): React.JSX.Element {
   const { isWrongChain, switchToBaseSepolia, switchToAnvil } = useChainGuard();
   const { accounts, isLoading, refetch } = useTrackedAccounts();
   const { address: activeAddress } = useAccount();
+  const chainId = useChainId();
+  const chainName = CHAIN_DISPLAY_NAMES[chainId] ?? `Chain ${chainId}`;
   const openWallet = useOpenWallet();
 
   const [pending, setPending] = useState<{ address: `0x${string}` } | null>(null);
@@ -101,8 +104,17 @@ export function HomeScreen(): React.JSX.Element {
             className="bg-dracula-yellow/20 border border-dracula-yellow rounded-2xl p-4 items-center active:bg-dracula-yellow/30"
           >
             <Text className="text-dracula-yellow text-sm font-medium">Wrong Network</Text>
-            <Text className="text-dracula-yellow/80 text-xs mt-1">Tap to switch to Base Sepolia</Text>
+            <Text className="text-dracula-yellow/80 text-xs mt-1">
+              On {chainName} — tap to switch to Base Sepolia
+            </Text>
           </Pressable>
+        )}
+
+        {isConnected && !isWrongChain && (
+          <View className="flex-row items-center justify-center gap-x-1.5">
+            <View className="w-1.5 h-1.5 rounded-full bg-dracula-green" />
+            <Text className="text-dracula-comment/60 text-[11px] font-medium">{chainName}</Text>
+          </View>
         )}
 
         {process.env.EXPO_PUBLIC_DEV_BYPASS === 'true' && (

@@ -95,7 +95,7 @@ export const appKit = createAppKit({
   projectId,
   // wagmi Chain objects are structurally compatible with AppKit's Network type
   networks: [baseSepolia, base, anvil] as unknown as Parameters<typeof createAppKit>[0]['networks'],
-  defaultNetwork: anvil,
+  defaultNetwork: baseSepolia,
   adapters: [wagmiAdapter],
   storage: appKitStorage,
   enableAnalytics: false,
