@@ -13,8 +13,10 @@ pragma solidity ^0.8.28;
 ///        [nullifier, epochNullifier, hashedAddress, cscaMerkleRoot]
 ///
 ///      `epochNullifier` is the real per-day epoch nullifier on BOTH register and renew —
-///      the circuit always constrains it. The registry does not increment the rate-limit
-///      counter on renewals, but the value passed here is still the real one.
+///      the circuit always constrains `epochNullifier == Poseidon2(passportSecret, epochDay)`,
+///      so passing zero would (with overwhelming probability) cause the proof to reject.
+///      The only difference between register and renew is on the registry side: register
+///      counts the call against the daily cap (`s_epochCounts`); renew does not.
 ///      `passportExpiry` is NOT a circuit input — it's checked on-chain before verification.
 interface IProofVerifier {
     /// @notice Verify a sigil registration or renewal proof.
