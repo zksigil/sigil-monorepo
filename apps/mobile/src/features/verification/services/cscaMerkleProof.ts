@@ -96,14 +96,3 @@ export function findCSCAMerkleProof(
   };
 }
 
-/**
- * Compute the CSCA leaf hash from pubkey + exponent.
- * Not needed for proof generation (leaf hash is in tree-data.json).
- * Returns placeholder.
- */
-export function computeCSCALeafHash(
-  _pubkeyModulus: Uint8Array,
-  _exponent: number,
-): string {
-  return "0x0";
-}

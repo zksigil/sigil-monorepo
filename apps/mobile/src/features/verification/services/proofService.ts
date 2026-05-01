@@ -75,9 +75,22 @@ export interface SigilProofOutput {
 let SIGIL_CIRCUIT_PATH: string | null = null;
 let SRS_PATH: string | null = null;
 
+/**
+ * Cached UltraHonk-Keccak verification key.
+ *
+ * The VK is deterministic from circuit JSON + SRS — recomputing it for every
+ * proof costs ~1-2s and produces the same bytes. We cache it module-locally so
+ * the second sigilization in a session is faster. Cache is invalidated by
+ * `setCircuitPaths` (called once at app boot from `useCircuitSetup`).
+ */
+let _cachedVkBuf: ArrayBuffer | null = null;
+
 export function setCircuitPaths(sigilPath: string, srsPath?: string): void {
   SIGIL_CIRCUIT_PATH = sigilPath;
   SRS_PATH = srsPath ?? null;
+  // Invalidate the VK cache whenever the circuit path changes (e.g. circuit JSON
+  // hash changed and was rewritten to disk).
+  _cachedVkBuf = null;
 }
 
 // ---------------------------------------------------------------------------
@@ -160,7 +173,9 @@ export async function generateSigilProof(input: ProofInput): Promise<SigilProofO
   const cscaRedcParam = await Mopro.computeRedcParam(cscaPubkey.buffer as ArrayBuffer);
 
   console.log('[PROOF] Finding CSCA Merkle proof (by CSCA pubkey)...');
-  let cscaMerkleProof = findCSCAMerkleProof(dscChain.cscaPubkey);
+  // Pass the modulus hex directly; avoids a Uint8Array round-trip that
+  // findCSCAMerkleProof would just hex-encode again.
+  let cscaMerkleProof = findCSCAMerkleProof(chainResult.cscaModulusHex);
   if (!cscaMerkleProof) {
     // Dev fallback: placeholder Merkle proof. Works only against MockProofVerifier;
     // a real verifier would reject this proof.
@@ -200,13 +215,20 @@ export async function generateSigilProof(input: ProofInput): Promise<SigilProofO
   console.log('[PROOF-DBG] nullifier:', sigilInputs.nullifier);
   console.log('[PROOF-DBG] epoch_nullifier:', sigilInputs.epochNullifier);
 
-  console.log('[PROOF] Getting sigil VK...');
-  const vkBuf = await Mopro.getNoirVerificationKey(
-    SIGIL_CIRCUIT_PATH,
-    SRS_PATH ?? undefined,
-    true,
-    false,
-  );
+  let vkBuf: ArrayBuffer;
+  if (_cachedVkBuf !== null) {
+    console.log('[PROOF] Using cached sigil VK');
+    vkBuf = _cachedVkBuf;
+  } else {
+    console.log('[PROOF] Getting sigil VK (computing for the first time this session)...');
+    vkBuf = await Mopro.getNoirVerificationKey(
+      SIGIL_CIRCUIT_PATH,
+      SRS_PATH ?? undefined,
+      true,
+      false,
+    );
+    _cachedVkBuf = vkBuf;
+  }
   console.log('[PROOF-VK] sigil VK bytes:', vkBuf.byteLength);
 
   console.log('[PROOF] Generating sigil proof (5-15s)...');
@@ -355,6 +377,11 @@ function bytesToFieldDecimal(bytes: Uint8Array): string {
   return (val % BN254_PRIME).toString(10);
 }
 
+/**
+ * Day index since the Unix epoch (UTC). Matches the contract's calculation:
+ *   `floor(block.timestamp / 1 days)`
+ * since `Date.now()` returns ms-since-epoch in UTC.
+ */
 function currentEpochDay(): number {
   return Math.floor(Date.now() / 1000 / 86400);
 }

@@ -95,9 +95,14 @@ pub fn generate_noir_proof(
 }
 
 /// Verify an UltraHonk-Keccak proof locally (optional -- the contract verifies on-chain).
+///
+/// `_circuit_path` is kept in the FFI signature for ABI stability (callers in JS
+/// pass it for symmetry with `generate_noir_proof`), but verification only needs
+/// the proof + VK -- the bytecode is irrelevant. We deliberately do NOT read the
+/// circuit JSON here, saving an unnecessary disk read + parse on every verify.
 #[uniffi::export]
 pub fn verify_noir_proof(
-    circuit_path: String,
+    _circuit_path: String,
     proof: Vec<u8>,
     on_chain: bool,
     vk: Vec<u8>,
@@ -108,7 +113,6 @@ pub fn verify_noir_proof(
             "off-chain (Poseidon) proofs not supported -- use on_chain=true for EVM".into(),
         ));
     }
-    let _bytecode = read_bytecode(&circuit_path)?;
     verify_ultra_honk_keccak(proof, vk, false)
         .map_err(|e| MoproError::NoirError(format!("Proof verification failed: {e}")))
 }
@@ -166,7 +170,15 @@ pub fn compute_sigil_inputs(
     let nullifier_str = field_to_decimal(nullifier);
     let epoch_nullifier_str = field_to_decimal(epoch_nullifier);
 
-    let mut inputs = Vec::new();
+    // Pre-size capacity to avoid Vec regrowths.
+    //   3 field elements (dg1, sod, epoch_day)
+    // + 512 signed_attrs + 1 len + 256 signature + 256 pubkey + 257 redc + 1 exp     = 1286
+    // + 1536 dsc_tbs + 1 len + 1 offset                                               = 2824
+    // + 512 csca_pubkey + 513 csca_redc + 1 csca_exp + 512 csca_signature             = 4362
+    // + 9 merkle siblings + 1 leaf_index                                              = 4372
+    // + 4 public inputs (nullifier, epoch_nullifier, hashed_address, csca_root)       = 4376
+    const INPUT_CAPACITY: usize = 4376;
+    let mut inputs: Vec<String> = Vec::with_capacity(INPUT_CAPACITY);
 
     // Private field elements
     inputs.push(dg1_hash);
@@ -207,14 +219,16 @@ pub fn compute_sigil_inputs(
     })
 }
 
+/// Must match noir-bignum >= v0.9.x BARRETT_REDUCTION_OVERFLOW_BITS.
+/// (v0.7.3 used 4 -- bumping noir-bignum changed this constant. Mismatched
+/// values produce a redc_param the circuit will reject.)
+const BARRETT_REDUCTION_OVERFLOW_BITS: u32 = 6;
+
 /// Compute the Barrett reduction parameter for an RSA modulus.
 ///
 /// Supports both RSA-2048 (256 bytes) and RSA-4096 (512 bytes).
 ///
 /// `redc_param = floor(2^(2*bits + BARRETT_REDUCTION_OVERFLOW_BITS) / modulus)`
-///
-/// `BARRETT_REDUCTION_OVERFLOW_BITS = 6` matches noir-bignum >= v0.9.x.
-/// (v0.7.3 used 4 -- bumping noir-bignum changed this constant.)
 ///
 /// Returns N+1 bytes (big-endian): 257 bytes for 2048-bit, 513 bytes for 4096-bit.
 #[uniffi::export]
@@ -232,7 +246,7 @@ pub fn compute_redc_param(modulus_bytes: Vec<u8>) -> Result<Vec<u8>, MoproError>
         return Err(MoproError::NoirError("Modulus is zero".into()));
     }
 
-    let numerator = BigUint::from(1u32) << (2 * bits + 6);
+    let numerator = BigUint::from(1u32) << (2 * bits + BARRETT_REDUCTION_OVERFLOW_BITS);
     let redc = &numerator / &modulus;
 
     let bytes = redc.to_bytes_be();
@@ -350,7 +364,9 @@ fn read_bytecode(circuit_path: &str) -> Result<String, MoproError> {
     circuit["bytecode"]
         .as_str()
         .map(|s: &str| s.to_string())
-        .ok_or_else(|| MoproError::NoirError("No 'bytecode' field in circuit JSON".into()))
+        .ok_or_else(|| MoproError::NoirError(
+            format!("No 'bytecode' field in circuit JSON at {circuit_path}"),
+        ))
 }
 
 // ---------------------------------------------------------------------------
