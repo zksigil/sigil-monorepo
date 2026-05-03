@@ -103,7 +103,13 @@ export const appKit = createAppKit({
     name: 'Sigil',
     description: 'Verify your Ethereum wallet with your passport — privately.',
     url: 'https://sigil.app',
-    icons: ['https://sigil.app/icon.png'],
+    // Inline data-URI icon: a real CDN URL means MetaMask waits on the fetch
+    // (the placeholder host returns 502 today) before showing its approval
+    // prompt — measurable extra seconds. Data URI renders instantly with no
+    // network. Swap to a hosted PNG when shipping under a real domain.
+    icons: [
+      'data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyMDAgMjAwIiB3aWR0aD0iMjAwIiBoZWlnaHQ9IjIwMCI+PHJlY3Qgd2lkdGg9IjIwMCIgaGVpZ2h0PSIyMDAiIHJ4PSI0MCIgZmlsbD0iIzI4MmEzNiIvPjxwYXRoIGQ9Ik0gMTY1IDU1IFEgMTY1IDMwIDEyNSAzMCBMIDc1IDMwIFEgMzUgMzAgMzUgNjUgTCAzNSA4MCBRIDM1IDExMCA4MCAxMTAgTCAxMjAgMTEwIFEgMTQ1IDExMCAxNDUgMTI1IFEgMTQ1IDE0MCAxMjAgMTQwIEwgNDAgMTQwIEwgNDAgMTcwIEwgMTIwIDE3MCBRIDE3MCAxNzAgMTcwIDEzNSBMIDE3MCAxMjAgUSAxNzAgOTAgMTIwIDkwIEwgODAgOTAgUSA1NSA5MCA1NSA3NSBMIDU1IDcwIFEgNTUgNTUgODAgNTUgTCAxNjUgNTUgWiIgZmlsbD0iI2JkOTNmOSIvPjwvc3ZnPg==',
+    ],
     redirect: {
       native: 'sigil://',
       universal: 'https://sigil.app',
@@ -289,3 +295,28 @@ if (OptionsController.state.projectId) {
     }
   });
 }
+
+// ---------------------------------------------------------------------------
+// Pre-warm the WalletConnect relay socket
+//
+// AppKit lazily constructs the WC SignClient on the first openAppKit() call,
+// which means the relay WebSocket handshake (~1-2s on a cold network) only
+// starts AFTER the user taps "Connect Wallet". Calling getProvider() on the
+// WC connector at boot triggers SignClient construction now, so by the time
+// the user taps, the socket is already up and the URI hand-off to MetaMask
+// happens immediately. No user-visible side effect — getProvider() doesn't
+// open a session, just primes the transport.
+// ---------------------------------------------------------------------------
+void (async () => {
+  for (const connector of wagmiAdapter.wagmiConfig.connectors) {
+    const id = (connector.id ?? '').toLowerCase();
+    const type = ((connector as { type?: string }).type ?? '').toLowerCase();
+    if (!id.includes('walletconnect') && !type.includes('walletconnect')) continue;
+    try {
+      await connector.getProvider();
+    } catch {
+      // best-effort warm-up; surfacing this would just confuse devs
+    }
+    return;
+  }
+})();

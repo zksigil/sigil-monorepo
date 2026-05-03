@@ -2,7 +2,7 @@
 # Prevents the manual copy mistakes that caused the redc_param debug loop.
 
 SHELL := /bin/bash
-.PHONY: help circuits ios android contracts test test-all typecheck clean clean-ios clean-circuits clean-contracts deps build-all install-dev
+.PHONY: help circuits circuits-all refresh-mopro-bindings ios android contracts test test-all typecheck clean clean-ios clean-circuits clean-contracts deps build-all install-dev
 
 # ─── Paths ─────────────────────────────────────────────────────────────
 CIRCUITS_SRC      := packages/circuits
@@ -104,6 +104,31 @@ bb-gate-count: circuits ## Print gate count for the sigil circuit
 	@echo "━━━ Sigil circuit gate count ━━━"
 	$(BB) gates $(BB_TARGET) -b $(CIRCUITS_TARGET)/passport_sigil.json
 	@echo "✅ Gate count printed"
+
+# ─── Refresh node_modules/mopro-ffi from local source ─────────────────
+# pnpm copies `file:` deps into node_modules instead of symlinking, so
+# changes to apps/mobile/modules/mopro/ don't reach the JS bundle until
+# the cached copy is busted. Without this, a stale TS binding signature
+# meets the freshly built Rust binary and you get a UniFFI BufferOverflow
+# in the next proof attempt.
+refresh-mopro-bindings: ## Force pnpm to re-copy apps/mobile/modules/mopro into node_modules/mopro-ffi
+	@echo "━━━ Refreshing node_modules/mopro-ffi ━━━"
+	rm -rf node_modules/mopro-ffi
+	pnpm install
+	@echo "✅ node_modules/mopro-ffi refreshed"
+
+# ─── Full Circuit Pipeline (the one to run after touching the circuit) ─
+# Order matters:
+#   circuits        regenerates passport_sigil.json (the new ACIR + witness shape)
+#   bb-verifier     regenerates SigilUltraHonkVerifier.sol from the new VK
+#   ios             rebuilds the Mopro Rust FFI + uniffi-generated TS/C++ bindings
+#                   (Rust binary is what consumes the new witness shape)
+#   refresh-mopro-bindings  ensures the freshly generated TS bindings actually
+#                           reach the JS bundle (see note above)
+# Skip any one of these and proof generation fails silently or with a buffer
+# underrun, depending on which artifact is stale.
+circuits-all: circuits bb-verifier ios refresh-mopro-bindings ## Full circuit pipeline: circuits + verifier + Mopro iOS + JS bindings refresh
+	@echo "✅ Circuit pipeline complete — rebuild the iOS app in Xcode (or 'pnpm mobile:ios') to pick up the new bundle"
 
 # ─── Smart Contracts ──────────────────────────────────────────────────
 contracts: ## Build contracts and sync ABI to mobile app
