@@ -8,6 +8,7 @@ import { RootNavigator } from './navigation/RootNavigator';
 import { SplashOverlay } from '../shared/components/SplashOverlay';
 import { validateEnv } from '../infrastructure/env';
 import { useCircuitSetup } from '../infrastructure/circuits/useCircuitSetup';
+import { useWalletStateGuard } from '../features/wallet/hooks/useWalletStateGuard';
 import { testMoproModuleLoading } from '../features/verification/services/proofService';
 
 if (__DEV__) {
@@ -16,6 +17,19 @@ if (__DEV__) {
 
 // Module-level flag — splash plays once per process, not per mount.
 let splashHasPlayed = false;
+
+// Hosted inside AppProviders so wagmi hooks have a context to read from.
+function AppShell(): React.JSX.Element {
+  useWalletStateGuard();
+  return (
+    <>
+      <StatusBar style="light" />
+      <RootNavigator />
+      {/* AppKit modal must be inside AppKitProvider but outside NavigationContainer */}
+      <AppKit />
+    </>
+  );
+}
 
 export default function App(): React.JSX.Element {
   useCircuitSetup();
@@ -34,10 +48,7 @@ export default function App(): React.JSX.Element {
 
   return (
     <AppProviders>
-      <StatusBar style="light" />
-      <RootNavigator />
-      {/* AppKit modal must be inside AppKitProvider but outside NavigationContainer */}
-      <AppKit />
+      <AppShell />
       {!splashDone && <SplashOverlay onDone={handleSplashDone} />}
     </AppProviders>
   );
