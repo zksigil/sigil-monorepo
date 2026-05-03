@@ -12,7 +12,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRoute, useNavigation } from '@react-navigation/native';
-import { useAccount, useChainId, useWriteContract, useWaitForTransactionReceipt } from 'wagmi';
+import { useAccount, useChainId, useSwitchChain, useWriteContract, useWaitForTransactionReceipt } from 'wagmi';
 import type { BaseError } from 'wagmi';
 import { createPublicClient, http } from 'viem';
 import { anvil, baseSepolia, base } from 'viem/chains';
@@ -185,6 +185,7 @@ export function ProofGenerationScreen(): React.JSX.Element {
 
   const { address } = useAccount();
   const chainId = useChainId();
+  const { switchChainAsync } = useSwitchChain();
   const { generate, isGenerating, error: proofError } = useProofGeneration();
 
   const [step, setStep] = useState<FlowStep>('generating');
@@ -308,18 +309,32 @@ export function ProofGenerationScreen(): React.JSX.Element {
     setStep('submitting');
     setSubmitError(null);
 
-    const publicClient = getPublicClient(chainId);
-    if (!publicClient) {
-      setSubmitError(`No RPC configured for chain ${chainId}.`);
+    // MetaMask 7.57+ removed the global chain picker (multichain accounts).
+    // Passing `chainId` to writeContract no longer reliably triggers an in-wallet
+    // switch over WalletConnect, so we drive it explicitly. No-op if the wallet
+    // is already on the right chain; on 4902 the user must add the network first.
+    try {
+      await switchChainAsync({ chainId: supportedChainId });
+    } catch (switchErr) {
+      const e = switchErr as { code?: number; message?: string };
+      if (e.code === 4902) {
+        setSubmitError(`Base Sepolia isn't added to your wallet. Add it (chain ID ${supportedChainId}, RPC sepolia.base.org) and retry.`);
+      } else if (e.code === 4001) {
+        setSubmitError('Network switch was declined. Approve the switch in your wallet and retry.');
+      } else {
+        setSubmitError(`Could not switch wallet to chain ${supportedChainId}: ${e.message ?? 'unknown error'}`);
+      }
       setStep('error');
       return;
     }
 
-    // chainId is REQUIRED here. The new multi-chain MetaMask doesn't have a single
-    // "active chain" — without an explicit chainId, the wallet defaults to Ethereum
-    // mainnet and the tx ends up on the wrong chain. wagmi sends a
-    // wallet_switchEthereumChain RPC first when chainId is set, so MetaMask flips
-    // to Base Sepolia before signing.
+    const publicClient = getPublicClient(supportedChainId);
+    if (!publicClient) {
+      setSubmitError(`No RPC configured for chain ${supportedChainId}.`);
+      setStep('error');
+      return;
+    }
+
     // passportExpiry is uint48 — viem types this as `number` in the generated ABI;
     // a unix-second uint48 fits comfortably in Number.MAX_SAFE_INTEGER (2^53-1).
     const call = {
@@ -354,7 +369,7 @@ export function ProofGenerationScreen(): React.JSX.Element {
 
     console.log('[TX] Simulation passed, submitting register');
     writeContract(call);
-  }, [proofResult, address, chainId, writeContract]);
+  }, [proofResult, address, chainId, switchChainAsync, writeContract]);
 
   // -------------------------------------------------------------------------
   // Generating state

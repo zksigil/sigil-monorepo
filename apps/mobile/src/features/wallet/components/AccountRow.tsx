@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { View, Text, Pressable, Alert, ActivityIndicator } from 'react-native';
-import { useAccount, useWriteContract, useWaitForTransactionReceipt, useChainId } from 'wagmi';
+import { useAccount, useWriteContract, useWaitForTransactionReceipt, useChainId, useSwitchChain } from 'wagmi';
 import { useOpenWallet } from '../hooks/useOpenWallet';
 import { VERIFICATION_REGISTRY_ABI } from '../../../infrastructure/blockchain/contractAbis';
 import { CONTRACT_ADDRESSES } from '../../../infrastructure/blockchain/contracts';
@@ -24,6 +24,7 @@ function isSupportedChain(chainId: number): chainId is SupportedChainId {
 export function AccountRow({ account, linkedSiblings, onSigilize, onUnregistered }: AccountRowProps): React.JSX.Element {
   const { address: activeAddress } = useAccount();
   const chainId = useChainId();
+  const { switchChainAsync } = useSwitchChain();
   const { writeContractAsync } = useWriteContract();
   const openWallet = useOpenWallet();
   const [txHash, setTxHash] = useState<`0x${string}` | undefined>();
@@ -44,19 +45,32 @@ export function AccountRow({ account, linkedSiblings, onSigilize, onUnregistered
     ? CONTRACT_ADDRESSES[chainId].verificationRegistry
     : null;
 
-  const submitUnregister = useCallback(() => {
+  const submitUnregister = useCallback(async () => {
     if (!contractAddress || !isSupportedChain(chainId)) return;
-    // chainId is REQUIRED — see ProofGenerationScreen for the multi-chain
-    // MetaMask gotcha that makes this necessary.
-    writeContractAsync({
-      address: contractAddress,
-      abi: VERIFICATION_REGISTRY_ABI,
-      functionName: 'unregister',
-      chainId,
-    }).then(setTxHash).catch(() => {
+    try {
+      await switchChainAsync({ chainId });
+    } catch (switchErr) {
+      const e = switchErr as { code?: number };
+      const msg = e.code === 4001
+        ? 'Network switch declined. Approve in your wallet and retry.'
+        : e.code === 4902
+        ? 'Add this network to your wallet first, then retry.'
+        : 'Could not switch wallet to the right network.';
+      Alert.alert('Network', msg);
+      return;
+    }
+    try {
+      const hash = await writeContractAsync({
+        address: contractAddress,
+        abi: VERIFICATION_REGISTRY_ABI,
+        functionName: 'unregister',
+        chainId,
+      });
+      setTxHash(hash);
+    } catch {
       Alert.alert('Error', 'Transaction failed. Please try again.');
-    });
-  }, [contractAddress, chainId, writeContractAsync]);
+    }
+  }, [contractAddress, chainId, switchChainAsync, writeContractAsync]);
 
   const promptUnregisterConfirm = useCallback(() => {
     Alert.alert(
