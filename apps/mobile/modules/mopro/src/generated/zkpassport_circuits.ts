@@ -66,9 +66,6 @@ const uniffiIsDebug =
  *
  * `redc_param = floor(2^(2*bits + BARRETT_REDUCTION_OVERFLOW_BITS) / modulus)`
  *
- * `BARRETT_REDUCTION_OVERFLOW_BITS = 6` matches noir-bignum >= v0.9.x.
- * (v0.7.3 used 4 -- bumping noir-bignum changed this constant.)
- *
  * Returns N+1 bytes (big-endian): 257 bytes for 2048-bit, 513 bytes for 4096-bit.
  */
 export function computeRedcParam(modulusBytes: ArrayBuffer): ArrayBuffer /*throws*/ {
@@ -178,6 +175,11 @@ export function getNoirVerificationKey(circuitPath: string, srsPath: string | un
     }
 /**
  * Verify an UltraHonk-Keccak proof locally (optional -- the contract verifies on-chain).
+ *
+ * `_circuit_path` is kept in the FFI signature for ABI stability (callers in JS
+ * pass it for symmetry with `generate_noir_proof`), but verification only needs
+ * the proof + VK -- the bytecode is irrelevant. We deliberately do NOT read the
+ * circuit JSON here, saving an unnecessary disk read + parse on every verify.
  */
 export function verifyNoirProof(circuitPath: string, proof: ArrayBuffer, onChain: boolean, vk: ArrayBuffer, lowMemoryMode: boolean): boolean /*throws*/ {
     return FfiConverterBool.lift(
@@ -426,7 +428,7 @@ function uniffiEnsureInitialized() {
     if (bindingsContractVersion !== scaffoldingContractVersion) {
         throw new UniffiInternalError.ContractVersionMismatch(scaffoldingContractVersion, bindingsContractVersion);
     }
-    if (nativeModule().ubrn_uniffi_zkpassport_circuits_checksum_func_compute_redc_param() !== 59430) {
+    if (nativeModule().ubrn_uniffi_zkpassport_circuits_checksum_func_compute_redc_param() !== 49397) {
         throw new UniffiInternalError.ApiChecksumMismatch("uniffi_zkpassport_circuits_checksum_func_compute_redc_param");
     }
     if (nativeModule().ubrn_uniffi_zkpassport_circuits_checksum_func_compute_sigil_inputs() !== 48585) {
@@ -438,7 +440,7 @@ function uniffiEnsureInitialized() {
     if (nativeModule().ubrn_uniffi_zkpassport_circuits_checksum_func_get_noir_verification_key() !== 5025) {
         throw new UniffiInternalError.ApiChecksumMismatch("uniffi_zkpassport_circuits_checksum_func_get_noir_verification_key");
     }
-    if (nativeModule().ubrn_uniffi_zkpassport_circuits_checksum_func_verify_noir_proof() !== 9050) {
+    if (nativeModule().ubrn_uniffi_zkpassport_circuits_checksum_func_verify_noir_proof() !== 47919) {
         throw new UniffiInternalError.ApiChecksumMismatch("uniffi_zkpassport_circuits_checksum_func_verify_noir_proof");
     }
 

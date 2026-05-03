@@ -177,7 +177,7 @@ extern "C" {
         RustCallStatus *uniffi_out_err
     );
     int8_t uniffi_zkpassport_circuits_fn_func_verify_noir_proof(
-        RustBuffer circuit_path, 
+        RustBuffer _circuit_path, 
         RustBuffer proof, 
         int8_t on_chain, 
         RustBuffer vk, 
