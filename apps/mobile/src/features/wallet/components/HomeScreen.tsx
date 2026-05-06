@@ -25,18 +25,26 @@ export function HomeScreen(): React.JSX.Element {
   const chainName = CHAIN_DISPLAY_NAMES[chainId] ?? `Chain ${chainId}`;
   const openWallet = useOpenWallet();
 
+  // Tapping the connected pill offers both available actions: switching the
+  // active account (which is wallet-side, so we deep-link the user out) and
+  // disconnecting the WalletConnect session entirely.
+  const handleManageWallet = useCallback(() => {
+    Alert.alert(
+      'Manage Connection',
+      undefined,
+      [
+        { text: 'Change active account', onPress: openWallet },
+        { text: 'Disconnect', style: 'destructive', onPress: disconnect },
+        { text: 'Cancel', style: 'cancel' },
+      ],
+    );
+  }, [openWallet, disconnect]);
+
   const [pending, setPending] = useState<{ address: `0x${string}`; mode: RegistrationMode } | null>(null);
   const [educationOpen, setEducationOpen] = useState(false);
   const [educationTarget, setEducationTarget] = useState<{ address: `0x${string}`; mode: RegistrationMode } | null>(null);
 
   useFocusEffect(useCallback(() => { refetch(); }, [refetch]));
-
-  const handleDisconnect = useCallback(() => {
-    Alert.alert('Disconnect', 'Disconnect your wallet?', [
-      { text: 'Cancel', style: 'cancel' },
-      { text: 'Disconnect', style: 'destructive', onPress: disconnect },
-    ]);
-  }, [disconnect]);
 
   // Number of already-sigilized accounts. If > 0, the user already understands the
   // linkability model; we skip the education modal on subsequent sigilizes.
@@ -98,7 +106,10 @@ export function HomeScreen(): React.JSX.Element {
 
   return (
     <SafeAreaView className="flex-1 bg-dracula-bg" edges={['bottom']}>
-      <ScrollView className="flex-1" contentContainerStyle={{ paddingHorizontal: 24, paddingVertical: 20, gap: 16 }}>
+      <ScrollView
+        className="flex-1"
+        contentContainerStyle={{ paddingHorizontal: 24, paddingVertical: 20, paddingBottom: 24, gap: 16 }}
+      >
 
         {isConnected && isWrongChain && (
           <Pressable
@@ -165,12 +176,40 @@ export function HomeScreen(): React.JSX.Element {
           </Text>
         )}
 
+        {/* Recovery / discovery entry point. Tap passport → derive nullifier → list
+            wallets registered under it. No tx, no proof. Useful when migrating
+            phones or just confirming what's sigilized. */}
+        <Pressable
+          onPress={() => navigation.navigate('PassportScan', { mode: 'discover' })}
+          className="w-full rounded-2xl py-3.5 items-center border border-dracula-purple/40 active:bg-dracula-purple/10"
+        >
+          <Text className="text-dracula-purple text-sm font-semibold">
+            Find my sigilized wallets
+          </Text>
+          <Text className="text-dracula-comment/60 text-[11px] mt-0.5">
+            Tap your passport — no transaction
+          </Text>
+        </Pressable>
+      </ScrollView>
+
+      {/* Fixed footer — single button slot. Connected state is a two-line
+          purple pill: status on top, available actions (change account /
+          disconnect) on the subtitle. Tapping opens an Alert with both
+          options. The address itself is intentionally NOT shown here since
+          the accounts list above already surfaces it. */}
+      <View
+        className="px-6 pt-3 pb-2 border-t border-dracula-comment/15"
+        style={{ backgroundColor: '#282a36' }}
+      >
         {isConnected ? (
           <Pressable
-            onPress={handleDisconnect}
-            className="w-full rounded-2xl py-3.5 items-center border border-dracula-comment/40 active:bg-dracula-bg"
+            onPress={handleManageWallet}
+            className="w-full rounded-2xl py-3 items-center bg-dracula-purple active:bg-dracula-purple/80"
           >
-            <Text className="text-dracula-comment text-sm font-medium">Connected</Text>
+            <Text className="text-dracula-fg text-base font-semibold">Connected</Text>
+            <Text className="text-dracula-fg/65 text-[11px] mt-0.5">
+              Change account · Disconnect
+            </Text>
           </Pressable>
         ) : (
           <Pressable
@@ -186,7 +225,7 @@ export function HomeScreen(): React.JSX.Element {
               : <Text className="text-dracula-fg text-base font-semibold">Connect Wallet</Text>}
           </Pressable>
         )}
-      </ScrollView>
+      </View>
 
       {/* First-sigilize education modal — shown once, before the user's first sigilize. */}
       <Modal visible={educationOpen} transparent animationType="fade" statusBarTranslucent onRequestClose={handleEducationCancel}>

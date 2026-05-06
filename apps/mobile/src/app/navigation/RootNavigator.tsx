@@ -6,6 +6,7 @@ import { HomeScreen } from '../../features/wallet/components/HomeScreen';
 import { PassportScanScreen } from '../../features/verification/components/PassportScanScreen';
 import { ProofGenerationScreen } from '../../features/verification/components/ProofGenerationScreen';
 import { VerificationSuccessScreen } from '../../features/verification/components/VerificationSuccessScreen';
+import { WalletDiscoveryScreen } from '../../features/verification/components/WalletDiscoveryScreen';
 const Stack = createNativeStackNavigator<RootStackParamList>();
 
 // Deep-link config for WalletConnect callbacks
@@ -57,6 +58,11 @@ export function RootNavigator(): React.JSX.Element {
             headerBackVisible: false,
             gestureEnabled: false,
           }}
+        />
+        <Stack.Screen
+          name="WalletDiscovery"
+          component={WalletDiscoveryScreen}
+          options={{ title: 'Find Wallets' }}
         />
       </Stack.Navigator>
     </NavigationContainer>

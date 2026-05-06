@@ -18,7 +18,7 @@ const EMPTY_MRZ: MRZInput = {
 
 export function PassportScanScreen(): React.JSX.Element {
   const route = useRoute<RootStackRouteProp<'PassportScan'>>();
-  const mode = route.params?.mode ?? 'register';
+  const mode = route.params?.mode ?? 'register'; // ScanMode
 
   const [step, setStep] = useState<Step>('mrz-entry');
   const [mrz, setMrz] = useState<MRZInput>(EMPTY_MRZ);
