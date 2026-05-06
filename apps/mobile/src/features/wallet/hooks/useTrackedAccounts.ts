@@ -8,6 +8,7 @@ import { VERIFICATION_REGISTRY_ABI } from '../../../infrastructure/blockchain/co
 import { CONTRACT_ADDRESSES } from '../../../infrastructure/blockchain/contracts';
 import { SUPPORTED_CHAIN_IDS } from '../../../shared/constants/chains';
 import type { SupportedChainId } from '../../../shared/constants/chains';
+import { useTrackedExternalAddresses } from './useTrackedExternalAddresses';
 
 export interface TrackedAccount {
   address: `0x${string}`;
@@ -18,6 +19,13 @@ export interface TrackedAccount {
   expiry: bigint | null;
   /** The passport nullifier this wallet is registered under (zero hash if none). */
   nullifier: `0x${string}` | null;
+  /**
+   * True if the address is currently in the connected wallet's authorized
+   * accounts (i.e. the user can sign txs from it). False for externally-tracked
+   * addresses surfaced via WalletDiscovery — those rows are read-only until
+   * the user reconnects with the matching account.
+   */
+  isInWallet: boolean;
 }
 
 function isSupportedChain(chainId: number): chainId is SupportedChainId {
@@ -61,24 +69,38 @@ export function useTrackedAccounts(): {
 } {
   const chainId = useChainId();
   const { addresses } = useAccount();
+  const { addresses: externalAddresses } = useTrackedExternalAddresses();
 
+  // Build the merged address list. Wallet addresses are kept in their wagmi
+  // order (first); externally-tracked addresses that aren't already in the
+  // wallet are appended. Equality is case-insensitive.
   const stableOrderRef = useRef<`0x${string}`[] | null>(null);
-  const walletAddresses = useMemo<`0x${string}`[]>(() => {
-    const deduped = addresses ? ([...new Set(addresses)] as `0x${string}`[]) : [];
-    if (deduped.length === 0) {
+  const walletAddressSet = useMemo(() => {
+    const set = new Set<string>();
+    if (addresses) for (const a of addresses) set.add(a.toLowerCase());
+    return set;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [JSON.stringify(addresses)]);
+
+  const mergedAddresses = useMemo<`0x${string}`[]>(() => {
+    const wallet = addresses ? ([...new Set(addresses)] as `0x${string}`[]) : [];
+    const external = externalAddresses.filter((a) => !walletAddressSet.has(a.toLowerCase()));
+    const merged: `0x${string}`[] = [...wallet, ...external];
+    if (merged.length === 0) {
       stableOrderRef.current = null;
       return [];
     }
+    // Reuse the previous order if the set hasn't changed — keeps row identity stable.
     if (
       stableOrderRef.current === null ||
-      stableOrderRef.current.length !== deduped.length ||
-      !deduped.every((a) => stableOrderRef.current!.some((s) => s.toLowerCase() === a.toLowerCase()))
+      stableOrderRef.current.length !== merged.length ||
+      !merged.every((a) => stableOrderRef.current!.some((s) => s.toLowerCase() === a.toLowerCase()))
     ) {
-      stableOrderRef.current = deduped;
+      stableOrderRef.current = merged;
     }
     return stableOrderRef.current;
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [JSON.stringify(addresses)]);
+  }, [JSON.stringify(addresses), JSON.stringify(externalAddresses), walletAddressSet]);
 
   const [accounts, setAccounts] = useState<TrackedAccount[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -86,13 +108,14 @@ export function useTrackedAccounts(): {
   const fetchIdRef = useRef(0);
 
   const fetchStatus = useCallback(async () => {
-    if (!isSupportedChain(chainId) || walletAddresses.length === 0) {
-      setAccounts(walletAddresses.map((addr) => ({
+    if (!isSupportedChain(chainId) || mergedAddresses.length === 0) {
+      setAccounts(mergedAddresses.map((addr) => ({
         address: addr,
         shortAddress: `${addr.slice(0, 6)}...${addr.slice(-4)}`,
         isVerified: false,
         expiry: null,
         nullifier: null,
+        isInWallet: walletAddressSet.has(addr.toLowerCase()),
       })));
       setIsLoading(false);
       return;
@@ -109,7 +132,7 @@ export function useTrackedAccounts(): {
 
     try {
       const results = await Promise.all(
-        walletAddresses.map(async (addr): Promise<TrackedAccount> => {
+        mergedAddresses.map(async (addr): Promise<TrackedAccount> => {
           const [verified, expiry, nullifier] = await Promise.all([
             client.readContract({
               address: contractAddress,
@@ -138,6 +161,7 @@ export function useTrackedAccounts(): {
             isVerified: verified as boolean,
             expiry: expiry as bigint | null,
             nullifier: nullifierVal && nullifierVal !== ZERO_NULLIFIER ? nullifierVal : null,
+            isInWallet: walletAddressSet.has(addr.toLowerCase()),
           };
         }),
       );
@@ -153,7 +177,7 @@ export function useTrackedAccounts(): {
         setIsLoading(false);
       }
     }
-  }, [chainId, walletAddresses]);
+  }, [chainId, mergedAddresses, walletAddressSet]);
 
   useEffect(() => {
     void fetchStatus();

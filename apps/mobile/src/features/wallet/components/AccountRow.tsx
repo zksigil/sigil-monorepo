@@ -3,6 +3,7 @@ import { View, Text, Pressable, Alert, ActivityIndicator, LayoutAnimation, Platf
 import { useAccount, useWriteContract, useWaitForTransactionReceipt, useChainId, useSwitchChain } from 'wagmi';
 import { useOpenWallet } from '../hooks/useOpenWallet';
 import { useEnsName } from '../hooks/useEnsName';
+import { useTrackedExternalAddresses } from '../hooks/useTrackedExternalAddresses';
 import { VERIFICATION_REGISTRY_ABI } from '../../../infrastructure/blockchain/contractAbis';
 import { CONTRACT_ADDRESSES } from '../../../infrastructure/blockchain/contracts';
 import { SUPPORTED_CHAIN_IDS } from '../../../shared/constants/chains';
@@ -64,6 +65,7 @@ export function AccountRow({ account, linkedSiblings, isActive, onSigilize, onUn
   const { writeContractAsync } = useWriteContract();
   const openWallet = useOpenWallet();
   const ensName = useEnsName(account.address);
+  const { remove: removeExternal } = useTrackedExternalAddresses();
 
   const [expanded, setExpanded] = useState(false);
   const [txHash, setTxHash] = useState<`0x${string}` | undefined>();
@@ -166,14 +168,32 @@ export function AccountRow({ account, linkedSiblings, isActive, onSigilize, onUn
   const handleReSigilize = useCallback(() => onSigilize(account.address, 'register'), [account.address, onSigilize]);
   const handleRenew = useCallback(() => onSigilize(account.address, 'renew'), [account.address, onSigilize]);
 
+  const handleStopTracking = useCallback(() => {
+    Alert.alert(
+      'Stop tracking?',
+      `Remove ${ensName ?? account.shortAddress} from your accounts list. This does not change anything on-chain.`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Stop tracking',
+          style: 'destructive',
+          onPress: () => { void removeExternal(account.address); onUnregistered(); },
+        },
+      ],
+    );
+  }, [account.address, account.shortAddress, ensName, removeExternal, onUnregistered]);
+
   const displayName = ensName ?? account.shortAddress;
   const showSubAddress = ensName !== null;
+  const isExternal = !account.isInWallet;
 
   return (
     <View
       className={`rounded-2xl ${
         isActive
           ? 'bg-dracula-surface border border-dracula-purple/60'
+          : isExternal
+          ? 'bg-dracula-surface/60 border border-dracula-comment/20'
           : 'bg-dracula-surface'
       }`}
     >
@@ -181,7 +201,10 @@ export function AccountRow({ account, linkedSiblings, isActive, onSigilize, onUn
       <Pressable onPress={toggleExpanded} className="px-4 py-3 flex-row items-center">
         {isActive && <View className="w-2 h-2 rounded-full bg-dracula-green mr-2.5" />}
         <View className="flex-1 min-w-0">
-          <Text className="text-dracula-fg text-sm font-semibold" numberOfLines={1}>
+          <Text
+            className={`text-sm font-semibold ${isExternal ? 'text-dracula-fg/70' : 'text-dracula-fg'}`}
+            numberOfLines={1}
+          >
             {displayName}
           </Text>
           {showSubAddress && (
@@ -218,11 +241,25 @@ export function AccountRow({ account, linkedSiblings, isActive, onSigilize, onUn
             </Text>
           )}
 
+          {isExternal && (
+            <View className="bg-dracula-bg/40 rounded-xl px-3 py-2.5 gap-y-1">
+              <Text className="text-dracula-comment text-xs font-semibold">
+                Not in connected wallet
+              </Text>
+              <Text className="text-dracula-comment/70 text-xs leading-4">
+                You're tracking this address from a passport-recovery scan. Connect the wallet
+                that holds it to sigilize, renew, or unregister.
+              </Text>
+            </View>
+          )}
+
           {isConfirming ? (
             <View className="flex-row items-center justify-center py-3 gap-x-2">
               <ActivityIndicator size="small" color="#bd93f9" />
               <Text className="text-dracula-comment text-sm">Submitting…</Text>
             </View>
+          ) : isExternal ? (
+            <DestructiveButton label="Stop tracking" onPress={handleStopTracking} />
           ) : (
             <Actions
               state={state}

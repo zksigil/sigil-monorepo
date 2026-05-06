@@ -1,7 +1,7 @@
 import React, { useCallback, useState } from 'react';
 import { View, Text, Pressable, ActivityIndicator } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
-import type { RegistrationMode, RootStackNavigationProp } from '../../../app/navigation/types';
+import type { RegistrationMode, RootStackNavigationProp, ScanMode } from '../../../app/navigation/types';
 import { useNFCReader } from '../hooks/useNFCReader';
 import type { NFCError, NFCReadResult } from '../../../infrastructure/nfc';
 import type { MRZInput } from '../services/mrzParser';
@@ -25,7 +25,7 @@ interface NFCSuccessResult {
 interface Props {
   mrz: MRZInput;
   onBack: () => void;
-  mode: RegistrationMode;
+  mode: ScanMode;
 }
 
 function getErrorMessage(error: NFCError): string {
@@ -85,9 +85,11 @@ export function NFCScanStep({ mrz, onBack, mode }: Props): React.JSX.Element {
 
   const handleDevSkip = useCallback(() => {
     // Dev-only skip — invalid DG1/SOD bytes route useProofGeneration to the
-    // stub fallback. Only works against MockProofVerifier on anvil.
+    // stub fallback. Only works against MockProofVerifier on anvil. Discovery
+    // mode skips this fallback since it never produces a real nullifier.
+    if (mode === 'discover') return;
     navigation.navigate('ProofGeneration', {
-      mode,
+      mode: mode as RegistrationMode,
       passportData: {
         documentNumber: 'AB1234567',
         dateOfBirth: '900101',
@@ -101,17 +103,19 @@ export function NFCScanStep({ mrz, onBack, mode }: Props): React.JSX.Element {
 
   const handleContinueToProof = useCallback(() => {
     if (!nfcResult) return;
-    navigation.navigate('ProofGeneration', {
-      mode,
-      passportData: {
-        documentNumber: nfcResult.data.documentNumber,
-        dateOfBirth: nfcResult.data.dateOfBirth,
-        dateOfExpiry: nfcResult.data.dateOfExpiry,
-        nationality: nfcResult.data.nationality,
-        rawDG1Hex: nfcResult.rawDG1Hex ?? '',
-        rawSODHex: nfcResult.rawSODHex ?? '',
-      },
-    });
+    const passportData = {
+      documentNumber: nfcResult.data.documentNumber,
+      dateOfBirth: nfcResult.data.dateOfBirth,
+      dateOfExpiry: nfcResult.data.dateOfExpiry,
+      nationality: nfcResult.data.nationality,
+      rawDG1Hex: nfcResult.rawDG1Hex ?? '',
+      rawSODHex: nfcResult.rawSODHex ?? '',
+    };
+    if (mode === 'discover') {
+      navigation.navigate('WalletDiscovery', { passportData });
+    } else {
+      navigation.navigate('ProofGeneration', { mode, passportData });
+    }
   }, [navigation, nfcResult, mode]);
 
   return (
@@ -135,6 +139,11 @@ export function NFCScanStep({ mrz, onBack, mode }: Props): React.JSX.Element {
             debugExpanded={debugExpanded}
             onToggleDebug={() => setDebugExpanded((p) => !p)}
             onContinue={handleContinueToProof}
+            continueLabel={
+              mode === 'discover' ? 'Look Up Wallets'
+              : mode === 'renew' ? 'Continue to Renewal'
+              : 'Continue to Proof Generation'
+            }
           />
         )}
 
@@ -203,9 +212,10 @@ interface SuccessProps {
   debugExpanded: boolean;
   onToggleDebug: () => void;
   onContinue: () => void;
+  continueLabel: string;
 }
 
-function SuccessState({ mrz, nfcResult, debugExpanded, onToggleDebug, onContinue }: SuccessProps): React.JSX.Element {
+function SuccessState({ mrz, nfcResult, debugExpanded, onToggleDebug, onContinue, continueLabel }: SuccessProps): React.JSX.Element {
   return (
     <>
       <View className="w-24 h-24 rounded-full bg-dracula-green/20 items-center justify-center">
@@ -224,7 +234,7 @@ function SuccessState({ mrz, nfcResult, debugExpanded, onToggleDebug, onContinue
         onPress={onContinue}
         className="w-full rounded-2xl py-4 items-center bg-dracula-purple active:bg-dracula-purple/80"
       >
-        <Text className="text-dracula-fg text-base font-semibold">Continue to Proof Generation</Text>
+        <Text className="text-dracula-fg text-base font-semibold">{continueLabel}</Text>
       </Pressable>
     </>
   );
