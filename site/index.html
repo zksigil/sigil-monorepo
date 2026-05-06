@@ -1,0 +1,207 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="color-scheme" content="dark" />
+  <meta name="theme-color" content="#0a0a10" />
+
+  <title>Sigil — Passport-grade proof of personhood</title>
+  <meta name="description" content="Tap your passport. Generate a zero-knowledge proof on your phone. Register your wallet on-chain — no passport data ever leaves the device." />
+
+  <meta property="og:title" content="Sigil — Passport-grade proof of personhood" />
+  <meta property="og:description" content="ZK-proven personhood for Ethereum wallets. Your passport never leaves your phone." />
+  <meta property="og:type" content="website" />
+  <meta property="og:url" content="https://zksigil.xyz" />
+  <meta property="og:image" content="https://zksigil.xyz/assets/icon.png" />
+  <meta name="twitter:card" content="summary_large_image" />
+
+  <link rel="icon" type="image/svg+xml" href="assets/sigil-mark.svg" />
+  <link rel="apple-touch-icon" href="assets/icon.png" />
+  <link rel="stylesheet" href="styles.css" />
+
+  <link rel="preconnect" href="https://rsms.me/" />
+  <link rel="stylesheet" href="https://rsms.me/inter/inter.css" />
+</head>
+<body>
+  <!--
+    Placeholder links — replace these once accounts/listings exist.
+      Twitter:   set on a.cta--twitter
+      GitHub:    set on a.cta--github
+      App Store: set on a.store--ios
+      Play Store: set on a.store--android
+    All four are href="#" by default and styled as clearly tappable.
+  -->
+
+  <div class="grid-bg" aria-hidden="true"></div>
+
+  <header class="nav">
+    <a class="brand" href="/" aria-label="Sigil home">
+      <img src="assets/sigil-mark.svg" alt="" width="28" height="28" />
+      <span>sigil</span>
+    </a>
+    <nav class="nav__links">
+      <a href="#how">How it works</a>
+      <a href="#privacy">Privacy</a>
+      <a href="#" class="cta--github" aria-label="GitHub repository">GitHub</a>
+    </nav>
+  </header>
+
+  <main>
+    <section class="hero">
+      <div class="hero__mark" aria-hidden="true">
+        <img src="assets/sigil-mark.svg" alt="" width="160" height="160" />
+        <div class="hero__halo"></div>
+      </div>
+
+      <h1 class="hero__title">
+        Passport-grade<br />
+        <span class="grad-text">proof of personhood</span>
+      </h1>
+
+      <p class="hero__lede">
+        Tap your passport to your phone. A zero-knowledge proof is generated on-device.
+        Your wallet gets a verifiable, sybil-resistant identity — and your passport never leaves the device.
+      </p>
+
+      <div class="cta-row">
+        <a href="#" class="store store--ios" aria-label="Download for iOS">
+          <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true">
+            <path fill="currentColor" d="M16.365 1.43c0 1.14-.41 2.097-1.23 2.87-.99.94-2.16 1.48-3.43 1.38-.16-1.13.43-2.32 1.21-3.05.86-.79 2.27-1.36 3.45-1.2zM21 17.6c-.5 1.16-.74 1.68-1.39 2.71-.91 1.45-2.2 3.26-3.79 3.27-1.42.02-1.79-.92-3.71-.91-1.93.01-2.33.93-3.76.92-1.59-.02-2.81-1.65-3.72-3.1C2.07 16.6 1.79 11.5 3.34 8.92c1.04-1.74 2.7-2.85 4.27-2.85 1.6 0 2.61.88 3.94.88 1.29 0 2.07-.88 3.93-.88 1.4 0 2.89.76 3.96 2.08-3.49 1.91-2.92 6.92.55 8.45z" />
+          </svg>
+          <span class="store__label">
+            <span class="store__small">Coming soon to</span>
+            <span class="store__big">App Store</span>
+          </span>
+        </a>
+
+        <a href="#" class="store store--android" aria-label="Download for Android">
+          <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true">
+            <path fill="currentColor" d="M3.61 20.97c.5.92 1.5 1.53 2.66 1.53.76 0 1.47-.27 2.02-.72L13.5 17H8.5l-4.89 3.97zM20.39 3.03c-.5-.92-1.5-1.53-2.66-1.53-.76 0-1.47.27-2.02.72L10.5 7h5l4.89-3.97zM2 4.13v15.74c0 .43.16.83.43 1.13l9.07-9-9.07-9c-.27.3-.43.7-.43 1.13zM23 12c0-1.1-.6-2.06-1.5-2.59l-3.91-2.26-4.59 4.59 4.59 4.59 3.91-2.26C22.4 14.06 23 13.1 23 12z" />
+          </svg>
+          <span class="store__label">
+            <span class="store__small">Coming soon to</span>
+            <span class="store__big">Google Play</span>
+          </span>
+        </a>
+      </div>
+
+      <div class="cta-row cta-row--secondary">
+        <a href="#" class="cta cta--twitter" aria-label="Sigil on Twitter">
+          <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true">
+            <path fill="currentColor" d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24h-6.66l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z" />
+          </svg>
+          <span>Twitter</span>
+        </a>
+        <a href="#" class="cta cta--github" aria-label="Sigil on GitHub">
+          <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true">
+            <path fill="currentColor" d="M12 .5C5.65.5.5 5.65.5 12c0 5.08 3.29 9.39 7.86 10.91.58.11.79-.25.79-.55 0-.27-.01-1.18-.02-2.14-3.2.7-3.87-1.36-3.87-1.36-.52-1.33-1.27-1.68-1.27-1.68-1.04-.71.08-.69.08-.69 1.15.08 1.76 1.18 1.76 1.18 1.02 1.75 2.69 1.24 3.34.95.1-.74.4-1.24.73-1.53-2.55-.29-5.24-1.28-5.24-5.69 0-1.26.45-2.28 1.18-3.09-.12-.29-.51-1.46.11-3.04 0 0 .97-.31 3.18 1.18a11 11 0 0 1 5.79 0c2.21-1.49 3.18-1.18 3.18-1.18.62 1.58.23 2.75.11 3.04.74.81 1.18 1.83 1.18 3.09 0 4.42-2.69 5.39-5.26 5.68.41.36.78 1.05.78 2.12 0 1.53-.01 2.76-.01 3.13 0 .3.21.66.8.55 4.57-1.52 7.85-5.83 7.85-10.91C23.5 5.65 18.35.5 12 .5z" />
+          </svg>
+          <span>GitHub</span>
+        </a>
+      </div>
+
+      <p class="hero__note">
+        Experimental. Currently testnet-only on
+        <a href="https://sepolia.basescan.org/address/0x6f692eba653ef8ff9048cbf5555bd700c78b414f" target="_blank" rel="noopener noreferrer">Base Sepolia</a>.
+      </p>
+    </section>
+
+    <section id="how" class="section">
+      <h2>How it works</h2>
+      <ol class="steps">
+        <li>
+          <span class="step__num">01</span>
+          <h3>Tap your passport</h3>
+          <p>The phone reads DG1 and the Security Object Document over NFC, using ICAO 9303 BAC. Nothing is uploaded.</p>
+        </li>
+        <li>
+          <span class="step__num">02</span>
+          <h3>Prove on-device</h3>
+          <p>A Noir circuit (UltraHonk) verifies the passport signature chain and derives a stable nullifier. Proving runs on your phone in 5–15s via Mopro.</p>
+        </li>
+        <li>
+          <span class="step__num">03</span>
+          <h3>Register on-chain</h3>
+          <p>Submit the proof to <code>VerificationRegistry</code>. Protocols read <code>isVerified(wallet)</code> for personhood and <code>nullifierOf(wallet)</code> for sybil dedup.</p>
+        </li>
+      </ol>
+    </section>
+
+    <section id="privacy" class="section section--privacy">
+      <h2>What's actually on-chain</h2>
+      <p class="section__lede">
+        Your passport never leaves the phone. No name, DOB, nationality, or document number is ever published.
+      </p>
+      <div class="onchain">
+        <div class="onchain__col onchain__col--yes">
+          <h4>Stored on-chain</h4>
+          <ul>
+            <li>An opaque nullifier — a one-way hash derived from your passport</li>
+            <li>The wallet address that registered it</li>
+            <li>Registration timestamp and expiry (rounded to 90-day buckets for privacy)</li>
+            <li>The zero-knowledge proof bytes</li>
+          </ul>
+        </div>
+        <div class="onchain__col onchain__col--no">
+          <h4>Never on-chain</h4>
+          <ul>
+            <li>Name, date of birth, nationality, sex</li>
+            <li>Passport number, issue date, MRZ</li>
+            <li>DG1 / SOD bytes, RSA signatures, document images</li>
+            <li>Anything that could re-identify the holder</li>
+          </ul>
+        </div>
+      </div>
+
+      <div class="tradeoff">
+        <h3>The single-tier trade-off</h3>
+        <p>
+          Every wallet you sigilize under the same passport shares the same on-chain nullifier — they're publicly linkable to each other.
+          Wallets you don't sigilize stay anonymous. This is an explicit, opt-in design choice: simple, auditable sybil resistance in exchange for cross-wallet linkability of accounts you choose to attest.
+        </p>
+      </div>
+    </section>
+
+    <section class="section section--cta">
+      <h2>Get the app</h2>
+      <p class="section__lede">Coming soon to iOS and Android.</p>
+      <div class="cta-row">
+        <a href="#" class="store store--ios" aria-label="Download for iOS">
+          <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true">
+            <path fill="currentColor" d="M16.365 1.43c0 1.14-.41 2.097-1.23 2.87-.99.94-2.16 1.48-3.43 1.38-.16-1.13.43-2.32 1.21-3.05.86-.79 2.27-1.36 3.45-1.2zM21 17.6c-.5 1.16-.74 1.68-1.39 2.71-.91 1.45-2.2 3.26-3.79 3.27-1.42.02-1.79-.92-3.71-.91-1.93.01-2.33.93-3.76.92-1.59-.02-2.81-1.65-3.72-3.1C2.07 16.6 1.79 11.5 3.34 8.92c1.04-1.74 2.7-2.85 4.27-2.85 1.6 0 2.61.88 3.94.88 1.29 0 2.07-.88 3.93-.88 1.4 0 2.89.76 3.96 2.08-3.49 1.91-2.92 6.92.55 8.45z" />
+          </svg>
+          <span class="store__label">
+            <span class="store__small">Coming soon to</span>
+            <span class="store__big">App Store</span>
+          </span>
+        </a>
+        <a href="#" class="store store--android" aria-label="Download for Android">
+          <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true">
+            <path fill="currentColor" d="M3.61 20.97c.5.92 1.5 1.53 2.66 1.53.76 0 1.47-.27 2.02-.72L13.5 17H8.5l-4.89 3.97zM20.39 3.03c-.5-.92-1.5-1.53-2.66-1.53-.76 0-1.47.27-2.02.72L10.5 7h5l4.89-3.97zM2 4.13v15.74c0 .43.16.83.43 1.13l9.07-9-9.07-9c-.27.3-.43.7-.43 1.13zM23 12c0-1.1-.6-2.06-1.5-2.59l-3.91-2.26-4.59 4.59 4.59 4.59 3.91-2.26C22.4 14.06 23 13.1 23 12z" />
+          </svg>
+          <span class="store__label">
+            <span class="store__small">Coming soon to</span>
+            <span class="store__big">Google Play</span>
+          </span>
+        </a>
+      </div>
+    </section>
+  </main>
+
+  <footer class="footer">
+    <div class="footer__inner">
+      <div class="footer__brand">
+        <img src="assets/sigil-mark.svg" alt="" width="20" height="20" />
+        <span>sigil</span>
+      </div>
+      <nav class="footer__links">
+        <a href="#" class="cta--twitter">Twitter</a>
+        <a href="#" class="cta--github">GitHub</a>
+        <a href="https://sepolia.basescan.org/address/0x6f692eba653ef8ff9048cbf5555bd700c78b414f" target="_blank" rel="noopener noreferrer">Contract</a>
+      </nav>
+      <p class="footer__small">Experimental, testnet only. No warranty, no guarantees.</p>
+    </div>
+  </footer>
+</body>
+</html>
