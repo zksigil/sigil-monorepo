@@ -6,11 +6,11 @@
   <meta name="color-scheme" content="dark" />
   <meta name="theme-color" content="#0a0a10" />
 
-  <title>Sigil — Passport-grade proof of personhood</title>
-  <meta name="description" content="Tap your passport. Generate a zero-knowledge proof on your phone. Register your wallet on-chain — no passport data ever leaves the device." />
+  <title>Sigil — proof of personhood, by passport</title>
+  <meta name="description" content="Prove you're human with your passport. The proof runs on your phone. Only an opaque hash reaches the chain." />
 
-  <meta property="og:title" content="Sigil — Passport-grade proof of personhood" />
-  <meta property="og:description" content="ZK-proven personhood for Ethereum wallets. Your passport never leaves your phone." />
+  <meta property="og:title" content="Sigil — proof of personhood, by passport" />
+  <meta property="og:description" content="Prove you're human with your passport. The proof runs on your phone. Only an opaque hash reaches the chain." />
   <meta property="og:type" content="website" />
   <meta property="og:url" content="https://zksigil.xyz" />
   <meta property="og:image" content="https://zksigil.xyz/assets/icon.png" />
@@ -56,13 +56,13 @@
       </div>
 
       <h1 class="hero__title">
-        Passport-grade<br />
-        <span class="grad-text">proof of personhood</span>
+        Proof of personhood,<br />
+        <span class="grad-text">by passport.</span>
       </h1>
 
       <p class="hero__lede">
-        Tap your passport to your phone. A zero-knowledge proof is generated on-device.
-        Your wallet gets a verifiable, sybil-resistant identity — and your passport never leaves the device.
+        Tap your passport on your phone. The app builds a zero-knowledge proof locally
+        and writes only an opaque hash to chain. The passport itself never leaves the device.
       </p>
 
       <div class="cta-row">
@@ -103,7 +103,7 @@
       </div>
 
       <p class="hero__note">
-        Experimental. Currently testnet-only on
+        Experimental. Testnet only, on
         <a href="https://sepolia.basescan.org/address/0x6f692eba653ef8ff9048cbf5555bd700c78b414f" target="_blank" rel="noopener noreferrer">Base Sepolia</a>.
       </p>
     </section>
@@ -114,17 +114,17 @@
         <li>
           <span class="step__num">01</span>
           <h3>Tap your passport</h3>
-          <p>The phone reads DG1 and the Security Object Document over NFC, using ICAO 9303 BAC. Nothing is uploaded.</p>
+          <p>Hold the passport against your phone. It reads DG1 and the Security Object over NFC using ICAO 9303 BAC. Nothing is uploaded.</p>
         </li>
         <li>
           <span class="step__num">02</span>
           <h3>Prove on-device</h3>
-          <p>A Noir circuit (UltraHonk) verifies the passport signature chain and derives a stable nullifier. Proving runs on your phone in 5–15s via Mopro.</p>
+          <p>A Noir circuit checks the passport's signature chain and derives an opaque per-passport ID. The whole proof runs on the phone in about 5–15 seconds with Mopro.</p>
         </li>
         <li>
           <span class="step__num">03</span>
           <h3>Register on-chain</h3>
-          <p>Submit the proof to <code>VerificationRegistry</code>. Protocols read <code>isVerified(wallet)</code> for personhood and <code>nullifierOf(wallet)</code> for sybil dedup.</p>
+          <p>Submit the proof to the registry. From then on, any contract or service can call <code>isVerified(wallet)</code> for personhood, or <code>nullifierOf(wallet)</code> to dedupe by passport.</p>
         </li>
       </ol>
     </section>
@@ -132,34 +132,34 @@
     <section id="privacy" class="section section--privacy">
       <h2>What's actually on-chain</h2>
       <p class="section__lede">
-        Your passport never leaves the phone. No name, DOB, nationality, or document number is ever published.
+        Your passport stays on the phone. The name, date of birth, nationality, and passport number never reach the chain.
       </p>
       <div class="onchain">
         <div class="onchain__col onchain__col--yes">
           <h4>Stored on-chain</h4>
           <ul>
-            <li>An opaque nullifier — a one-way hash derived from your passport</li>
+            <li>An opaque nullifier (one-way hash of your passport secret)</li>
             <li>The wallet address that registered it</li>
-            <li>Registration timestamp and expiry (rounded to 90-day buckets for privacy)</li>
-            <li>The zero-knowledge proof bytes</li>
+            <li>A registration timestamp and expiry, rounded to 90-day buckets</li>
+            <li>The zero-knowledge proof itself</li>
           </ul>
         </div>
         <div class="onchain__col onchain__col--no">
           <h4>Never on-chain</h4>
           <ul>
             <li>Name, date of birth, nationality, sex</li>
-            <li>Passport number, issue date, MRZ</li>
+            <li>Passport number, issue date, the MRZ</li>
             <li>DG1 / SOD bytes, RSA signatures, document images</li>
-            <li>Anything that could re-identify the holder</li>
+            <li>Anything that ties back to the actual person</li>
           </ul>
         </div>
       </div>
 
       <div class="tradeoff">
-        <h3>The single-tier trade-off</h3>
+        <h3>What you're giving up</h3>
         <p>
-          Every wallet you sigilize under the same passport shares the same on-chain nullifier — they're publicly linkable to each other.
-          Wallets you don't sigilize stay anonymous. This is an explicit, opt-in design choice: simple, auditable sybil resistance in exchange for cross-wallet linkability of accounts you choose to attest.
+          Every wallet you sigilize with the same passport gets the same on-chain ID. They become publicly linked to each other.
+          Wallets you don't sigilize stay anonymous. The deal: the wallets you sigilize lose pseudonymity to each other, in exchange for sybil resistance any protocol can rely on.
         </p>
       </div>
     </section>
@@ -167,28 +167,22 @@
     <section id="protocols" class="section section--protocols">
       <h2>For protocols</h2>
       <p class="section__lede">
-        A single mapping lookup gives any contract or off-chain service two things:
-        whether a wallet is attested to a real human, and a stable per-passport identifier
-        for deduplication. No SDK, no off-chain attestation server — just a public on-chain read.
+        Any contract or off-chain service gets two things from one read: whether there's a real person behind a wallet, and a stable ID for that person. No SDK to install. No attestation server to call. The registry is just public state on Base.
       </p>
 
       <div class="pillars">
         <div class="pillar">
           <span class="pillar__tag">Personhood</span>
-          <h3>One-line gating</h3>
+          <h3>Personhood check</h3>
           <p>
-            <code>isVerified(wallet)</code> returns <code>true</code> if a real human is currently
-            attested behind that address. Use it to gate airdrop claims, faucet drips, governance
-            actions, onboarding bonuses — anywhere bots and farms break your unit economics.
+            <code>isVerified(wallet)</code> returns <code>true</code> when there's a real person currently attested to the address. Drop it in front of an airdrop claim, a faucet, a governance vote, a signup bonus. Wallets without a human behind them get filtered out.
           </p>
         </div>
         <div class="pillar">
           <span class="pillar__tag">Sybil resistance</span>
           <h3>One passport, one share</h3>
           <p>
-            <code>nullifierOf(wallet)</code> returns a stable opaque identifier — same value
-            for every wallet a person has sigilized. Track it in a <code>seen[]</code> set
-            and a single passport can only participate once, no matter how many wallets it controls.
+            <code>nullifierOf(wallet)</code> returns a stable per-person ID. Same value for every wallet that person has sigilized. Track it in a <code>seen[]</code> set and one passport participates once, no matter how many wallets it controls.
           </p>
         </div>
       </div>
@@ -198,60 +192,58 @@
           <span class="snippet__lang">Solidity</span>
           <span class="snippet__caption">Standard integration pattern</span>
         </div>
-<pre><code><span class="hl-com">// Gate on real personhood AND ensure one share per passport.</span>
+<pre><code><span class="hl-com">// Gate on personhood, then dedupe by passport.</span>
 <span class="hl-kw">if</span> (!sigil.isVerified(msg.sender)) <span class="hl-kw">revert</span> NotVerified();
 
 <span class="hl-typ">bytes32</span> nullifier = sigil.nullifierOf(msg.sender);
 <span class="hl-kw">if</span> (claimed[nullifier]) <span class="hl-kw">revert</span> AlreadyClaimed();
 claimed[nullifier] = <span class="hl-kw">true</span>;
 
-<span class="hl-com">// ... proceed with the per-human action.</span></code></pre>
+<span class="hl-com">// ... continue with the action.</span></code></pre>
       </div>
 
-      <h3 class="usecases__title">What this unlocks</h3>
+      <h3 class="usecases__title">Where it fits</h3>
       <div class="usecases">
         <div class="usecase">
           <span class="usecase__icon" aria-hidden="true">⤓</span>
           <h4>Airdrops</h4>
-          <p>One claim per real human, even when they hold ten wallets.</p>
+          <p>One claim per person, even if they have ten wallets.</p>
         </div>
         <div class="usecase">
           <span class="usecase__icon" aria-hidden="true">⊙</span>
           <h4>DAO voting</h4>
-          <p>One-person-one-vote without KYC, plain Sybil-resistant tallies.</p>
+          <p>One vote per person. No KYC.</p>
         </div>
         <div class="usecase">
           <span class="usecase__icon" aria-hidden="true">⊞</span>
           <h4>Quadratic funding</h4>
-          <p>Matching pools that aren't gameable by spinning up wallets.</p>
+          <p>Matching pools that don't break when someone spins up 50 wallets.</p>
         </div>
         <div class="usecase">
           <span class="usecase__icon" aria-hidden="true">⌬</span>
           <h4>Onboarding rewards</h4>
-          <p>Per-person sign-up bonuses that don't get farmed into the ground.</p>
+          <p>Sign-up bonuses that aren't farmed into the ground.</p>
         </div>
         <div class="usecase">
           <span class="usecase__icon" aria-hidden="true">◇</span>
           <h4>Reputation &amp; reviews</h4>
-          <p>One verifiable opinion per real person, not per generated identity.</p>
+          <p>One review per person, not per fake account.</p>
         </div>
         <div class="usecase">
           <span class="usecase__icon" aria-hidden="true">⊜</span>
           <h4>Rate limiting</h4>
-          <p>Per-human quotas instead of per-wallet — bots can't outscale you.</p>
+          <p>Per-person quotas instead of per-wallet. A wallet farm gets you nowhere.</p>
         </div>
       </div>
 
       <p class="protocols__note">
-        Off-chain works the same way: any backend can <code>eth_call</code> the registry
-        before issuing an API key, validating a signup, or accepting a review.
-        Reads are free and don't touch the user's phone.
+        Off-chain works the same way. A backend can <code>eth_call</code> the registry before issuing an API key or validating a signup. The read is just public state, no roundtrip to the user's device.
       </p>
     </section>
 
     <section class="section section--cta">
       <h2>Get the app</h2>
-      <p class="section__lede">Coming soon to iOS and Android.</p>
+      <p class="section__lede">iOS and Android, soon.</p>
       <div class="cta-row">
         <a href="#" class="store store--ios" aria-label="Download for iOS">
           <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true">
@@ -286,7 +278,7 @@ claimed[nullifier] = <span class="hl-kw">true</span>;
         <a href="#" class="cta--github">GitHub</a>
         <a href="https://sepolia.basescan.org/address/0x6f692eba653ef8ff9048cbf5555bd700c78b414f" target="_blank" rel="noopener noreferrer">Contract</a>
       </nav>
-      <p class="footer__small">Experimental, testnet only. No warranty, no guarantees.</p>
+      <p class="footer__small">Experimental. Testnet only. Use at your own risk.</p>
     </div>
   </footer>
 </body>
