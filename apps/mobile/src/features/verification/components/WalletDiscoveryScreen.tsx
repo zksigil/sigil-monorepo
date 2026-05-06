@@ -35,6 +35,27 @@ function decimalToBytes32(decimal: string): `0x${string}` {
   return `0x${BigInt(decimal).toString(16).padStart(64, '0')}` as `0x${string}`;
 }
 
+/**
+ * Translate raw error messages from the discovery flow into something a user
+ * can act on. Falls back to the raw message (truncated) for unrecognized errors.
+ */
+function humanizeDiscoveryError(raw: string | null, chainName: string): string {
+  if (!raw) return 'Could not look up wallets for this passport.';
+  if (raw.includes('Mopro native module not available')) {
+    return 'The on-device prover is not loaded. Try restarting the app.';
+  }
+  if (raw.includes('No registry deployed')) {
+    return `Sigil isn't deployed on ${chainName}. Switch your wallet to a supported chain and try again.`;
+  }
+  if (raw.includes('No RPC configured')) {
+    return `Couldn't reach ${chainName}. Check your internet connection and try again.`;
+  }
+  if (/network|fetch|timeout|ECONNREFUSED/i.test(raw)) {
+    return 'Network request failed. Check your connection and try again.';
+  }
+  return raw;
+}
+
 export function WalletDiscoveryScreen(): React.JSX.Element {
   const route = useRoute<RootStackRouteProp<'WalletDiscovery'>>();
   const navigation = useNavigation<RootStackNavigationProp<'WalletDiscovery'>>();
@@ -121,7 +142,7 @@ export function WalletDiscoveryScreen(): React.JSX.Element {
           <Text className="text-5xl">⚠️</Text>
           <Text className="text-dracula-red text-lg font-semibold">Discovery Failed</Text>
           <Text className="text-dracula-comment text-sm text-center max-w-xs">
-            {errorMessage ?? 'Could not look up wallets for this passport.'}
+            {humanizeDiscoveryError(errorMessage, queryChainName)}
           </Text>
           <Pressable
             onPress={handleDone}
@@ -134,29 +155,38 @@ export function WalletDiscoveryScreen(): React.JSX.Element {
     );
   }
 
-  // step === 'done'
+  // step === 'done' — distinct visual treatment for found vs empty so the
+  // celebratory checkmark only shows when there's actually something to find.
+  const isEmpty = wallets.length === 0;
   return (
     <SafeAreaView className="flex-1 bg-dracula-bg" edges={['bottom']}>
       <ScrollView className="flex-1 px-6 py-6" contentContainerClassName="pb-8">
         <View className="items-center mb-6">
-          <View className="w-20 h-20 rounded-full bg-dracula-green/20 items-center justify-center mb-4">
-            <Text className="text-4xl">✓</Text>
+          <View
+            className={`w-20 h-20 rounded-full items-center justify-center mb-4 ${
+              isEmpty ? 'bg-dracula-surface' : 'bg-dracula-green/20'
+            }`}
+          >
+            <Text className={`text-4xl ${isEmpty ? 'opacity-70' : ''}`}>
+              {isEmpty ? '🔎' : '✓'}
+            </Text>
           </View>
           <Text className="text-dracula-fg text-xl font-bold">
-            {wallets.length === 0
+            {isEmpty
               ? 'No sigilized wallets'
               : `${wallets.length} sigilized ${wallets.length === 1 ? 'wallet' : 'wallets'} found`}
           </Text>
           <Text className="text-dracula-comment/70 text-xs mt-1">on {queryChainName}</Text>
         </View>
 
-        {wallets.length === 0 ? (
-          <View className="bg-dracula-surface rounded-2xl px-5 py-6 items-center mb-6">
-            <Text className="text-dracula-comment text-sm text-center leading-5">
-              This passport has not sigilized any wallets on {queryChainName}.
-              {'\n'}
-              {'\n'}
-              If you sigilized on a different chain, switch your wallet network and try again.
+        {isEmpty ? (
+          <View className="bg-dracula-surface rounded-2xl px-5 py-5 mb-6 gap-y-2">
+            <Text className="text-dracula-fg/80 text-sm font-semibold">
+              Why am I seeing this?
+            </Text>
+            <Text className="text-dracula-comment text-xs leading-5">
+              Either this passport has never been sigilized, or you sigilized on a different
+              chain. Switch your wallet network to {queryChainName === 'Base Sepolia' ? 'Base mainnet' : 'Base Sepolia'} and tap "Find my sigilized wallets" again to check there.
             </Text>
           </View>
         ) : (
