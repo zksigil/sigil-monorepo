@@ -4,7 +4,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import { useAccount, useChainId } from 'wagmi';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import type { RootStackNavigationProp } from '../../../app/navigation/types';
+import type { RegistrationMode, RootStackNavigationProp } from '../../../app/navigation/types';
 import { useWalletConnection } from '../hooks/useWalletConnection';
 import { useChainGuard } from '../hooks/useChainGuard';
 import { useTrackedAccounts } from '../hooks/useTrackedAccounts';
@@ -25,9 +25,9 @@ export function HomeScreen(): React.JSX.Element {
   const chainName = CHAIN_DISPLAY_NAMES[chainId] ?? `Chain ${chainId}`;
   const openWallet = useOpenWallet();
 
-  const [pending, setPending] = useState<{ address: `0x${string}` } | null>(null);
+  const [pending, setPending] = useState<{ address: `0x${string}`; mode: RegistrationMode } | null>(null);
   const [educationOpen, setEducationOpen] = useState(false);
-  const [educationTarget, setEducationTarget] = useState<`0x${string}` | null>(null);
+  const [educationTarget, setEducationTarget] = useState<{ address: `0x${string}`; mode: RegistrationMode } | null>(null);
 
   useFocusEffect(useCallback(() => { refetch(); }, [refetch]));
 
@@ -43,13 +43,13 @@ export function HomeScreen(): React.JSX.Element {
   const sigilizedCount = accounts.filter((a) => a.isVerified).length;
 
   // Once the wallet has switched to the requested address, navigate.
-  const proceedToScan = useCallback((address: `0x${string}`) => {
+  const proceedToScan = useCallback((address: `0x${string}`, mode: RegistrationMode) => {
     if (activeAddress?.toLowerCase() === address.toLowerCase()) {
-      navigation.navigate('PassportScan');
+      navigation.navigate('PassportScan', { mode });
       return;
     }
     const short = `${address.slice(0, 6)}…${address.slice(-4)}`;
-    setPending({ address });
+    setPending({ address, mode });
     Alert.alert(
       'Switch Account',
       `Switch your active wallet account to ${short} to continue.`,
@@ -60,18 +60,18 @@ export function HomeScreen(): React.JSX.Element {
     );
   }, [activeAddress, navigation, openWallet]);
 
-  const handleSigilize = useCallback(async (address: `0x${string}`) => {
-    // Show the education modal the first time, unless the user has dismissed it before
-    // OR they already have at least one sigilized wallet (so they've seen the consequence).
-    if (sigilizedCount === 0) {
+  const handleSigilize = useCallback(async (address: `0x${string}`, mode: RegistrationMode) => {
+    // Education modal only on the user's *first* fresh registration. Renewals
+    // and re-sigilizes always skip it — user has already seen the consequence.
+    if (mode === 'register' && sigilizedCount === 0) {
       const dismissed = await AsyncStorage.getItem(FIRST_SIGILIZE_DISMISSED_KEY);
       if (!dismissed) {
-        setEducationTarget(address);
+        setEducationTarget({ address, mode });
         setEducationOpen(true);
         return;
       }
     }
-    proceedToScan(address);
+    proceedToScan(address, mode);
   }, [proceedToScan, sigilizedCount]);
 
   const handleEducationContinue = useCallback(async () => {
@@ -79,7 +79,7 @@ export function HomeScreen(): React.JSX.Element {
     const target = educationTarget;
     setEducationOpen(false);
     setEducationTarget(null);
-    if (target) proceedToScan(target);
+    if (target) proceedToScan(target.address, target.mode);
   }, [educationTarget, proceedToScan]);
 
   const handleEducationCancel = useCallback(() => {
@@ -90,8 +90,9 @@ export function HomeScreen(): React.JSX.Element {
   // Once the wallet switches to the pending address, proceed.
   React.useEffect(() => {
     if (pending && activeAddress?.toLowerCase() === pending.address.toLowerCase()) {
+      const { mode } = pending;
       setPending(null);
-      navigation.navigate('PassportScan');
+      navigation.navigate('PassportScan', { mode });
     }
   }, [activeAddress, pending, navigation]);
 
@@ -149,6 +150,7 @@ export function HomeScreen(): React.JSX.Element {
                   key={account.address}
                   account={account}
                   linkedSiblings={accounts}
+                  isActive={activeAddress?.toLowerCase() === account.address.toLowerCase()}
                   onSigilize={handleSigilize}
                   onUnregistered={refetch}
                 />

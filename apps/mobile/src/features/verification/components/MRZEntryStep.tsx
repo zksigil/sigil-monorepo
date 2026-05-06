@@ -46,9 +46,10 @@ interface Props {
   mrz: MRZInput;
   onChange: (mrz: MRZInput) => void;
   onContinue: () => void;
+  mode: 'register' | 'renew';
 }
 
-export function MRZEntryStep({ mrz, onChange, onContinue }: Props): React.JSX.Element {
+export function MRZEntryStep({ mrz, onChange, onContinue, mode }: Props): React.JSX.Element {
   const [activeTab, setActiveTab] = useState<Tab>('manual');
   const [cameraPermission, requestCameraPermission] = useCameraPermissions();
   const cameraRef = useRef<CameraView>(null);
@@ -66,9 +67,13 @@ export function MRZEntryStep({ mrz, onChange, onContinue }: Props): React.JSX.El
 
   return (
     <>
-      <Text className="text-dracula-fg text-2xl font-bold mb-2">Scan Passport</Text>
+      <Text className="text-dracula-fg text-2xl font-bold mb-2">
+        {mode === 'renew' ? 'Renew Sigil' : 'Scan Passport'}
+      </Text>
       <Text className="text-dracula-comment text-sm mb-6">
-        Enter your passport MRZ details to enable NFC reading
+        {mode === 'renew'
+          ? 'Re-tap your passport to extend the registration on this wallet.'
+          : 'Enter your passport MRZ details to enable NFC reading'}
       </Text>
 
       <View className="flex-row mb-6 rounded-xl overflow-hidden bg-dracula-surface">

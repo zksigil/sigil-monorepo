@@ -1,7 +1,7 @@
 import React, { useCallback, useState } from 'react';
 import { View, Text, Pressable, ActivityIndicator } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
-import type { RootStackNavigationProp } from '../../../app/navigation/types';
+import type { RegistrationMode, RootStackNavigationProp } from '../../../app/navigation/types';
 import { useNFCReader } from '../hooks/useNFCReader';
 import type { NFCError, NFCReadResult } from '../../../infrastructure/nfc';
 import type { MRZInput } from '../services/mrzParser';
@@ -25,13 +25,14 @@ interface NFCSuccessResult {
 interface Props {
   mrz: MRZInput;
   onBack: () => void;
+  mode: RegistrationMode;
 }
 
 function getErrorMessage(error: NFCError): string {
   return error.message;
 }
 
-export function NFCScanStep({ mrz, onBack }: Props): React.JSX.Element {
+export function NFCScanStep({ mrz, onBack, mode }: Props): React.JSX.Element {
   const navigation = useNavigation<RootStackNavigationProp<'PassportScan'>>();
   const { readPassport, cancelScan } = useNFCReader();
 
@@ -86,6 +87,7 @@ export function NFCScanStep({ mrz, onBack }: Props): React.JSX.Element {
     // Dev-only skip — invalid DG1/SOD bytes route useProofGeneration to the
     // stub fallback. Only works against MockProofVerifier on anvil.
     navigation.navigate('ProofGeneration', {
+      mode,
       passportData: {
         documentNumber: 'AB1234567',
         dateOfBirth: '900101',
@@ -95,11 +97,12 @@ export function NFCScanStep({ mrz, onBack }: Props): React.JSX.Element {
         rawSODHex: 'deadbeef' + '00'.repeat(252),
       },
     });
-  }, [navigation]);
+  }, [navigation, mode]);
 
   const handleContinueToProof = useCallback(() => {
     if (!nfcResult) return;
     navigation.navigate('ProofGeneration', {
+      mode,
       passportData: {
         documentNumber: nfcResult.data.documentNumber,
         dateOfBirth: nfcResult.data.dateOfBirth,
@@ -109,7 +112,7 @@ export function NFCScanStep({ mrz, onBack }: Props): React.JSX.Element {
         rawSODHex: nfcResult.rawSODHex ?? '',
       },
     });
-  }, [navigation, nfcResult]);
+  }, [navigation, nfcResult, mode]);
 
   return (
     <>

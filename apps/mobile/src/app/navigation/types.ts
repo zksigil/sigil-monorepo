@@ -10,13 +10,21 @@ export interface PassportMRZData {
   readonly rawSODHex: string;      // hex-encoded SOD bytes from NFC
 }
 
+/**
+ * Distinguishes between a fresh registration and extending an existing one.
+ * Both paths take the same passport scan + proof; only the contract function
+ * (register vs renew) and some labelling differ.
+ */
+export type RegistrationMode = 'register' | 'renew';
+
 export type RootStackParamList = {
   Home: undefined;
-  PassportScan: undefined;
-  ProofGeneration: { passportData: PassportMRZData };
+  PassportScan: { mode?: RegistrationMode } | undefined;
+  ProofGeneration: { passportData: PassportMRZData; mode: RegistrationMode };
   VerificationSuccess: {
     txHash: `0x${string}`;
     verifiedAddress: `0x${string}`;
+    mode: RegistrationMode;
   };
 };
 

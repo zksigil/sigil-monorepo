@@ -1,6 +1,8 @@
 import React, { useCallback, useState } from 'react';
 import { ScrollView } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { useRoute } from '@react-navigation/native';
+import type { RootStackRouteProp } from '../../../app/navigation/types';
 import { MRZEntryStep } from './MRZEntryStep';
 import { NFCScanStep } from './NFCScanStep';
 import type { MRZInput } from '../services/mrzParser';
@@ -15,6 +17,9 @@ const EMPTY_MRZ: MRZInput = {
 };
 
 export function PassportScanScreen(): React.JSX.Element {
+  const route = useRoute<RootStackRouteProp<'PassportScan'>>();
+  const mode = route.params?.mode ?? 'register';
+
   const [step, setStep] = useState<Step>('mrz-entry');
   const [mrz, setMrz] = useState<MRZInput>(EMPTY_MRZ);
 
@@ -29,9 +34,9 @@ export function PassportScanScreen(): React.JSX.Element {
         keyboardShouldPersistTaps="handled"
       >
         {step === 'mrz-entry' ? (
-          <MRZEntryStep mrz={mrz} onChange={setMrz} onContinue={handleContinueToNFC} />
+          <MRZEntryStep mrz={mrz} onChange={setMrz} onContinue={handleContinueToNFC} mode={mode} />
         ) : (
-          <NFCScanStep mrz={mrz} onBack={handleBackToMRZ} />
+          <NFCScanStep mrz={mrz} onBack={handleBackToMRZ} mode={mode} />
         )}
       </ScrollView>
     </SafeAreaView>
