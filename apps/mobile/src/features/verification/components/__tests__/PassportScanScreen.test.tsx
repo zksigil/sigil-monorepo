@@ -112,7 +112,7 @@ describe('PassportScanScreen', () => {
   });
 
   describe('Camera tab — permission granted', () => {
-    it('shows CameraView with MRZ guide when permission is granted', () => {
+    it('shows CameraView with status pill when permission is granted', () => {
       setPermission({ granted: true, canAskAgain: true });
       const { getByText } = render(<PassportScanScreen />);
 
