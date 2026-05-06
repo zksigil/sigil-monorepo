@@ -181,7 +181,7 @@ function getPublicClient(chainId: number) {
 export function ProofGenerationScreen(): React.JSX.Element {
   const route = useRoute<RootStackRouteProp<'ProofGeneration'>>();
   const navigation = useNavigation<RootStackNavigationProp<'ProofGeneration'>>();
-  const { passportData } = route.params;
+  const { passportData, mode } = route.params;
 
   const { address } = useAccount();
   const chainId = useChainId();
@@ -252,8 +252,9 @@ export function ProofGenerationScreen(): React.JSX.Element {
     navigation.navigate('VerificationSuccess', {
       txHash: hash,
       verifiedAddress: wallet,
+      mode,
     });
-  }, [navigation]);
+  }, [navigation, mode]);
 
   useEffect(() => {
     if (isConfirmed && txHash && address) {
@@ -337,10 +338,11 @@ export function ProofGenerationScreen(): React.JSX.Element {
 
     // passportExpiry is uint48 — viem types this as `number` in the generated ABI;
     // a unix-second uint48 fits comfortably in Number.MAX_SAFE_INTEGER (2^53-1).
+    // register() and renew() take identical args; only the function name differs.
     const call = {
       address: registryAddress,
       abi: VERIFICATION_REGISTRY_ABI,
-      functionName: 'register' as const,
+      functionName: mode,
       args: [
         decimalOrHexToBytes32(proofResult.nullifier),
         decimalOrHexToBytes32(proofResult.epochNullifier),
@@ -348,12 +350,13 @@ export function ProofGenerationScreen(): React.JSX.Element {
         proofResult.zkProof.proof,
       ] as const,
       chainId: supportedChainId,
-    };
+    } as const;
 
     try {
-      console.log('[TX] Simulating register to', registryAddress);
+      console.log(`[TX] Simulating ${mode} to`, registryAddress);
       console.log('[TX-CAST-ARGS]', JSON.stringify({
         registry: registryAddress,
+        mode,
         nullifier: decimalOrHexToBytes32(proofResult.nullifier),
         epochNullifier: decimalOrHexToBytes32(proofResult.epochNullifier),
         passportExpiry: Number(proofResult.zkProof.passportExpiry),
@@ -367,9 +370,9 @@ export function ProofGenerationScreen(): React.JSX.Element {
       return;
     }
 
-    console.log('[TX] Simulation passed, submitting register');
+    console.log(`[TX] Simulation passed, submitting ${mode}`);
     writeContract(call);
-  }, [proofResult, address, chainId, switchChainAsync, writeContract]);
+  }, [proofResult, address, chainId, switchChainAsync, writeContract, mode]);
 
   // -------------------------------------------------------------------------
   // Generating state
@@ -560,7 +563,7 @@ export function ProofGenerationScreen(): React.JSX.Element {
           className="w-full rounded-2xl py-4 items-center bg-dracula-purple active:bg-dracula-purple/80"
         >
           <Text className="text-dracula-fg text-base font-semibold">
-            Submit Sigilization
+            {mode === 'renew' ? 'Submit Renewal' : 'Submit Sigilization'}
           </Text>
         </Pressable>
       </ScrollView>

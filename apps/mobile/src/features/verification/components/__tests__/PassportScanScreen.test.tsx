@@ -9,6 +9,7 @@ import { PassportScanScreen } from '../PassportScanScreen';
 const mockNavigate = jest.fn();
 jest.mock('@react-navigation/native', () => ({
   useNavigation: () => ({ navigate: mockNavigate }),
+  useRoute: () => ({ params: undefined }),
 }));
 
 const mockReadPassport = jest.fn();
