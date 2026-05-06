@@ -11,7 +11,11 @@ import { useTrackedAccounts } from '../hooks/useTrackedAccounts';
 import { useOpenWallet } from '../hooks/useOpenWallet';
 import { AccountRow } from './AccountRow';
 import { PreConnectInfo } from './PreConnectInfo';
-import { CHAIN_DISPLAY_NAMES } from '../../../shared/constants/chains';
+import { CHAIN_DISPLAY_NAMES, SUPPORTED_CHAIN_IDS } from '../../../shared/constants/chains';
+import { CONTRACT_ADDRESSES } from '../../../infrastructure/blockchain/contracts';
+import type { SupportedChainId } from '../../../shared/constants/chains';
+
+const ZERO_ADDR = '0x0000000000000000000000000000000000000000';
 
 const FIRST_SIGILIZE_DISMISSED_KEY = 'sigil:first-sigilize-dismissed:v1';
 
@@ -19,10 +23,14 @@ export function HomeScreen(): React.JSX.Element {
   const navigation = useNavigation<RootStackNavigationProp<'Home'>>();
   const { isConnected, isConnecting, connect, disconnect } = useWalletConnection();
   const { isWrongChain, switchToBaseSepolia, switchToAnvil } = useChainGuard();
-  const { accounts, isLoading, refetch } = useTrackedAccounts();
+  const { accounts, refetch } = useTrackedAccounts();
   const { address: activeAddress } = useAccount();
   const chainId = useChainId();
   const chainName = CHAIN_DISPLAY_NAMES[chainId] ?? `Chain ${chainId}`;
+  const isChainSupported = (SUPPORTED_CHAIN_IDS as readonly number[]).includes(chainId);
+  const registryDeployedHere = isChainSupported
+    ? CONTRACT_ADDRESSES[chainId as SupportedChainId].verificationRegistry !== ZERO_ADDR
+    : false;
   const openWallet = useOpenWallet();
 
   // Tapping the connected pill offers both available actions: switching the
@@ -147,26 +155,38 @@ export function HomeScreen(): React.JSX.Element {
               Accounts
             </Text>
 
-            {isLoading ? (
-              <ActivityIndicator color="#6272a4" />
-            ) : accounts.length === 0 ? (
-              <View className="bg-dracula-surface/50 rounded-2xl px-4 py-6 items-center">
-                <Text className="text-dracula-comment/50 text-sm">
-                  No accounts found in wallet
+            {accounts.length === 0 ? (
+              <View className="bg-dracula-surface/50 rounded-2xl px-4 py-6 gap-y-1.5">
+                <Text className="text-dracula-fg text-sm font-semibold text-center">
+                  No accounts authorized
+                </Text>
+                <Text className="text-dracula-comment/70 text-xs text-center leading-4">
+                  Open your wallet to authorize one or more accounts for this app, then tap
+                  Disconnect and reconnect.
                 </Text>
               </View>
-            ) : (
-              accounts.map((account) => (
-                <AccountRow
-                  key={account.address}
-                  account={account}
-                  linkedSiblings={accounts}
-                  isActive={activeAddress?.toLowerCase() === account.address.toLowerCase()}
-                  onSigilize={handleSigilize}
-                  onUnregistered={refetch}
-                />
-              ))
-            )}
+            ) : !registryDeployedHere && isChainSupported ? (
+              // Chain is supported by the app but no registry is deployed there.
+              <View className="bg-dracula-yellow/10 border border-dracula-yellow/40 rounded-2xl px-4 py-3 gap-y-1">
+                <Text className="text-dracula-yellow text-xs font-semibold">
+                  Sigil isn't deployed on {chainName}
+                </Text>
+                <Text className="text-dracula-comment/80 text-xs leading-4">
+                  Switch to Base Sepolia (or Base mainnet) to view sigil status for these accounts.
+                </Text>
+              </View>
+            ) : null}
+
+            {accounts.map((account) => (
+              <AccountRow
+                key={account.address}
+                account={account}
+                linkedSiblings={accounts}
+                isActive={activeAddress?.toLowerCase() === account.address.toLowerCase()}
+                onSigilize={handleSigilize}
+                onUnregistered={refetch}
+              />
+            ))}
           </View>
         )}
 

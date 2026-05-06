@@ -26,6 +26,12 @@ export interface TrackedAccount {
    * the user reconnects with the matching account.
    */
   isInWallet: boolean;
+  /**
+   * True while the on-chain status (isVerified / expiry / nullifier) is still
+   * being fetched. Used to render a loading chip instead of the default
+   * "Not sigilized" state, which would be misleading mid-fetch.
+   */
+  isStatusLoading: boolean;
 }
 
 function isSupportedChain(chainId: number): chainId is SupportedChainId {
@@ -64,12 +70,11 @@ function getPublicClient(chainId: number) {
 
 export function useTrackedAccounts(): {
   accounts: TrackedAccount[];
-  isLoading: boolean;
   refetch: () => void;
 } {
   const chainId = useChainId();
   const { addresses } = useAccount();
-  const { addresses: externalAddresses } = useTrackedExternalAddresses();
+  const { addresses: externalAddresses, isHydrated: externalHydrated } = useTrackedExternalAddresses();
 
   // Build the merged address list. Wallet addresses are kept in their wagmi
   // order (first); externally-tracked addresses that aren't already in the
@@ -84,7 +89,12 @@ export function useTrackedAccounts(): {
 
   const mergedAddresses = useMemo<`0x${string}`[]>(() => {
     const wallet = addresses ? ([...new Set(addresses)] as `0x${string}`[]) : [];
-    const external = externalAddresses.filter((a) => !walletAddressSet.has(a.toLowerCase()));
+    // Don't surface external addresses before AsyncStorage finishes hydrating
+    // — otherwise tracked addresses briefly disappear on first paint after
+    // app launch, causing a confusing list jump.
+    const external = externalHydrated
+      ? externalAddresses.filter((a) => !walletAddressSet.has(a.toLowerCase()))
+      : [];
     const merged: `0x${string}`[] = [...wallet, ...external];
     if (merged.length === 0) {
       stableOrderRef.current = null;
@@ -100,35 +110,54 @@ export function useTrackedAccounts(): {
     }
     return stableOrderRef.current;
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [JSON.stringify(addresses), JSON.stringify(externalAddresses), walletAddressSet]);
+  }, [JSON.stringify(addresses), JSON.stringify(externalAddresses), externalHydrated, walletAddressSet]);
 
-  const [accounts, setAccounts] = useState<TrackedAccount[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
-  const hasFetchedRef = useRef(false);
+  // Synchronous stub list — rows render immediately from mergedAddresses with
+  // isStatusLoading=true; fetchStatus replaces them in place when on-chain
+  // reads resolve. This kills the spinner → empty → list flash on first paint.
+  const stubAccounts = useMemo<TrackedAccount[]>(() => mergedAddresses.map((addr) => ({
+    address: addr,
+    shortAddress: `${addr.slice(0, 6)}...${addr.slice(-4)}`,
+    isVerified: false,
+    expiry: null,
+    nullifier: null,
+    isInWallet: walletAddressSet.has(addr.toLowerCase()),
+    isStatusLoading: true,
+  })), [mergedAddresses, walletAddressSet]);
+
+  const [accounts, setAccounts] = useState<TrackedAccount[]>(stubAccounts);
   const fetchIdRef = useRef(0);
 
+  // Whenever the address set changes, immediately surface the stubs so the user
+  // sees rows for the new addresses while the on-chain status loads.
+  useEffect(() => {
+    setAccounts(stubAccounts);
+  }, [stubAccounts]);
+
   const fetchStatus = useCallback(async () => {
-    if (!isSupportedChain(chainId) || mergedAddresses.length === 0) {
-      setAccounts(mergedAddresses.map((addr) => ({
-        address: addr,
-        shortAddress: `${addr.slice(0, 6)}...${addr.slice(-4)}`,
-        isVerified: false,
-        expiry: null,
-        nullifier: null,
-        isInWallet: walletAddressSet.has(addr.toLowerCase()),
-      })));
-      setIsLoading(false);
+    // Wrong chain: leave isStatusLoading=true so rows show "Loading…" rather
+    // than misleadingly claiming "Not sigilized". The HomeScreen also shows a
+    // prominent Wrong Network banner above, which is the user's actual cue.
+    if (!isSupportedChain(chainId)) return;
+
+    if (mergedAddresses.length === 0) return;
+
+    const client = getPublicClient(chainId);
+    if (!client) {
+      setAccounts((prev) => prev.map((a) => ({ ...a, isStatusLoading: false })));
       return;
     }
 
-    const client = getPublicClient(chainId);
-    if (!client) { setIsLoading(false); return; }
-
     const contractAddress = CONTRACT_ADDRESSES[chainId].verificationRegistry;
-    if (contractAddress === '0x0000000000000000000000000000000000000000') { setIsLoading(false); return; }
+    if (contractAddress === '0x0000000000000000000000000000000000000000') {
+      // Chain is supported but the registry isn't deployed there yet — surface
+      // the rows with a known-empty status so chips render concretely, and let
+      // the HomeScreen banner explain why.
+      setAccounts((prev) => prev.map((a) => ({ ...a, isStatusLoading: false })));
+      return;
+    }
 
     const id = ++fetchIdRef.current;
-    if (!hasFetchedRef.current) setIsLoading(true);
 
     try {
       const results = await Promise.all(
@@ -162,19 +191,20 @@ export function useTrackedAccounts(): {
             expiry: expiry as bigint | null,
             nullifier: nullifierVal && nullifierVal !== ZERO_NULLIFIER ? nullifierVal : null,
             isInWallet: walletAddressSet.has(addr.toLowerCase()),
+            isStatusLoading: false,
           };
         }),
       );
 
       if (id === fetchIdRef.current) {
-        hasFetchedRef.current = true;
         setAccounts(results);
       }
     } catch (err) {
       console.error('[ACCOUNTS] Failed to fetch verification status:', err);
-    } finally {
+      // Mark stubs as no-longer-loading so rows show the "unknown" state rather
+      // than a perpetual spinner.
       if (id === fetchIdRef.current) {
-        setIsLoading(false);
+        setAccounts((prev) => prev.map((a) => ({ ...a, isStatusLoading: false })));
       }
     }
   }, [chainId, mergedAddresses, walletAddressSet]);
@@ -194,7 +224,6 @@ export function useTrackedAccounts(): {
 
   return {
     accounts,
-    isLoading,
     refetch: () => { void fetchStatus(); },
   };
 }

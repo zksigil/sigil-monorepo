@@ -35,6 +35,8 @@ async function save(addresses: Addr[]): Promise<void> {
 
 export interface UseTrackedExternalAddresses {
   addresses: Addr[];
+  /** False on first render before AsyncStorage has been read; true thereafter. */
+  isHydrated: boolean;
   /** Add an address. Lowercases and dedupes; no-op if already present. */
   add: (address: `0x${string}`) => Promise<void>;
   /** Remove an address. No-op if not present. */
@@ -43,9 +45,13 @@ export interface UseTrackedExternalAddresses {
 
 export function useTrackedExternalAddresses(): UseTrackedExternalAddresses {
   const [addresses, setAddresses] = useState<Addr[]>([]);
+  const [isHydrated, setIsHydrated] = useState(false);
 
   useEffect(() => {
-    void load().then(setAddresses);
+    void load().then((loaded) => {
+      setAddresses(loaded);
+      setIsHydrated(true);
+    });
   }, []);
 
   const add = useCallback(async (address: `0x${string}`) => {
@@ -69,5 +75,5 @@ export function useTrackedExternalAddresses(): UseTrackedExternalAddresses {
     });
   }, []);
 
-  return { addresses, add, remove };
+  return { addresses, isHydrated, add, remove };
 }

@@ -213,7 +213,11 @@ export function AccountRow({ account, linkedSiblings, isActive, onSigilize, onUn
             </Text>
           )}
         </View>
-        <StatusChip state={state} expirySec={expirySec} nowSec={nowSec} compact={!expanded} />
+        {account.isStatusLoading ? (
+          <LoadingChip />
+        ) : (
+          <StatusChip state={state} expirySec={expirySec} nowSec={nowSec} compact={!expanded} />
+        )}
         <View
           style={{
             marginLeft: 10,
@@ -233,41 +237,50 @@ export function AccountRow({ account, linkedSiblings, isActive, onSigilize, onUn
 
       {expanded && (
         <View className="px-4 pb-4 pt-0 gap-y-3">
-          <ExpandedDetail state={state} expirySec={expirySec} nowSec={nowSec} />
-
-          {linkedSiblingCount > 0 && (
-            <Text className="text-dracula-comment/60 text-xs">
-              Linked to {linkedSiblingCount} other sigilized {linkedSiblingCount === 1 ? 'wallet' : 'wallets'} on-chain.
-            </Text>
-          )}
-
-          {isExternal && (
-            <View className="bg-dracula-bg/40 rounded-xl px-3 py-2.5 gap-y-1">
-              <Text className="text-dracula-comment text-xs font-semibold">
-                Not in connected wallet
-              </Text>
-              <Text className="text-dracula-comment/70 text-xs leading-4">
-                You're tracking this address from a passport-recovery scan. Connect the wallet
-                that holds it to sigilize, renew, or unregister.
-              </Text>
-            </View>
-          )}
-
-          {isConfirming ? (
+          {account.isStatusLoading ? (
             <View className="flex-row items-center justify-center py-3 gap-x-2">
-              <ActivityIndicator size="small" color="#bd93f9" />
-              <Text className="text-dracula-comment text-sm">Submitting…</Text>
+              <ActivityIndicator size="small" color="#6272a4" />
+              <Text className="text-dracula-comment text-xs">Loading status…</Text>
             </View>
-          ) : isExternal ? (
-            <DestructiveButton label="Stop tracking" onPress={handleStopTracking} />
           ) : (
-            <Actions
-              state={state}
-              onSigilize={handleSigilize}
-              onReSigilize={handleReSigilize}
-              onRenew={handleRenew}
-              onUnregister={handleUnregister}
-            />
+            <>
+              <ExpandedDetail state={state} expirySec={expirySec} nowSec={nowSec} />
+
+              {linkedSiblingCount > 0 && (
+                <Text className="text-dracula-comment/60 text-xs">
+                  Linked to {linkedSiblingCount} other sigilized {linkedSiblingCount === 1 ? 'wallet' : 'wallets'} on-chain.
+                </Text>
+              )}
+
+              {isExternal && (
+                <View className="bg-dracula-bg/40 rounded-xl px-3 py-2.5 gap-y-1">
+                  <Text className="text-dracula-comment text-xs font-semibold">
+                    Not in connected wallet
+                  </Text>
+                  <Text className="text-dracula-comment/70 text-xs leading-4">
+                    You're tracking this address from a passport-recovery scan. Connect the wallet
+                    that holds it to sigilize, renew, or unregister.
+                  </Text>
+                </View>
+              )}
+
+              {isConfirming ? (
+                <View className="flex-row items-center justify-center py-3 gap-x-2">
+                  <ActivityIndicator size="small" color="#bd93f9" />
+                  <Text className="text-dracula-comment text-sm">Submitting…</Text>
+                </View>
+              ) : isExternal ? (
+                <DestructiveButton label="Stop tracking" onPress={handleStopTracking} />
+              ) : (
+                <Actions
+                  state={state}
+                  onSigilize={handleSigilize}
+                  onReSigilize={handleReSigilize}
+                  onRenew={handleRenew}
+                  onUnregister={handleUnregister}
+                />
+              )}
+            </>
           )}
         </View>
       )}
@@ -278,6 +291,26 @@ export function AccountRow({ account, linkedSiblings, isActive, onSigilize, onUn
 // ---------------------------------------------------------------------------
 // Status chip — compact summary shown in the header
 // ---------------------------------------------------------------------------
+
+/** Placeholder chip while on-chain status is being fetched. */
+function LoadingChip(): React.JSX.Element {
+  return (
+    <View
+      style={{
+        backgroundColor: 'rgba(98,114,164,0.20)',
+        borderRadius: 999,
+        paddingHorizontal: 10,
+        paddingVertical: 4,
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 6,
+      }}
+    >
+      <ActivityIndicator size="small" color="#8a92b2" />
+      <Text style={{ color: '#8a92b2', fontSize: 11, fontWeight: '600' }}>Loading…</Text>
+    </View>
+  );
+}
 
 function StatusChip({ state, expirySec, nowSec, compact }: { state: AccountState; expirySec: number; nowSec: number; compact: boolean }): React.JSX.Element {
   const tone = STATE_TONE[state];
