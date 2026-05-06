@@ -43,6 +43,7 @@
     <nav class="nav__links">
       <a href="#how">How it works</a>
       <a href="#privacy">Privacy</a>
+      <a href="#protocols">For protocols</a>
       <a href="#" class="cta--github" aria-label="GitHub repository">GitHub</a>
     </nav>
   </header>
@@ -161,6 +162,91 @@
           Wallets you don't sigilize stay anonymous. This is an explicit, opt-in design choice: simple, auditable sybil resistance in exchange for cross-wallet linkability of accounts you choose to attest.
         </p>
       </div>
+    </section>
+
+    <section id="protocols" class="section section--protocols">
+      <h2>For protocols</h2>
+      <p class="section__lede">
+        A single mapping lookup gives any contract or off-chain service two things:
+        whether a wallet is attested to a real human, and a stable per-passport identifier
+        for deduplication. No SDK, no off-chain attestation server — just a public on-chain read.
+      </p>
+
+      <div class="pillars">
+        <div class="pillar">
+          <span class="pillar__tag">Personhood</span>
+          <h3>One-line gating</h3>
+          <p>
+            <code>isVerified(wallet)</code> returns <code>true</code> if a real human is currently
+            attested behind that address. Use it to gate airdrop claims, faucet drips, governance
+            actions, onboarding bonuses — anywhere bots and farms break your unit economics.
+          </p>
+        </div>
+        <div class="pillar">
+          <span class="pillar__tag">Sybil resistance</span>
+          <h3>One passport, one share</h3>
+          <p>
+            <code>nullifierOf(wallet)</code> returns a stable opaque identifier — same value
+            for every wallet a person has sigilized. Track it in a <code>seen[]</code> set
+            and a single passport can only participate once, no matter how many wallets it controls.
+          </p>
+        </div>
+      </div>
+
+      <div class="snippet">
+        <div class="snippet__header">
+          <span class="snippet__lang">Solidity</span>
+          <span class="snippet__caption">Standard integration pattern</span>
+        </div>
+<pre><code><span class="hl-com">// Gate on real personhood AND ensure one share per passport.</span>
+<span class="hl-kw">if</span> (!sigil.isVerified(msg.sender)) <span class="hl-kw">revert</span> NotVerified();
+
+<span class="hl-typ">bytes32</span> nullifier = sigil.nullifierOf(msg.sender);
+<span class="hl-kw">if</span> (claimed[nullifier]) <span class="hl-kw">revert</span> AlreadyClaimed();
+claimed[nullifier] = <span class="hl-kw">true</span>;
+
+<span class="hl-com">// ... proceed with the per-human action.</span></code></pre>
+      </div>
+
+      <h3 class="usecases__title">What this unlocks</h3>
+      <div class="usecases">
+        <div class="usecase">
+          <span class="usecase__icon" aria-hidden="true">⤓</span>
+          <h4>Airdrops</h4>
+          <p>One claim per real human, even when they hold ten wallets.</p>
+        </div>
+        <div class="usecase">
+          <span class="usecase__icon" aria-hidden="true">⊙</span>
+          <h4>DAO voting</h4>
+          <p>One-person-one-vote without KYC, plain Sybil-resistant tallies.</p>
+        </div>
+        <div class="usecase">
+          <span class="usecase__icon" aria-hidden="true">⊞</span>
+          <h4>Quadratic funding</h4>
+          <p>Matching pools that aren't gameable by spinning up wallets.</p>
+        </div>
+        <div class="usecase">
+          <span class="usecase__icon" aria-hidden="true">⌬</span>
+          <h4>Onboarding rewards</h4>
+          <p>Per-person sign-up bonuses that don't get farmed into the ground.</p>
+        </div>
+        <div class="usecase">
+          <span class="usecase__icon" aria-hidden="true">◇</span>
+          <h4>Reputation &amp; reviews</h4>
+          <p>One verifiable opinion per real person, not per generated identity.</p>
+        </div>
+        <div class="usecase">
+          <span class="usecase__icon" aria-hidden="true">⊜</span>
+          <h4>Rate limiting</h4>
+          <p>Per-human quotas instead of per-wallet — bots can't outscale you.</p>
+        </div>
+      </div>
+
+      <p class="protocols__note">
+        Off-chain works the same way: any backend can <code>eth_call</code> the registry
+        before issuing an API key, validating a signup, or accepting a review.
+        Reads are free and don't touch the user's phone.
+      </p>
     </section>
 
     <section class="section section--cta">
