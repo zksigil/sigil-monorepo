@@ -44,6 +44,7 @@
       <a href="#how">How it works</a>
       <a href="#privacy">Privacy</a>
       <a href="#protocols">For protocols</a>
+      <a href="#about">About</a>
       <a href="#" class="cta--github" aria-label="GitHub repository">GitHub</a>
     </nav>
   </header>
@@ -56,13 +57,14 @@
       </div>
 
       <h1 class="hero__title">
-        Proof of personhood,<br />
-        <span class="grad-text">by passport.</span>
+        Tap your passport.<br />
+        <span class="grad-text">Get a real-person ID for any wallet.</span>
       </h1>
 
       <p class="hero__lede">
-        Tap your passport on your phone. The app builds a zero-knowledge proof locally
-        and writes only an opaque hash to chain. The passport itself never leaves the device.
+        Sigil is an app and a smart contract. The app turns your passport into an opaque,
+        anonymous ID for any wallet you own. The contract lets any other app or service verify
+        that ID with one on-chain read. The passport itself never leaves your phone.
       </p>
 
       <div class="cta-row">
@@ -106,6 +108,44 @@
         Experimental. Testnet only, on
         <a href="https://sepolia.basescan.org/address/0x6f692eba653ef8ff9048cbf5555bd700c78b414f" target="_blank" rel="noopener noreferrer">Base Sepolia</a>.
       </p>
+    </section>
+
+    <section id="audiences" class="section section--audiences">
+      <h2>Two sides, one mapping</h2>
+      <p class="section__lede">
+        Sigil works the same way whether you're someone who wants their wallets attested,
+        or a protocol that wants to filter for real people.
+      </p>
+      <div class="audiences">
+        <div class="audience">
+          <span class="audience__tag">For people</span>
+          <h3>You tap once. Your wallets get verified.</h3>
+          <p>
+            One passport tap creates a stable, opaque ID. Sigilize the wallets you want
+            to attest, and they all share that ID on-chain. Wallets you leave alone stay
+            anonymous. Pay gas; that's it.
+          </p>
+          <ul class="audience__list">
+            <li>Get your fair share of airdrops, votes, and signups instead of having them diluted by bots.</li>
+            <li>No name, DOB, or passport number ever touches the chain.</li>
+            <li>Unregister any time.</li>
+          </ul>
+        </div>
+        <div class="audience">
+          <span class="audience__tag">For protocols</span>
+          <h3>One mapping read. No SDK.</h3>
+          <p>
+            Two free view functions on a public Solidity contract. <code>isVerified(wallet)</code>
+            tells you a real person is behind a wallet. <code>nullifierOf(wallet)</code> returns
+            a stable per-passport key for deduping airdrops, votes, signups by person.
+          </p>
+          <ul class="audience__list">
+            <li>No off-chain attestation server to run, no API key to manage.</li>
+            <li>Bound to <code>msg.sender</code> in the proof — proofs aren't transferable.</li>
+            <li>Off-chain backends can <code>eth_call</code> the same registry.</li>
+          </ul>
+        </div>
+      </div>
     </section>
 
     <section id="how" class="section">
@@ -167,7 +207,7 @@
     <section id="protocols" class="section section--protocols">
       <h2>For protocols</h2>
       <p class="section__lede">
-        Any contract or off-chain service gets two things from one read: whether there's a real person behind a wallet, and a stable ID for that person. No SDK to install. No attestation server to call. The registry is just public state on Base.
+        Here's what a typical integration looks like.
       </p>
 
       <div class="pillars">
@@ -239,6 +279,51 @@ claimed[nullifier] = <span class="hl-kw">true</span>;
       <p class="protocols__note">
         Off-chain works the same way. A backend can <code>eth_call</code> the registry before issuing an API key or validating a signup. The read is just public state, no roundtrip to the user's device.
       </p>
+    </section>
+
+    <section id="about" class="section section--about">
+      <h2>Behind the scenes</h2>
+      <p class="section__lede">
+        The honest version: who runs Sigil, who pays for what, and where it goes from here.
+      </p>
+      <div class="about">
+        <div class="about__row">
+          <h3>Who's running it</h3>
+          <p>
+            Sigil is an open-source side project. The mobile app, the Solidity contracts, the
+            Noir circuit, and the Mopro bridge are all in
+            <a href="#" class="cta--github">one GitHub repo</a>. There's no company behind it
+            and no token. The smart contracts are immutable once deployed; nobody can change
+            their behavior, not even the author.
+          </p>
+        </div>
+        <div class="about__row">
+          <h3>Who pays</h3>
+          <p>
+            Users pay gas to register and unregister, and that's all. <code>isVerified()</code>
+            and <code>nullifierOf()</code> are <code>view</code> functions, so protocols pay
+            nothing for reads. There are no usage fees, subscriptions, or per-call charges
+            today.
+          </p>
+        </div>
+        <div class="about__row">
+          <h3>Where this is going</h3>
+          <p>
+            Currently testnet only on Base Sepolia. Mainnet deployment is pending until a
+            renewal flow lands in the app and a couple of audit follow-ups are merged. If a
+            protocol fee gets added in a future version, it'll be opt-in and disclosed before
+            anything is shipped.
+          </p>
+        </div>
+        <div class="about__row">
+          <h3>How to help</h3>
+          <p>
+            Try it on Sepolia, file an issue with what breaks, or send a PR.
+            If you're building a protocol that wants to integrate, the contract addresses
+            and ABIs are in the repo.
+          </p>
+        </div>
+      </div>
     </section>
 
     <section class="section section--cta">
