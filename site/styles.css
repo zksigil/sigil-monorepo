@@ -380,15 +380,17 @@ main {
 .audience__tag {
   display: inline-block;
   font-family: var(--font-mono);
-  font-size: 0.7rem;
-  letter-spacing: 0.12em;
+  font-size: 1rem;
+  letter-spacing: 0.18em;
   text-transform: uppercase;
-  padding: 4px 10px;
-  border-radius: 999px;
-  background: var(--bg-soft);
-  border: 1px solid var(--line-soft);
-  color: var(--fg-dim);
-  margin-bottom: 16px;
+  font-weight: 700;
+  background: var(--grad);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  margin-bottom: 22px;
+  padding: 0;
+  border: 0;
 }
 .audience h3 {
   font-size: 1.2rem;
