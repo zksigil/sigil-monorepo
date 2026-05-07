@@ -318,6 +318,48 @@ export function generateStubProof(input: StubProofInput): StubProofOutput {
   };
 }
 
+/**
+ * Derive the on-chain sigil nullifier for a passport WITHOUT generating a
+ * proof or running off-circuit RSA verification. Used by the wallet-discovery
+ * flow: tap passport → compute nullifier → call `getWallets(nullifier)`.
+ *
+ * The nullifier output of `compute_sigil_inputs` depends only on `dg1Hash` and
+ * `sodHash` (it's `Poseidon2([Poseidon2([dg1, sod]), 1])`). All the other
+ * inputs are packaged into the proof-input vector but don't affect the
+ * returned `.nullifier` — so we pass zero-filled buffers for them. The
+ * returned `inputs` array is malformed but we discard it.
+ */
+export async function computeNullifierOnly(rawDG1Hex: string, rawSODHex: string): Promise<string> {
+  const Mopro = loadMoproModule();
+  const dg1Hash = sha256ToField(stripHexPrefix(rawDG1Hex));
+  const sodHash = sha256ToField(stripHexPrefix(rawSODHex));
+
+  // Zero-filled stand-ins — required by the function signature, but the
+  // nullifier doesn't read them.
+  const zeros = (n: number): ArrayBuffer => new Uint8Array(n).buffer as ArrayBuffer;
+
+  const result = await Mopro.computeSigilInputs(
+    dg1Hash,
+    sodHash,
+    '0',                              // epoch_day
+    zeros(SIGNED_ATTRS_MAX_LEN), 0,   // signed_attrs, signed_attrs_len
+    zeros(256),                        // signature
+    zeros(256),                        // pubkey
+    zeros(257),                        // redc_param
+    65537,                             // exponent
+    zeros(DSC_TBS_MAX_LEN), 0, 0,     // dsc_tbs, dsc_tbs_len, dsc_pubkey_offset
+    zeros(CSCA_MODULUS_LEN),          // csca_pubkey
+    zeros(513),                        // csca_redc_param
+    65537,                             // csca_exponent
+    zeros(CSCA_SIGNATURE_LEN),        // csca_signature
+    new Array(9).fill('0'),            // csca_merkle_siblings
+    0,                                 // csca_leaf_index
+    '0',                               // hashed_address
+    '0',                               // csca_merkle_root
+  );
+  return result.nullifier;
+}
+
 // ---------------------------------------------------------------------------
 // Internal helpers
 // ---------------------------------------------------------------------------

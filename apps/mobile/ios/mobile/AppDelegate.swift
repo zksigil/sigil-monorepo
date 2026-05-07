@@ -23,10 +23,18 @@ public class AppDelegate: ExpoAppDelegate {
 
 #if os(iOS) || os(tvOS)
     window = UIWindow(frame: UIScreen.main.bounds)
+    // Match the JS-side splash + dracula canvas (#282a36) so we don't flash
+    // white between the storyboard dismissing and React Native's first paint.
+    let canvas = UIColor(red: 40/255, green: 42/255, blue: 54/255, alpha: 1)
+    window?.backgroundColor = canvas
     factory.startReactNative(
       withModuleName: "main",
       in: window,
       launchOptions: launchOptions)
+    // RCTRootView (added to the window by the factory) defaults to white and
+    // paints over our window background until the JS tree renders. Recolour
+    // it so even mid-bundle-load the screen stays dark.
+    window?.rootViewController?.view.backgroundColor = canvas
 #endif
 
     return super.application(application, didFinishLaunchingWithOptions: launchOptions)

@@ -9,6 +9,7 @@ import { PassportScanScreen } from '../PassportScanScreen';
 const mockNavigate = jest.fn();
 jest.mock('@react-navigation/native', () => ({
   useNavigation: () => ({ navigate: mockNavigate }),
+  useRoute: () => ({ params: undefined }),
 }));
 
 const mockReadPassport = jest.fn();
@@ -112,7 +113,7 @@ describe('PassportScanScreen', () => {
   });
 
   describe('Camera tab — permission granted', () => {
-    it('shows CameraView with MRZ guide when permission is granted', () => {
+    it('shows CameraView with status pill when permission is granted', () => {
       setPermission({ granted: true, canAskAgain: true });
       const { getByText } = render(<PassportScanScreen />);
 
