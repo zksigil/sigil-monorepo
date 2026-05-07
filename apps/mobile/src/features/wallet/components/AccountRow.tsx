@@ -53,12 +53,19 @@ interface Props {
   linkedSiblings: TrackedAccount[];
   /** True when this is the wallet's currently-active address. */
   isActive: boolean;
+  /**
+   * Latest chain block.timestamp (unix seconds). Sourced from useTrackedAccounts
+   * so renewable/expired state and "X days left" track chain time, not the
+   * device wall clock — required for fast-forwarded anvil to exercise the
+   * renewal flow. Falls back to wall clock before the first chain read lands.
+   */
+  nowSec: number;
   /** Navigate to the scan flow for register / re-register / renew. */
   onSigilize: (address: `0x${string}`, mode: RegistrationMode) => void;
   onUnregistered: () => void;
 }
 
-export function AccountRow({ account, linkedSiblings, isActive, onSigilize, onUnregistered }: Props): React.JSX.Element {
+export function AccountRow({ account, linkedSiblings, isActive, nowSec, onSigilize, onUnregistered }: Props): React.JSX.Element {
   const { address: activeAddress } = useAccount();
   const chainId = useChainId();
   const { switchChainAsync } = useSwitchChain();
@@ -70,7 +77,6 @@ export function AccountRow({ account, linkedSiblings, isActive, onSigilize, onUn
   const [expanded, setExpanded] = useState(false);
   const [txHash, setTxHash] = useState<`0x${string}` | undefined>();
   const [pendingUnregister, setPendingUnregister] = useState(false);
-  const nowSec = Math.floor(Date.now() / 1000);
 
   const state = computeState(account, nowSec);
   const expirySec = account.expiry ? Number(account.expiry) : 0;
