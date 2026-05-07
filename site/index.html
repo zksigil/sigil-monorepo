@@ -58,12 +58,12 @@
 
       <h1 class="hero__title">
         Tap your passport.<br />
-        <span class="grad-text">Get a real-person ID for any wallet.</span>
+        <span class="grad-text">Get a real-person ID for any address.</span>
       </h1>
 
       <p class="hero__lede">
         Sigil is an app and a smart contract. The app turns your passport into a unique,
-        opaque ID — one ID per passport, no matter how many wallets you sigilize. The contract
+        opaque ID — one ID per passport, no matter how many addresses you sigilize. The contract
         lets any other app verify that ID in one on-chain read. They don't integrate anything;
         they just point users here.
       </p>
@@ -115,17 +115,17 @@
     <section id="audiences" class="section section--audiences">
       <h2>Two sides, one mapping</h2>
       <p class="section__lede">
-        Sigil works the same way whether you're someone who wants their wallets attested,
+        Sigil works the same way whether you're someone who wants their addresses attested,
         or a protocol that wants to filter for real people.
       </p>
       <div class="audiences">
         <div class="audience">
           <span class="audience__tag">For people</span>
-          <h3>You tap once. Your wallets get verified.</h3>
+          <h3>You tap once. Your addresses get verified.</h3>
           <p>
             Your passport produces one stable, opaque ID — the same value every time, for
-            this passport only. Attach it to as many wallets as you own; they all share that
-            ID on-chain. Wallets you leave alone stay anonymous.
+            this passport only. Attach it to as many addresses as you own; they all share that
+            ID on-chain. Addresses you leave alone stay anonymous.
           </p>
           <ul class="audience__list">
             <li>Get your fair share of airdrops, votes, and signups instead of having them diluted by bots.</li>
@@ -138,14 +138,14 @@
           <h3>Tell users to sigilize. Read one mapping.</h3>
           <p>
             That's the integration. No SDK to install, no QR code to host, no proof to verify
-            on your end. Once a user sigilizes their wallet here, any contract or backend can
-            read <code>isVerified(wallet)</code> for personhood and <code>nullifierOf(wallet)</code>
+            on your end. Once a user sigilizes their address here, any contract or backend can
+            read <code>isVerified(address)</code> for personhood and <code>nullifierOf(address)</code>
             for sybil dedup.
           </p>
           <ul class="audience__list">
             <li>Two free Solidity view functions, no API key to manage.</li>
             <li>Each passport produces exactly one nullifier — that's what makes dedup work.</li>
-            <li>Proofs are bound to <code>msg.sender</code>, so they can't be reused on a different wallet.</li>
+            <li>Proofs are bound to <code>msg.sender</code>, so they can't be reused on a different address.</li>
           </ul>
         </div>
       </div>
@@ -167,7 +167,7 @@
         <li>
           <span class="step__num">03</span>
           <h3>Register on-chain</h3>
-          <p>Submit the proof to the registry. From then on, any contract or service can call <code>isVerified(wallet)</code> for personhood, or <code>nullifierOf(wallet)</code> to dedupe by passport.</p>
+          <p>Submit the proof to the registry. From then on, any contract or service can call <code>isVerified(address)</code> for personhood, or <code>nullifierOf(address)</code> to dedupe by passport.</p>
         </li>
       </ol>
     </section>
@@ -182,7 +182,7 @@
           <h4>Stored on-chain</h4>
           <ul>
             <li>An opaque nullifier (one-way hash of your passport secret)</li>
-            <li>The wallet address that registered it</li>
+            <li>The address that registered it</li>
             <li>A registration timestamp and expiry, rounded to 90-day buckets</li>
             <li>The zero-knowledge proof itself</li>
           </ul>
@@ -201,11 +201,11 @@
       <div class="tradeoff">
         <h3>How linkability works</h3>
         <p>
-          Every wallet you sigilize with the same passport shares the same on-chain ID. That's
+          Every address you sigilize with the same passport shares the same on-chain ID. That's
           the mechanism: same passport, same ID, anywhere it shows up. As a result, anyone reading
-          the chain can tell which of your sigilized wallets are linked to each other. It's a
+          the chain can tell which of your sigilized addresses are linked to each other. It's a
           real privacy cost, and it's the trade Sigil makes to keep verification a single mapping
-          read for any protocol. Wallets you don't sigilize are unaffected; they stay pseudonymous.
+          read for any protocol. Addresses you don't sigilize are unaffected; they stay pseudonymous.
         </p>
       </div>
     </section>
@@ -221,14 +221,14 @@
           <span class="pillar__tag">Personhood</span>
           <h3>Personhood check</h3>
           <p>
-            <code>isVerified(wallet)</code> returns <code>true</code> when there's a real person currently attested to the address. Drop it in front of an airdrop claim, a faucet, a governance vote, a signup bonus. Wallets without a human behind them get filtered out.
+            <code>isVerified(address)</code> returns <code>true</code> when there's a real person currently attested to the address. Drop it in front of an airdrop claim, a faucet, a governance vote, a signup bonus. Addresses without a human behind them get filtered out.
           </p>
         </div>
         <div class="pillar">
           <span class="pillar__tag">Sybil resistance</span>
           <h3>One passport, one share</h3>
           <p>
-            <code>nullifierOf(wallet)</code> returns a stable per-person ID. Same value for every wallet that person has sigilized. Track it in a <code>seen[]</code> set and one passport participates once, no matter how many wallets it controls.
+            <code>nullifierOf(address)</code> returns a stable per-person ID. Same value for every address that person has sigilized. Track it in a <code>seen[]</code> set and one passport participates once, no matter how many addresses it controls.
           </p>
         </div>
       </div>
@@ -253,7 +253,7 @@ claimed[nullifier] = <span class="hl-kw">true</span>;
         <div class="usecase">
           <span class="usecase__icon" aria-hidden="true">⤓</span>
           <h4>Airdrops</h4>
-          <p>One claim per person, even if they have ten wallets.</p>
+          <p>One claim per person, even if they have ten addresses.</p>
         </div>
         <div class="usecase">
           <span class="usecase__icon" aria-hidden="true">⊙</span>
@@ -263,7 +263,7 @@ claimed[nullifier] = <span class="hl-kw">true</span>;
         <div class="usecase">
           <span class="usecase__icon" aria-hidden="true">⊞</span>
           <h4>Quadratic funding</h4>
-          <p>Matching pools that don't break when someone spins up 50 wallets.</p>
+          <p>Matching pools that don't break when someone spins up 50 addresses.</p>
         </div>
         <div class="usecase">
           <span class="usecase__icon" aria-hidden="true">⌬</span>
@@ -278,7 +278,7 @@ claimed[nullifier] = <span class="hl-kw">true</span>;
         <div class="usecase">
           <span class="usecase__icon" aria-hidden="true">⊜</span>
           <h4>Rate limiting</h4>
-          <p>Per-person quotas instead of per-wallet. A wallet farm gets you nowhere.</p>
+          <p>Per-person quotas instead of per-address. Spinning up new addresses gets you nowhere.</p>
         </div>
       </div>
 
