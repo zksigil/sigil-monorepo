@@ -1029,3 +1029,161 @@ function oidToHashAlgo(oidHex: string): string | null {
   if (oidHex === '2a864886f70d010105') return 'SHA-1';
   return null;
 }
+
+// ---------------------------------------------------------------------------
+// Compatibility inspection (non-throwing)
+// ---------------------------------------------------------------------------
+//
+// parseSod() above throws when the DSC SPKI isn't RSA. This inspector exists
+// so the NFC flow can detect "passport not yet supported" cases (ECDSA DSC,
+// RSA-1024/3072/4096 DSC, ECDSA CSCA, RSA-2048/3072 CSCA) right after the tap
+// finishes — instead of letting the user wait through proof generation only
+// to hit a cryptic error deep inside the prover.
+//
+// We support exactly RSA-2048 DSCs and RSA-4096 CSCAs today (sizes are baked
+// into the Noir circuit + Mopro bridge).
+
+const REQUIRED_DSC_BITS = 2048;
+const REQUIRED_CSCA_BITS = 4096;
+
+const ECDSA_SIG_OIDS: Record<string, string> = {
+  // ecdsa-with-SHA224: 1.2.840.10045.4.3.1
+  '2a8648ce3d040301': 'ECDSA-SHA224',
+  // ecdsa-with-SHA256: 1.2.840.10045.4.3.2
+  '2a8648ce3d040302': 'ECDSA-SHA256',
+  // ecdsa-with-SHA384: 1.2.840.10045.4.3.3
+  '2a8648ce3d040303': 'ECDSA-SHA384',
+  // ecdsa-with-SHA512: 1.2.840.10045.4.3.4
+  '2a8648ce3d040304': 'ECDSA-SHA512',
+};
+
+const RSA_SIG_OIDS = new Set([
+  '2a864886f70d010105', // sha1WithRSAEncryption
+  '2a864886f70d01010b', // sha256WithRSAEncryption
+  '2a864886f70d01010c', // sha384WithRSAEncryption
+  '2a864886f70d01010d', // sha512WithRSAEncryption
+  '2a864886f70d01010a', // RSASSA-PSS
+]);
+
+export type PassportCompatibility =
+  | { supported: true }
+  | {
+      supported: false;
+      /**
+       * - dsc_not_rsa:    DSC public key is not RSA (e.g. ECDSA).
+       * - dsc_rsa_size:   DSC is RSA but at a bit size we don't support yet.
+       * - csca_not_rsa:   CSCA signed the DSC with a non-RSA algorithm.
+       * - csca_rsa_size:  CSCA is RSA but at a bit size we don't support yet.
+       * - sod_malformed:  We couldn't parse enough of the SOD to decide.
+       */
+      reason: 'dsc_not_rsa' | 'dsc_rsa_size' | 'csca_not_rsa' | 'csca_rsa_size' | 'sod_malformed';
+      /** User-facing label, e.g. "ECDSA" or "RSA-1024". */
+      algorithm: string;
+      /** Bit size when known (RSA cases). */
+      bits?: number;
+    };
+
+/**
+ * Inspect a SOD and decide whether Sigil can prove it. Detection-only —
+ * never throws, never mutates state, never makes network requests. Runs the
+ * existing DSC->CSCA chain probe to determine CSCA bit size when DSC is RSA.
+ *
+ * Note on the "valid: false" CSCA path: when the chain probe finds no
+ * matching CSCA in our trust list (after we've confirmed DSC is RSA-2048),
+ * we deliberately return `supported: true` and let the existing proof flow
+ * surface that error. "Unknown CSCA" is a different bucket from
+ * "unsupported algorithm" and we don't want this gate to swallow it.
+ */
+export async function inspectPassportCompatibility(sodHex: string): Promise<PassportCompatibility> {
+  let certs: Uint8Array[];
+  try {
+    certs = extractSodCertificates(sodHex);
+  } catch {
+    return { supported: false, reason: 'sod_malformed', algorithm: 'unknown' };
+  }
+  if (certs.length === 0) {
+    return { supported: false, reason: 'sod_malformed', algorithm: 'unknown' };
+  }
+
+  const dsc = parseCertificate(certs[0]!);
+  if (!dsc) {
+    return { supported: false, reason: 'sod_malformed', algorithm: 'unknown' };
+  }
+
+  // 1. DSC subject public key — RSA at the right bit size?
+  if (!dsc.modulus) {
+    return { supported: false, reason: 'dsc_not_rsa', algorithm: 'ECDSA' };
+  }
+  const dscBits = dsc.modulus.length * 8;
+  if (dscBits !== REQUIRED_DSC_BITS) {
+    return { supported: false, reason: 'dsc_rsa_size', algorithm: `RSA-${dscBits}`, bits: dscBits };
+  }
+
+  // 2. DSC signatureAlgorithm OID = how the CSCA signed the DSC. ECDSA here
+  //    means the CSCA is ECDSA and we'd need a different verifier.
+  if (dsc.sigAlgOid && ECDSA_SIG_OIDS[dsc.sigAlgOid]) {
+    return { supported: false, reason: 'csca_not_rsa', algorithm: 'ECDSA' };
+  }
+  if (dsc.sigAlgOid && !RSA_SIG_OIDS.has(dsc.sigAlgOid)) {
+    return { supported: false, reason: 'csca_not_rsa', algorithm: `unrecognized (OID ${dsc.sigAlgOid})` };
+  }
+
+  // 3. Chain probe to lock in CSCA bit size.
+  const dscExponent = dsc.exponent ?? 65537;
+  let chain: ChainVerificationResult;
+  try {
+    chain = await verifyDSCChain(dsc.modulus, dscExponent, certs);
+  } catch (e) {
+    console.warn('[COMPAT] chain probe threw:', e instanceof Error ? e.message : String(e));
+    return { supported: true };
+  }
+
+  if (chain.valid && chain.cscaModulusHex) {
+    const cscaBits = (chain.cscaModulusHex.length / 2) * 8;
+    if (cscaBits !== REQUIRED_CSCA_BITS) {
+      return { supported: false, reason: 'csca_rsa_size', algorithm: `RSA-${cscaBits}`, bits: cscaBits };
+    }
+  }
+
+  return { supported: true };
+}
+
+/**
+ * Walk a SOD's CMS SignedData and return the raw certificate DER blobs.
+ * Unlike parseSod(), this never tries to extract an RSA modulus, so it
+ * survives ECDSA / non-2048 DSCs.
+ */
+function extractSodCertificates(sodHex: string): Uint8Array[] {
+  const hex = sodHex.startsWith('0x') ? sodHex.slice(2) : sodHex;
+  const data = hexToBytes(hex);
+
+  const pos = findInnerContentInfo(data);
+  const contentInfo = readTagLength(data, pos);
+  assertTag(data, pos, TAG_SEQUENCE, 'ContentInfo');
+
+  const oid = readTagLength(data, contentInfo.contentStart);
+  assertTag(data, contentInfo.contentStart, TAG_OID, 'ContentInfo OID');
+  const oidBytes = data.slice(oid.contentStart, oid.contentStart + oid.length);
+  if (!arraysEqual(oidBytes, SIGNED_DATA_OID)) {
+    throw new Error('SOD is not CMS SignedData');
+  }
+
+  const ctx0 = readTagLength(data, oid.end);
+  assertTag(data, oid.end, TAG_CONTEXT_0, 'SignedData [0] wrapper');
+
+  const signedData = readTagLength(data, ctx0.contentStart);
+  assertTag(data, ctx0.contentStart, TAG_SEQUENCE, 'SignedData');
+
+  let cursor = signedData.contentStart;
+  const end = signedData.end;
+
+  cursor = readTagLength(data, cursor).end;            // version INTEGER
+  cursor = readTagLength(data, cursor).end;            // digestAlgorithms SET
+  cursor = readTagLength(data, cursor).end;            // encapContentInfo SEQUENCE
+
+  if (cursor < end && data[cursor] === TAG_CONTEXT_0) {
+    const certs = readTagLength(data, cursor);
+    return extractAllCertificates(data, certs);
+  }
+  return [];
+}

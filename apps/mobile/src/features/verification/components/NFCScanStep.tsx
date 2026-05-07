@@ -5,8 +5,9 @@ import type { RegistrationMode, RootStackNavigationProp, ScanMode } from '../../
 import { useNFCReader } from '../hooks/useNFCReader';
 import type { NFCError, NFCReadResult } from '../../../infrastructure/nfc';
 import type { MRZInput } from '../services/mrzParser';
+import { inspectPassportCompatibility, type PassportCompatibility } from '../../../infrastructure/sod/parseSod';
 
-type NFCScanState = 'ready' | 'scanning' | 'success' | 'error';
+type NFCScanState = 'ready' | 'scanning' | 'checking' | 'success' | 'unsupported' | 'error';
 
 interface NFCSuccessData {
   documentNumber: string;
@@ -39,11 +40,13 @@ export function NFCScanStep({ mrz, onBack, mode }: Props): React.JSX.Element {
   const [scanState, setScanState] = useState<NFCScanState>('ready');
   const [nfcResult, setNfcResult] = useState<NFCSuccessResult | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [unsupported, setUnsupported] = useState<PassportCompatibility | null>(null);
   const [debugExpanded, setDebugExpanded] = useState(true);
 
   const handleBeginScan = useCallback(async () => {
     setScanState('scanning');
     setErrorMessage(null);
+    setUnsupported(null);
     try {
       const result: NFCReadResult = await readPassport({
         documentNumber: mrz.documentNumber,
@@ -59,8 +62,19 @@ export function NFCScanStep({ mrz, onBack, mode }: Props): React.JSX.Element {
           bacUsed: result.bacUsed,
         };
         setNfcResult(successResult);
-        setScanState('success');
         console.log('[SCAN] NFC OK — DG1', successResult.rawDG1Hex?.length ?? 0, 'SOD', successResult.rawSODHex?.length ?? 0);
+
+        if (successResult.rawSODHex) {
+          setScanState('checking');
+          const compat = await inspectPassportCompatibility(successResult.rawSODHex);
+          if (!compat.supported) {
+            console.log('[SCAN] Passport incompatible:', compat.reason, compat.algorithm);
+            setUnsupported(compat);
+            setScanState('unsupported');
+            return;
+          }
+        }
+        setScanState('success');
       } else {
         setErrorMessage(getErrorMessage(result.error));
         setScanState('error');
@@ -82,6 +96,10 @@ export function NFCScanStep({ mrz, onBack, mode }: Props): React.JSX.Element {
     setScanState('ready');
     setErrorMessage(null);
   }, []);
+
+  const handleBackHome = useCallback(() => {
+    navigation.popToTop();
+  }, [navigation]);
 
   const handleDevSkip = useCallback(() => {
     // Dev-only skip — invalid DG1/SOD bytes route useProofGeneration to the
@@ -132,6 +150,8 @@ export function NFCScanStep({ mrz, onBack, mode }: Props): React.JSX.Element {
 
         {scanState === 'scanning' && <ScanningState onCancel={handleCancel} />}
 
+        {scanState === 'checking' && <CheckingState />}
+
         {scanState === 'success' && nfcResult && (
           <SuccessState
             mrz={mrz}
@@ -145,6 +165,10 @@ export function NFCScanStep({ mrz, onBack, mode }: Props): React.JSX.Element {
               : 'Continue to Proof Generation'
             }
           />
+        )}
+
+        {scanState === 'unsupported' && unsupported && !unsupported.supported && (
+          <UnsupportedState compat={unsupported} onBackHome={handleBackHome} />
         )}
 
         {scanState === 'error' && (
@@ -201,6 +225,40 @@ function ScanningState({ onCancel }: { onCancel: () => void }): React.JSX.Elemen
         className="w-full rounded-2xl py-4 items-center bg-dracula-surface/70 active:bg-dracula-comment/40"
       >
         <Text className="text-dracula-fg text-base font-semibold">Cancel</Text>
+      </Pressable>
+    </>
+  );
+}
+
+function CheckingState(): React.JSX.Element {
+  return (
+    <>
+      <View className="w-32 h-32 rounded-full bg-dracula-purple/20 items-center justify-center">
+        <ActivityIndicator size="large" color="#818CF8" />
+      </View>
+      <Text className="text-dracula-fg text-lg font-semibold">Checking compatibility...</Text>
+    </>
+  );
+}
+
+function UnsupportedState({ compat, onBackHome }: { compat: PassportCompatibility & { supported: false }; onBackHome: () => void }): React.JSX.Element {
+  return (
+    <>
+      <View className="w-24 h-24 rounded-full bg-dracula-orange/20 items-center justify-center">
+        <Text className="text-5xl">ℹ️</Text>
+      </View>
+      <Text className="text-dracula-fg text-lg font-semibold">Passport not supported yet</Text>
+      <Text className="text-dracula-comment text-sm text-center max-w-xs leading-5">
+        Your passport uses {compat.algorithm}, which Sigil will support in the future.
+      </Text>
+      <Text className="text-dracula-comment/60 text-xs text-center max-w-xs leading-5">
+        Sigil currently supports passports signed with RSA-2048 chained to RSA-4096 country signing keys.
+      </Text>
+      <Pressable
+        onPress={onBackHome}
+        className="w-full rounded-2xl py-4 items-center bg-dracula-purple active:bg-dracula-purple/80"
+      >
+        <Text className="text-dracula-fg text-base font-semibold">Back to Home</Text>
       </Pressable>
     </>
   );
