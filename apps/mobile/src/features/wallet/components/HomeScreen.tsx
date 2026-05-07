@@ -23,7 +23,7 @@ export function HomeScreen(): React.JSX.Element {
   const navigation = useNavigation<RootStackNavigationProp<'Home'>>();
   const { isConnected, isConnecting, connect, disconnect } = useWalletConnection();
   const { isWrongChain, switchToBaseSepolia, switchToAnvil } = useChainGuard();
-  const { accounts, refetch } = useTrackedAccounts();
+  const { accounts, nowSec, refetch } = useTrackedAccounts();
   const { address: activeAddress } = useAccount();
   const chainId = useChainId();
   const chainName = CHAIN_DISPLAY_NAMES[chainId] ?? `Chain ${chainId}`;
@@ -183,6 +183,7 @@ export function HomeScreen(): React.JSX.Element {
                 account={account}
                 linkedSiblings={accounts}
                 isActive={activeAddress?.toLowerCase() === account.address.toLowerCase()}
+                nowSec={nowSec}
                 onSigilize={handleSigilize}
                 onUnregistered={refetch}
               />

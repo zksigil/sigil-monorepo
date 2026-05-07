@@ -70,6 +70,17 @@ function getPublicClient(chainId: number) {
 
 export function useTrackedAccounts(): {
   accounts: TrackedAccount[];
+  /**
+   * Latest block.timestamp seen on the connected chain (unix seconds).
+   * Used by AccountRow to decide "renewable" state and "X days left" so
+   * the renewal CTA tracks chain time, not the device wall clock — letting
+   * fast-forwarded anvil chains exercise the renewal flow. On real chains
+   * (Base / Base Sepolia) chain time tracks wall clock, so behavior is
+   * indistinguishable for users.
+   *
+   * Falls back to Date.now() before the first chain read completes.
+   */
+  nowSec: number;
   refetch: () => void;
 } {
   const chainId = useChainId();
@@ -126,6 +137,7 @@ export function useTrackedAccounts(): {
   })), [mergedAddresses, walletAddressSet]);
 
   const [accounts, setAccounts] = useState<TrackedAccount[]>(stubAccounts);
+  const [nowSec, setNowSec] = useState<number>(() => Math.floor(Date.now() / 1000));
   const fetchIdRef = useRef(0);
 
   // Whenever the address set changes, immediately surface the stubs so the user
@@ -158,6 +170,16 @@ export function useTrackedAccounts(): {
     }
 
     const id = ++fetchIdRef.current;
+
+    // Pull the latest block timestamp alongside per-address reads. One extra
+    // RPC call per refresh; negligible cost.
+    void client.getBlock({ blockTag: 'latest' }).then((block) => {
+      if (id === fetchIdRef.current) {
+        setNowSec(Number(block.timestamp));
+      }
+    }).catch((err) => {
+      console.warn('[ACCOUNTS] getBlock(latest) failed; falling back to wall clock:', err);
+    });
 
     try {
       const results = await Promise.all(
@@ -224,6 +246,7 @@ export function useTrackedAccounts(): {
 
   return {
     accounts,
+    nowSec,
     refetch: () => { void fetchStatus(); },
   };
 }
