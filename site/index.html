@@ -62,9 +62,10 @@
       </h1>
 
       <p class="hero__lede">
-        Sigil is an app and a smart contract. The app turns your passport into an opaque,
-        anonymous ID for any wallet you own. The contract lets any other app or service verify
-        that ID with one on-chain read. The passport itself never leaves your phone.
+        Sigil is an app and a smart contract. The app turns your passport into a unique,
+        opaque ID — one ID per passport, no matter how many wallets you sigilize. The contract
+        lets any other app verify that ID in one on-chain read. They don't integrate anything;
+        they just point users here.
       </p>
 
       <div class="cta-row">
@@ -107,6 +108,7 @@
       <p class="hero__note">
         Experimental. Testnet only, on
         <a href="https://sepolia.basescan.org/address/0x6f692eba653ef8ff9048cbf5555bd700c78b414f" target="_blank" rel="noopener noreferrer">Base Sepolia</a>.
+        RSA-signed passports for now.
       </p>
     </section>
 
@@ -121,9 +123,9 @@
           <span class="audience__tag">For people</span>
           <h3>You tap once. Your wallets get verified.</h3>
           <p>
-            One passport tap creates a stable, opaque ID. Sigilize the wallets you want
-            to attest, and they all share that ID on-chain. Wallets you leave alone stay
-            anonymous. Pay gas; that's it.
+            Your passport produces one stable, opaque ID — the same value every time, for
+            this passport only. Attach it to as many wallets as you own; they all share that
+            ID on-chain. Wallets you leave alone stay anonymous.
           </p>
           <ul class="audience__list">
             <li>Get your fair share of airdrops, votes, and signups instead of having them diluted by bots.</li>
@@ -133,16 +135,17 @@
         </div>
         <div class="audience">
           <span class="audience__tag">For protocols</span>
-          <h3>One mapping read. No SDK.</h3>
+          <h3>Tell users to sigilize. Read one mapping.</h3>
           <p>
-            Two free view functions on a public Solidity contract. <code>isVerified(wallet)</code>
-            tells you a real person is behind a wallet. <code>nullifierOf(wallet)</code> returns
-            a stable per-passport key for deduping airdrops, votes, signups by person.
+            That's the integration. No SDK to install, no QR code to host, no proof to verify
+            on your end. Once a user sigilizes their wallet here, any contract or backend can
+            read <code>isVerified(wallet)</code> for personhood and <code>nullifierOf(wallet)</code>
+            for sybil dedup.
           </p>
           <ul class="audience__list">
-            <li>No off-chain attestation server to run, no API key to manage.</li>
-            <li>Bound to <code>msg.sender</code> in the proof — proofs aren't transferable.</li>
-            <li>Off-chain backends can <code>eth_call</code> the same registry.</li>
+            <li>Two free Solidity view functions, no API key to manage.</li>
+            <li>Each passport produces exactly one nullifier — that's what makes dedup work.</li>
+            <li>Proofs are bound to <code>msg.sender</code>, so they can't be reused on a different wallet.</li>
           </ul>
         </div>
       </div>
@@ -196,10 +199,13 @@
       </div>
 
       <div class="tradeoff">
-        <h3>What you're giving up</h3>
+        <h3>How linkability works</h3>
         <p>
-          Every wallet you sigilize with the same passport gets the same on-chain ID. They become publicly linked to each other.
-          Wallets you don't sigilize stay anonymous. The deal: the wallets you sigilize lose pseudonymity to each other, in exchange for sybil resistance any protocol can rely on.
+          Every wallet you sigilize with the same passport shares the same on-chain ID. That's
+          the mechanism: same passport, same ID, anywhere it shows up. As a result, anyone reading
+          the chain can tell which of your sigilized wallets are linked to each other. It's a
+          real privacy cost, and it's the trade Sigil makes to keep verification a single mapping
+          read for any protocol. Wallets you don't sigilize are unaffected; they stay pseudonymous.
         </p>
       </div>
     </section>
@@ -207,7 +213,7 @@
     <section id="protocols" class="section section--protocols">
       <h2>For protocols</h2>
       <p class="section__lede">
-        Here's what a typical integration looks like.
+        There's barely an integration to show — but here's what gating an action looks like in Solidity.
       </p>
 
       <div class="pillars">
@@ -304,6 +310,15 @@ claimed[nullifier] = <span class="hl-kw">true</span>;
             and <code>nullifierOf()</code> are <code>view</code> functions, so protocols pay
             nothing for reads. There are no usage fees, subscriptions, or per-call charges
             today.
+          </p>
+        </div>
+        <div class="about__row">
+          <h3>Compatibility</h3>
+          <p>
+            Sigil currently verifies passports signed with RSA-2048, the most common scheme on
+            biometric passports today (US, most EU, Japan, and many others). Some countries use
+            ECDSA, which isn't supported yet. The app checks at tap time and tells you if your
+            passport isn't compatible.
           </p>
         </div>
         <div class="about__row">
