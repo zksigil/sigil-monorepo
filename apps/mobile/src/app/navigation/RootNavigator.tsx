@@ -1,5 +1,5 @@
 import React from 'react';
-import { NavigationContainer } from '@react-navigation/native';
+import { NavigationContainer, DefaultTheme } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import type { RootStackParamList } from './types';
 import { HomeScreen } from '../../features/wallet/components/HomeScreen';
@@ -7,6 +7,19 @@ import { PassportScanScreen } from '../../features/verification/components/Passp
 import { ProofGenerationScreen } from '../../features/verification/components/ProofGenerationScreen';
 import { VerificationSuccessScreen } from '../../features/verification/components/VerificationSuccessScreen';
 import { WalletDiscoveryScreen } from '../../features/verification/components/WalletDiscoveryScreen';
+
+// React Navigation defaults colors.background to '#fff' which paints white
+// behind any screen before the screen mounts. Override to the dracula canvas
+// (matches AppDelegate window + storyboard + SplashOverlay) so the navigator
+// background never flashes white during the JS first-paint window.
+const navTheme = {
+  ...DefaultTheme,
+  colors: {
+    ...DefaultTheme.colors,
+    background: '#282a36',
+  },
+};
+
 const Stack = createNativeStackNavigator<RootStackParamList>();
 
 // Deep-link config for WalletConnect callbacks
@@ -21,7 +34,7 @@ const linking = {
 
 export function RootNavigator(): React.JSX.Element {
   return (
-    <NavigationContainer linking={linking}>
+    <NavigationContainer linking={linking} theme={navTheme}>
       <Stack.Navigator
         screenOptions={{
           headerStyle: { backgroundColor: '#000000' },
