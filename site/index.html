@@ -167,7 +167,7 @@
         <li>
           <span class="step__num">03</span>
           <h3>Register on-chain</h3>
-          <p>Submit the proof to the registry. From then on, any contract or service can call <code>isVerified(address)</code> for personhood, or <code>nullifierOf(address)</code> to dedupe by passport.</p>
+          <p>Submit the proof to the registry. After that, any contract or service can look up the address with one Solidity call — <code>isVerified(address)</code> for personhood, <code>nullifierOf(address)</code> for sybil dedup. Nothing else for them to integrate.</p>
         </li>
       </ol>
     </section>
