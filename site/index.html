@@ -1,0 +1,385 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="color-scheme" content="dark" />
+  <meta name="theme-color" content="#0a0a10" />
+
+  <title>Sigil — proof of personhood, by passport</title>
+  <meta name="description" content="Prove you're human with your passport. The proof runs on your phone. Only an opaque hash reaches the chain." />
+
+  <meta property="og:title" content="Sigil — proof of personhood, by passport" />
+  <meta property="og:description" content="Prove you're human with your passport. The proof runs on your phone. Only an opaque hash reaches the chain." />
+  <meta property="og:type" content="website" />
+  <meta property="og:url" content="https://zksigil.xyz" />
+  <meta property="og:image" content="https://zksigil.xyz/assets/icon.png" />
+  <meta name="twitter:card" content="summary_large_image" />
+
+  <link rel="icon" type="image/svg+xml" href="assets/sigil-mark.svg" />
+  <link rel="apple-touch-icon" href="assets/icon.png" />
+  <link rel="stylesheet" href="styles.css" />
+
+  <link rel="preconnect" href="https://rsms.me/" />
+  <link rel="stylesheet" href="https://rsms.me/inter/inter.css" />
+</head>
+<body>
+  <!--
+    Placeholder links — replace these once accounts/listings exist.
+      Twitter:   set on a.cta--twitter
+      GitHub:    set on a.cta--github
+      App Store: set on a.store--ios
+      Play Store: set on a.store--android
+    All four are href="#" by default and styled as clearly tappable.
+  -->
+
+  <div class="grid-bg" aria-hidden="true"></div>
+
+  <header class="nav">
+    <a class="brand" href="/" aria-label="Sigil home">
+      <img src="assets/sigil-mark.svg" alt="" width="28" height="28" />
+      <span>sigil</span>
+    </a>
+    <nav class="nav__links">
+      <a href="#how">How it works</a>
+      <a href="#privacy">Privacy</a>
+      <a href="#protocols">For protocols</a>
+      <a href="#about">About</a>
+      <a href="#" class="cta--github" aria-label="GitHub repository">GitHub</a>
+    </nav>
+  </header>
+
+  <main>
+    <section class="hero">
+      <div class="hero__mark" aria-hidden="true">
+        <img src="assets/sigil-mark.svg" alt="" width="160" height="160" />
+        <div class="hero__halo"></div>
+      </div>
+
+      <h1 class="hero__title">
+        Tap your passport.<br />
+        <span class="grad-text">Get a real-person ID for any address.</span>
+      </h1>
+
+      <p class="hero__lede">
+        Sigil is an app and a smart contract. The app turns your passport into a unique,
+        opaque ID — one ID per passport, no matter how many addresses you sigilize. The contract
+        lets any other app verify that ID in one on-chain read. They don't integrate anything;
+        they just point users here.
+      </p>
+
+      <div class="cta-row">
+        <a href="#" class="store store--ios" aria-label="Download for iOS">
+          <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true">
+            <path fill="currentColor" d="M16.365 1.43c0 1.14-.41 2.097-1.23 2.87-.99.94-2.16 1.48-3.43 1.38-.16-1.13.43-2.32 1.21-3.05.86-.79 2.27-1.36 3.45-1.2zM21 17.6c-.5 1.16-.74 1.68-1.39 2.71-.91 1.45-2.2 3.26-3.79 3.27-1.42.02-1.79-.92-3.71-.91-1.93.01-2.33.93-3.76.92-1.59-.02-2.81-1.65-3.72-3.1C2.07 16.6 1.79 11.5 3.34 8.92c1.04-1.74 2.7-2.85 4.27-2.85 1.6 0 2.61.88 3.94.88 1.29 0 2.07-.88 3.93-.88 1.4 0 2.89.76 3.96 2.08-3.49 1.91-2.92 6.92.55 8.45z" />
+          </svg>
+          <span class="store__label">
+            <span class="store__small">Coming soon to</span>
+            <span class="store__big">App Store</span>
+          </span>
+        </a>
+
+        <a href="#" class="store store--android" aria-label="Download for Android">
+          <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true">
+            <path fill="currentColor" d="M3.61 20.97c.5.92 1.5 1.53 2.66 1.53.76 0 1.47-.27 2.02-.72L13.5 17H8.5l-4.89 3.97zM20.39 3.03c-.5-.92-1.5-1.53-2.66-1.53-.76 0-1.47.27-2.02.72L10.5 7h5l4.89-3.97zM2 4.13v15.74c0 .43.16.83.43 1.13l9.07-9-9.07-9c-.27.3-.43.7-.43 1.13zM23 12c0-1.1-.6-2.06-1.5-2.59l-3.91-2.26-4.59 4.59 4.59 4.59 3.91-2.26C22.4 14.06 23 13.1 23 12z" />
+          </svg>
+          <span class="store__label">
+            <span class="store__small">Coming soon to</span>
+            <span class="store__big">Google Play</span>
+          </span>
+        </a>
+      </div>
+
+      <div class="cta-row cta-row--secondary">
+        <a href="#" class="cta cta--twitter" aria-label="Sigil on Twitter">
+          <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true">
+            <path fill="currentColor" d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24h-6.66l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z" />
+          </svg>
+          <span>Twitter</span>
+        </a>
+        <a href="#" class="cta cta--github" aria-label="Sigil on GitHub">
+          <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true">
+            <path fill="currentColor" d="M12 .5C5.65.5.5 5.65.5 12c0 5.08 3.29 9.39 7.86 10.91.58.11.79-.25.79-.55 0-.27-.01-1.18-.02-2.14-3.2.7-3.87-1.36-3.87-1.36-.52-1.33-1.27-1.68-1.27-1.68-1.04-.71.08-.69.08-.69 1.15.08 1.76 1.18 1.76 1.18 1.02 1.75 2.69 1.24 3.34.95.1-.74.4-1.24.73-1.53-2.55-.29-5.24-1.28-5.24-5.69 0-1.26.45-2.28 1.18-3.09-.12-.29-.51-1.46.11-3.04 0 0 .97-.31 3.18 1.18a11 11 0 0 1 5.79 0c2.21-1.49 3.18-1.18 3.18-1.18.62 1.58.23 2.75.11 3.04.74.81 1.18 1.83 1.18 3.09 0 4.42-2.69 5.39-5.26 5.68.41.36.78 1.05.78 2.12 0 1.53-.01 2.76-.01 3.13 0 .3.21.66.8.55 4.57-1.52 7.85-5.83 7.85-10.91C23.5 5.65 18.35.5 12 .5z" />
+          </svg>
+          <span>GitHub</span>
+        </a>
+      </div>
+
+      <p class="hero__note">
+        Experimental. Testnet only, on
+        <a href="https://sepolia.basescan.org/address/0x6f692eba653ef8ff9048cbf5555bd700c78b414f" target="_blank" rel="noopener noreferrer">Base Sepolia</a>.
+        RSA-signed passports for now.
+      </p>
+    </section>
+
+    <section id="audiences" class="section section--audiences">
+      <h2>Two sides, one mapping</h2>
+      <p class="section__lede">
+        Sigil works the same way whether you're someone who wants their addresses attested,
+        or a protocol that wants to filter for real people.
+      </p>
+      <div class="audiences">
+        <div class="audience">
+          <span class="audience__tag">For Users</span>
+          <h3>You tap once. Your addresses get verified.</h3>
+          <p>
+            Your passport produces one stable, opaque ID — the same value every time, for
+            this passport only. Attach it to as many addresses as you own; they all share that
+            ID on-chain. Addresses you leave alone stay anonymous.
+          </p>
+          <ul class="audience__list">
+            <li>Get your fair share of airdrops, votes, and signups instead of having them diluted by bots.</li>
+            <li>No name, DOB, or passport number ever touches the chain.</li>
+            <li>Unregister any time.</li>
+          </ul>
+        </div>
+        <div class="audience">
+          <span class="audience__tag">For Protocols</span>
+          <h3>Tell users to sigilize. Read one mapping.</h3>
+          <p>
+            That's the integration. No SDK to install, no QR code to host, no proof to verify
+            on your end. Once a user sigilizes their address here, any contract or backend can
+            read <code>isVerified(address)</code> for personhood and <code>nullifierOf(address)</code>
+            for sybil dedup.
+          </p>
+          <ul class="audience__list">
+            <li>Two free Solidity view functions, no API key to manage.</li>
+            <li>Each passport produces exactly one nullifier — that's what makes dedup work.</li>
+            <li>Proofs are bound to <code>msg.sender</code>, so they can't be reused on a different address.</li>
+          </ul>
+        </div>
+      </div>
+    </section>
+
+    <section id="how" class="section">
+      <h2>How it works</h2>
+      <ol class="steps">
+        <li>
+          <span class="step__num">01</span>
+          <h3>Tap your passport</h3>
+          <p>Hold the passport against your phone. It reads DG1 and the Security Object over NFC using ICAO 9303 BAC. Nothing is uploaded.</p>
+        </li>
+        <li>
+          <span class="step__num">02</span>
+          <h3>Prove on-device</h3>
+          <p>A Noir circuit checks the passport's signature chain and derives an opaque per-passport ID. The whole proof runs on the phone in about 5–15 seconds with Mopro.</p>
+        </li>
+        <li>
+          <span class="step__num">03</span>
+          <h3>Register on-chain</h3>
+          <p>Submit the proof to the registry. After that, any contract or service can look up the address with one Solidity call — <code>isVerified(address)</code> for personhood, <code>nullifierOf(address)</code> for sybil dedup. Nothing else for them to integrate.</p>
+        </li>
+      </ol>
+    </section>
+
+    <section id="privacy" class="section section--privacy">
+      <h2>What's actually on-chain</h2>
+      <p class="section__lede">
+        Your passport stays on the phone. The name, date of birth, nationality, and passport number never reach the chain.
+      </p>
+      <div class="onchain">
+        <div class="onchain__col onchain__col--yes">
+          <h4>Stored on-chain</h4>
+          <ul>
+            <li>An opaque nullifier (one-way hash of your passport secret)</li>
+            <li>The address that registered it</li>
+            <li>A registration timestamp and expiry, rounded to 90-day buckets</li>
+            <li>The zero-knowledge proof itself</li>
+          </ul>
+        </div>
+        <div class="onchain__col onchain__col--no">
+          <h4>Never on-chain</h4>
+          <ul>
+            <li>Name, date of birth, nationality, sex</li>
+            <li>Passport number, issue date, the MRZ</li>
+            <li>DG1 / SOD bytes, RSA signatures, document images</li>
+            <li>Anything that ties back to the actual person</li>
+          </ul>
+        </div>
+      </div>
+
+      <div class="tradeoff">
+        <h3>How linkability works</h3>
+        <p>
+          Every address you sigilize with the same passport shares the same on-chain ID. That's
+          the mechanism: same passport, same ID, anywhere it shows up. As a result, anyone reading
+          the chain can tell which of your sigilized addresses are linked to each other. It's a
+          real privacy cost, and it's the trade Sigil makes to keep verification a single mapping
+          read for any protocol. Addresses you don't sigilize are unaffected; they stay pseudonymous.
+        </p>
+      </div>
+    </section>
+
+    <section id="protocols" class="section section--protocols">
+      <h2>For protocols</h2>
+      <p class="section__lede">
+        There's barely an integration to show — but here's what gating an action looks like in Solidity.
+      </p>
+
+      <div class="pillars">
+        <div class="pillar">
+          <span class="pillar__tag">Personhood</span>
+          <h3>Personhood check</h3>
+          <p>
+            <code>isVerified(address)</code> returns <code>true</code> when there's a real person currently attested to the address. Drop it in front of an airdrop claim, a faucet, a governance vote, a signup bonus. Addresses without a human behind them get filtered out.
+          </p>
+        </div>
+        <div class="pillar">
+          <span class="pillar__tag">Sybil resistance</span>
+          <h3>One passport, one share</h3>
+          <p>
+            <code>nullifierOf(address)</code> returns a stable per-person ID. Same value for every address that person has sigilized. Track it in a <code>seen[]</code> set and one passport participates once, no matter how many addresses it controls.
+          </p>
+        </div>
+      </div>
+
+      <div class="snippet">
+        <div class="snippet__header">
+          <span class="snippet__lang">Solidity</span>
+          <span class="snippet__caption">Standard integration pattern</span>
+        </div>
+<pre><code><span class="hl-com">// Gate on personhood, then dedupe by passport.</span>
+<span class="hl-kw">if</span> (!sigil.isVerified(msg.sender)) <span class="hl-kw">revert</span> NotVerified();
+
+<span class="hl-typ">bytes32</span> nullifier = sigil.nullifierOf(msg.sender);
+<span class="hl-kw">if</span> (claimed[nullifier]) <span class="hl-kw">revert</span> AlreadyClaimed();
+claimed[nullifier] = <span class="hl-kw">true</span>;
+
+<span class="hl-com">// ... continue with the action.</span></code></pre>
+      </div>
+
+      <h3 class="usecases__title">Where it fits</h3>
+      <div class="usecases">
+        <div class="usecase">
+          <span class="usecase__icon" aria-hidden="true">⤓</span>
+          <h4>Airdrops</h4>
+          <p>One claim per person, even if they have ten addresses.</p>
+        </div>
+        <div class="usecase">
+          <span class="usecase__icon" aria-hidden="true">⊙</span>
+          <h4>DAO voting</h4>
+          <p>One vote per person. No KYC.</p>
+        </div>
+        <div class="usecase">
+          <span class="usecase__icon" aria-hidden="true">⊞</span>
+          <h4>Quadratic funding</h4>
+          <p>Matching pools that don't break when someone spins up 50 addresses.</p>
+        </div>
+        <div class="usecase">
+          <span class="usecase__icon" aria-hidden="true">⌬</span>
+          <h4>Onboarding rewards</h4>
+          <p>Sign-up bonuses that aren't farmed into the ground.</p>
+        </div>
+        <div class="usecase">
+          <span class="usecase__icon" aria-hidden="true">◇</span>
+          <h4>Reputation &amp; reviews</h4>
+          <p>One review per person, not per fake account.</p>
+        </div>
+        <div class="usecase">
+          <span class="usecase__icon" aria-hidden="true">⊜</span>
+          <h4>Rate limiting</h4>
+          <p>Per-person quotas instead of per-address. Spinning up new addresses gets you nowhere.</p>
+        </div>
+      </div>
+
+      <p class="protocols__note">
+        Off-chain works the same way. A backend can <code>eth_call</code> the registry before issuing an API key or validating a signup. The read is just public state, no roundtrip to the user's device.
+      </p>
+    </section>
+
+    <section id="about" class="section section--about">
+      <h2>Behind the scenes</h2>
+      <p class="section__lede">
+        The honest version: who runs Sigil, who pays for what, and where it goes from here.
+      </p>
+      <div class="about">
+        <div class="about__row">
+          <h3>Who's running it</h3>
+          <p>
+            Sigil is an open-source side project. The mobile app, the Solidity contracts, the
+            Noir circuit, and the Mopro bridge are all in
+            <a href="#" class="cta--github">one GitHub repo</a>. There's no company behind it
+            and no token. The smart contracts are immutable once deployed; nobody can change
+            their behavior, not even the author.
+          </p>
+        </div>
+        <div class="about__row">
+          <h3>Who pays</h3>
+          <p>
+            Users pay gas to register and unregister, and that's all. <code>isVerified()</code>
+            and <code>nullifierOf()</code> are <code>view</code> functions, so protocols pay
+            nothing for reads. There are no usage fees, subscriptions, or per-call charges
+            today.
+          </p>
+        </div>
+        <div class="about__row">
+          <h3>Compatibility</h3>
+          <p>
+            Sigil currently verifies passports signed with RSA-2048, the most common scheme on
+            biometric passports today (US, most EU, Japan, and many others). Some countries use
+            ECDSA, which isn't supported yet. The app checks at tap time and tells you if your
+            passport isn't compatible.
+          </p>
+        </div>
+        <div class="about__row">
+          <h3>Where this is going</h3>
+          <p>
+            Currently testnet only on Base Sepolia. Mainnet deployment is pending until a
+            renewal flow lands in the app and a couple of audit follow-ups are merged. If a
+            protocol fee gets added in a future version, it'll be opt-in and disclosed before
+            anything is shipped.
+          </p>
+        </div>
+        <div class="about__row">
+          <h3>How to help</h3>
+          <p>
+            Try it on Sepolia, file an issue with what breaks, or send a PR.
+            If you're building a protocol that wants to integrate, the contract addresses
+            and ABIs are in the repo.
+          </p>
+        </div>
+      </div>
+    </section>
+
+    <section class="section section--cta">
+      <h2>Get the app</h2>
+      <p class="section__lede">iOS and Android, soon.</p>
+      <div class="cta-row">
+        <a href="#" class="store store--ios" aria-label="Download for iOS">
+          <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true">
+            <path fill="currentColor" d="M16.365 1.43c0 1.14-.41 2.097-1.23 2.87-.99.94-2.16 1.48-3.43 1.38-.16-1.13.43-2.32 1.21-3.05.86-.79 2.27-1.36 3.45-1.2zM21 17.6c-.5 1.16-.74 1.68-1.39 2.71-.91 1.45-2.2 3.26-3.79 3.27-1.42.02-1.79-.92-3.71-.91-1.93.01-2.33.93-3.76.92-1.59-.02-2.81-1.65-3.72-3.1C2.07 16.6 1.79 11.5 3.34 8.92c1.04-1.74 2.7-2.85 4.27-2.85 1.6 0 2.61.88 3.94.88 1.29 0 2.07-.88 3.93-.88 1.4 0 2.89.76 3.96 2.08-3.49 1.91-2.92 6.92.55 8.45z" />
+          </svg>
+          <span class="store__label">
+            <span class="store__small">Coming soon to</span>
+            <span class="store__big">App Store</span>
+          </span>
+        </a>
+        <a href="#" class="store store--android" aria-label="Download for Android">
+          <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true">
+            <path fill="currentColor" d="M3.61 20.97c.5.92 1.5 1.53 2.66 1.53.76 0 1.47-.27 2.02-.72L13.5 17H8.5l-4.89 3.97zM20.39 3.03c-.5-.92-1.5-1.53-2.66-1.53-.76 0-1.47.27-2.02.72L10.5 7h5l4.89-3.97zM2 4.13v15.74c0 .43.16.83.43 1.13l9.07-9-9.07-9c-.27.3-.43.7-.43 1.13zM23 12c0-1.1-.6-2.06-1.5-2.59l-3.91-2.26-4.59 4.59 4.59 4.59 3.91-2.26C22.4 14.06 23 13.1 23 12z" />
+          </svg>
+          <span class="store__label">
+            <span class="store__small">Coming soon to</span>
+            <span class="store__big">Google Play</span>
+          </span>
+        </a>
+      </div>
+    </section>
+  </main>
+
+  <footer class="footer">
+    <div class="footer__inner">
+      <div class="footer__brand">
+        <img src="assets/sigil-mark.svg" alt="" width="20" height="20" />
+        <span>sigil</span>
+      </div>
+      <nav class="footer__links">
+        <a href="#" class="cta--twitter">Twitter</a>
+        <a href="#" class="cta--github">GitHub</a>
+        <a href="https://sepolia.basescan.org/address/0x6f692eba653ef8ff9048cbf5555bd700c78b414f" target="_blank" rel="noopener noreferrer">Contract</a>
+      </nav>
+      <p class="footer__small">Experimental. Testnet only. Use at your own risk.</p>
+    </div>
+  </footer>
+</body>
+</html>
