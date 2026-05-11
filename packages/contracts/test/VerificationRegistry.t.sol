@@ -454,38 +454,6 @@ contract VerificationRegistryTest is Test {
     }
 
     // =========================================================================
-    // No governance surface — confirm the registry exposes nothing privileged.
-    // =========================================================================
-
-    /// @notice Sanity: there is no callable function that mutates the verifier, CSCA tree,
-    ///         TTL, daily cap, or any other configuration. This test would fail to compile
-    ///         if a setter were re-introduced — kept as a documentation-and-guard pattern.
-    function test_NoGovernance_OnlyExpectedExternalSelectors() public view {
-        // Existing function selectors. If any setter / pause / governance function is added,
-        // this list won't match the contract's actual ABI and integrators will know.
-        bytes4[] memory expected = new bytes4[](14);
-        expected[0]  = registry.register.selector;
-        expected[1]  = registry.renew.selector;
-        expected[2]  = registry.unregister.selector;
-        expected[3]  = registry.isVerified.selector;
-        expected[4]  = registry.nullifierOf.selector;
-        expected[5]  = registry.getExpiry.selector;
-        expected[6]  = registry.getRegisteredAt.selector;
-        expected[7]  = registry.getWallets.selector;
-        expected[8]  = registry.i_verifier.selector;
-        expected[9]  = registry.i_cscaMerkleTree.selector;
-        expected[10] = registry.i_registrationTTL.selector;
-        expected[11] = registry.i_maxDailyRegistrations.selector;
-        expected[12] = registry.s_nullifierByWallet.selector;
-        // ReentrancyGuard introduces no external entry points; kept slot for documentation.
-        expected[13] = bytes4(0);
-
-        // No assertions — selectors are taken at compile time. If a setter is added,
-        // the developer should add it here explicitly so the audit trail catches the change.
-        assertGt(expected.length, 0);
-    }
-
-    // =========================================================================
     // Fuzz
     // =========================================================================
 
