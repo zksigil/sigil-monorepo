@@ -2,7 +2,7 @@
 # Prevents the manual copy mistakes that caused the redc_param debug loop.
 
 SHELL := /bin/bash
-.PHONY: help circuits circuits-all refresh-mopro-bindings ios android contracts test test-all typecheck clean clean-ios clean-circuits clean-contracts deps build-all install-dev
+.PHONY: help circuits circuits-all refresh-mopro-bindings ios android contracts pods bootstrap test test-all typecheck clean clean-ios clean-circuits clean-contracts clean-pods deps build-all install-dev
 
 # ─── Paths ─────────────────────────────────────────────────────────────
 CIRCUITS_SRC      := packages/circuits
@@ -139,6 +139,40 @@ contracts: ## Build contracts and sync ABI to mobile app
 	pnpm contracts:sync-abi
 	@echo "✅ Contracts built and ABI synced"
 
+# ─── CocoaPods ─────────────────────────────────────────────────────────
+# `pod install` reads apps/mobile/ios/Podfile, downloads pods, integrates them
+# against the modules in apps/mobile/modules/ (including the freshly-built
+# MoproFfi xcframework), and generates mobile.xcworkspace — the file you open
+# in Xcode. Only needs to be re-run when Podfile / Podfile.lock change.
+pods: ## Install CocoaPods and generate apps/mobile/ios/mobile.xcworkspace
+	@echo "━━━ Installing CocoaPods ━━━"
+	cd apps/mobile/ios && pod install
+	@echo "✅ Pods installed — open apps/mobile/ios/mobile.xcworkspace in Xcode"
+
+# ─── First-time bootstrap from a fresh checkout ────────────────────────
+# Run after cloning the repo. Order is load-bearing:
+#   deps                    pnpm install → node_modules (including a stale copy of mopro-ffi)
+#   circuits                Noir compile → ACIR + witness JSON in app assets
+#   bb-verifier             bb gen → SigilUltraHonkVerifier.sol (only needed once VK exists,
+#                                                                but cheap; included for safety)
+#   contracts               forge build + ABI sync into the mobile app
+#   ios                     Rust FFI rebuild → MoproFfiFramework.xcframework
+#   refresh-mopro-bindings  bust node_modules/mopro-ffi so the freshly built FFI propagates
+#                           (pnpm `file:` deps are COPIED not symlinked)
+#   pods                    pod install → mobile.xcworkspace (links the new xcframework into Xcode)
+# After this completes, open apps/mobile/ios/mobile.xcworkspace in Xcode.
+bootstrap: deps circuits bb-verifier contracts ios refresh-mopro-bindings pods ## Full first-time setup from a fresh checkout
+	@echo ""
+	@echo "✅ Bootstrap complete!"
+	@echo ""
+	@echo "Next steps:"
+	@echo "  1. Open apps/mobile/ios/mobile.xcworkspace in Xcode"
+	@echo "  2. Edit Scheme → Build Configuration → Release"
+	@echo "  3. Select your physical device → ⌘R"
+	@echo ""
+	@echo "Don't forget: create .env and apps/mobile/.env (EXPO_PUBLIC_WALLETCONNECT_PROJECT_ID"
+	@echo "and EXPO_PUBLIC_BASE_SEPOLIA_REGISTRY_ADDRESS at minimum)."
+
 # ─── Testing ──────────────────────────────────────────────────────────
 test: ## Run mobile app tests (single file or directory)
 	@echo "━━━ Running tests ━━━"
@@ -235,7 +269,11 @@ clean-nargo: ## Clean nargo cached dependencies
 	rm -rf ~/.nargo/
 	@echo "✅ Nargo cache cleaned"
 
-clean: clean-circuits clean-ios clean-contracts clean-rust clean-nargo clean-xcode-cache ## Clean everything
+clean-pods: ## Clean CocoaPods install (Pods/, Podfile.lock, mobile.xcworkspace)
+	rm -rf apps/mobile/ios/Pods apps/mobile/ios/Podfile.lock apps/mobile/ios/mobile.xcworkspace
+	@echo "✅ Pods cleaned"
+
+clean: clean-circuits clean-ios clean-contracts clean-rust clean-nargo clean-pods clean-xcode-cache ## Clean everything
 	@echo "✅ Everything cleaned"
 
 # ─── Verification ─────────────────────────────────────────────────────
