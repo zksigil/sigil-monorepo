@@ -183,7 +183,7 @@ anvil-update-env: ## Internal: extract VerificationRegistry address from latest 
 	sed -i '' "s|EXPO_PUBLIC_ANVIL_REGISTRY_ADDRESS=.*|EXPO_PUBLIC_ANVIL_REGISTRY_ADDRESS=$$ADDR|" .env apps/mobile/.env && \
 	echo "✅ Updated EXPO_PUBLIC_ANVIL_REGISTRY_ADDRESS in .env and apps/mobile/.env"
 
-anvil-deploy: anvil-env contracts ## Deploy with MockProofVerifier to local anvil
+anvil-deploy: anvil-env contracts ## Deploy with MockUltraHonkVerifier to local anvil
 	@echo "━━━ Deploying (mock verifier) to anvil ━━━"
 	cd $(CONTRACTS) && forge script script/DeployDev.s.sol:DeployDev \
 		--rpc-url http://127.0.0.1:8545 --broadcast \

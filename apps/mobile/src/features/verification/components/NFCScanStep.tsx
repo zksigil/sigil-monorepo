@@ -103,7 +103,7 @@ export function NFCScanStep({ mrz, onBack, mode }: Props): React.JSX.Element {
 
   const handleDevSkip = useCallback(() => {
     // Dev-only skip — invalid DG1/SOD bytes route useProofGeneration to the
-    // stub fallback. Only works against MockProofVerifier on anvil. Discovery
+    // stub fallback. Only works against MockUltraHonkVerifier on anvil. Discovery
     // mode skips this fallback since it never produces a real nullifier.
     if (mode === 'discover') return;
     navigation.navigate('ProofGeneration', {

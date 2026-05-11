@@ -2,9 +2,15 @@
 pragma solidity ^0.8.28;
 
 import {IVerificationRegistry} from "./interfaces/IVerificationRegistry.sol";
-import {IProofVerifier} from "./interfaces/IProofVerifier.sol";
 import {ICSCAMerkleTree} from "./interfaces/ICSCAMerkleTree.sol";
 import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
+
+/// @dev Surface of the generated Noir UltraHonk verifier (SigilUltraHonkVerifier.sol).
+///      Declared here rather than imported so we don't pin the registry to that exact contract —
+///      any verifier with this signature (e.g. a test mock) is interchangeable at deploy time.
+interface IUltraHonkVerifier {
+    function verify(bytes calldata proof, bytes32[] calldata publicInputs) external view returns (bool);
+}
 
 /// @title VerificationRegistry
 /// @notice Single-tier ZK passport identity registry for Sigil. Immutable after deploy.
@@ -52,6 +58,13 @@ contract VerificationRegistry is IVerificationRegistry, ReentrancyGuard {
     uint8 private constant MIN_DAILY_REGISTRATIONS = 1;
     uint8 private constant MAX_DAILY_REGISTRATIONS = 50;
 
+    /// @dev BN254 scalar field prime. `hashedAddress` is `keccak256(wallet)`, a 256-bit value
+    ///      that exceeds this prime ~81% of the time. The Mopro prover reduces it mod p when
+    ///      forming the public inputs, so the on-chain verifier must reduce identically or
+    ///      the Fiat-Shamir transcript diverges (SumcheckFailed).
+    uint256 private constant BN254_PRIME =
+        21888242871839275222246405745257275088548364400416034343698204186575808495617;
+
     // =========================================================================
     // Structs
     // =========================================================================
@@ -68,7 +81,7 @@ contract VerificationRegistry is IVerificationRegistry, ReentrancyGuard {
     // Immutables
     // =========================================================================
 
-    IProofVerifier public immutable i_verifier;
+    IUltraHonkVerifier public immutable i_verifier;
     ICSCAMerkleTree public immutable i_cscaMerkleTree;
     uint256 public immutable i_registrationTTL;
     uint8 public immutable i_maxDailyRegistrations;
@@ -103,7 +116,7 @@ contract VerificationRegistry is IVerificationRegistry, ReentrancyGuard {
     // =========================================================================
 
     constructor(
-        IProofVerifier verifier_,
+        IUltraHonkVerifier verifier_,
         address cscaMerkleTree_,
         uint256 registrationTTL_,
         uint8 maxDailyRegistrations_
@@ -146,7 +159,7 @@ contract VerificationRegistry is IVerificationRegistry, ReentrancyGuard {
         uint8 count = s_epochCounts[epochNullifier];
         if (count >= i_maxDailyRegistrations) revert VerificationRegistry__RateLimitExceeded();
 
-        if (!i_verifier.verifyProof(hashedAddress, nullifier, epochNullifier, i_cscaMerkleTree.getRoot(), proof)) {
+        if (!_verifyProof(hashedAddress, nullifier, epochNullifier, proof)) {
             revert VerificationRegistry__InvalidProof();
         }
 
@@ -192,7 +205,7 @@ contract VerificationRegistry is IVerificationRegistry, ReentrancyGuard {
 
         // The real epochNullifier is passed through to the verifier (the circuit always
         // constrains it). Rate limiting is NOT applied on renewals — `s_epochCounts` stays put.
-        if (!i_verifier.verifyProof(hashedAddress, nullifier, epochNullifier, i_cscaMerkleTree.getRoot(), proof)) {
+        if (!_verifyProof(hashedAddress, nullifier, epochNullifier, proof)) {
             revert VerificationRegistry__InvalidProof();
         }
 
@@ -245,6 +258,24 @@ contract VerificationRegistry is IVerificationRegistry, ReentrancyGuard {
     // =========================================================================
     // Internal Helpers
     // =========================================================================
+
+    /// @dev Marshals public inputs into the bytes32[] array expected by the generated
+    ///      UltraHonk verifier, preserving the circuit's declaration order:
+    ///        [nullifier, epochNullifier, hashedAddress (mod p), cscaMerkleRoot].
+    ///      `hashedAddress` is reduced mod the BN254 prime to match the prover.
+    function _verifyProof(
+        bytes32 hashedAddress,
+        bytes32 nullifier,
+        bytes32 epochNullifier,
+        bytes calldata proof
+    ) private view returns (bool) {
+        bytes32[] memory publicInputs = new bytes32[](4);
+        publicInputs[0] = nullifier;
+        publicInputs[1] = epochNullifier;
+        publicInputs[2] = bytes32(uint256(hashedAddress) % BN254_PRIME);
+        publicInputs[3] = i_cscaMerkleTree.getRoot();
+        return i_verifier.verify(proof, publicInputs);
+    }
 
     /// @dev Removes a wallet from `s_walletsByNullifier[nullifier]` via swap-and-pop.
     ///      No-op if the wallet is not in the array.

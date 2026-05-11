@@ -2,8 +2,7 @@
 pragma solidity ^0.8.28;
 
 import {Script, console2} from "forge-std/Script.sol";
-import {ProofVerifier} from "../src/ProofVerifier.sol";
-import {VerificationRegistry} from "../src/VerificationRegistry.sol";
+import {VerificationRegistry, IUltraHonkVerifier} from "../src/VerificationRegistry.sol";
 import {CSCAMerkleTree} from "../src/CSCAMerkleTree.sol";
 import {SigilUltraHonkVerifier} from "../src/verifiers/SigilUltraHonkVerifier.sol";
 
@@ -54,7 +53,7 @@ contract Deploy is Script {
     function run()
         public
         returns (
-            ProofVerifier verifier,
+            SigilUltraHonkVerifier verifier,
             CSCAMerkleTree cscaTree,
             VerificationRegistry registry
         )
@@ -75,17 +74,17 @@ contract Deploy is Script {
         console2.log("CSCAMerkleTree:       ", address(cscaTree));
         console2.logBytes32(CSCA_MERKLE_ROOT);
 
-        // 2. UltraHonk verifier — single verifier for the unified sigil circuit.
-        SigilUltraHonkVerifier honk = new SigilUltraHonkVerifier();
-        console2.log("UltraHonk verifier:   ", address(honk));
+        // 2. UltraHonk verifier — single verifier for the unified sigil circuit. The
+        //    registry talks to it directly via the IUltraHonkVerifier surface; public-input
+        //    marshalling and BN254 reduction live inside the registry.
+        verifier = new SigilUltraHonkVerifier();
+        console2.log("UltraHonk verifier:   ", address(verifier));
 
-        // 3. ProofVerifier — marshals typed inputs and delegates to the UltraHonk verifier.
-        verifier = new ProofVerifier(address(honk));
-        console2.log("ProofVerifier:        ", address(verifier));
-
-        // 4. VerificationRegistry — immutable after this constructor returns.
+        // 3. VerificationRegistry — immutable after this constructor returns.
+        //    Cast is required because the generated SigilUltraHonkVerifier doesn't declare
+        //    the IUltraHonkVerifier interface, but its `verify` signature matches.
         registry = new VerificationRegistry(
-            verifier,
+            IUltraHonkVerifier(address(verifier)),
             address(cscaTree),
             REGISTRATION_TTL,
             MAX_DAILY_REGISTRATIONS

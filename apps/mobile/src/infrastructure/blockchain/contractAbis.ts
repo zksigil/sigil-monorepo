@@ -13,7 +13,7 @@ export const VERIFICATION_REGISTRY_ABI = [
       {
         "name": "verifier_",
         "type": "address",
-        "internalType": "contract IProofVerifier"
+        "internalType": "contract IUltraHonkVerifier"
       },
       {
         "name": "cscaMerkleTree_",
@@ -137,7 +137,7 @@ export const VERIFICATION_REGISTRY_ABI = [
       {
         "name": "",
         "type": "address",
-        "internalType": "contract IProofVerifier"
+        "internalType": "contract IUltraHonkVerifier"
       }
     ],
     "stateMutability": "view"

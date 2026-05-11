@@ -2,15 +2,14 @@
 pragma solidity 0.8.28;
 
 import {Test} from "forge-std/Test.sol";
-import {VerificationRegistry} from "../src/VerificationRegistry.sol";
+import {VerificationRegistry, IUltraHonkVerifier} from "../src/VerificationRegistry.sol";
 import {CSCAMerkleTree} from "../src/CSCAMerkleTree.sol";
 import {IVerificationRegistry} from "../src/interfaces/IVerificationRegistry.sol";
-import {IProofVerifier} from "../src/interfaces/IProofVerifier.sol";
-import {MockProofVerifier} from "./mocks/MockProofVerifier.sol";
+import {MockUltraHonkVerifier} from "./mocks/MockUltraHonkVerifier.sol";
 
 contract VerificationRegistryTest is Test {
     VerificationRegistry public registry;
-    MockProofVerifier public verifier;
+    MockUltraHonkVerifier public verifier;
     CSCAMerkleTree public cscaTree;
 
     address public cscaOwner = makeAddr("cscaOwner");
@@ -34,7 +33,7 @@ contract VerificationRegistryTest is Test {
     bytes32 public constant EPOCH_B_DAY0 = keccak256("epoch_B_day0");
 
     function setUp() public {
-        verifier = new MockProofVerifier();
+        verifier = new MockUltraHonkVerifier();
         cscaTree = new CSCAMerkleTree(CSCA_MERKLE_ROOT, cscaOwner);
         registry = new VerificationRegistry(verifier, address(cscaTree), TTL, MAX_DAILY);
     }
@@ -54,7 +53,7 @@ contract VerificationRegistryTest is Test {
 
     function test_Constructor_Reverts_ZeroVerifier() public {
         vm.expectRevert(VerificationRegistry.VerificationRegistry__ZeroAddress.selector);
-        new VerificationRegistry(IProofVerifier(address(0)), address(cscaTree), TTL, MAX_DAILY);
+        new VerificationRegistry(IUltraHonkVerifier(address(0)), address(cscaTree), TTL, MAX_DAILY);
     }
 
     function test_Constructor_Reverts_ZeroCscaTree() public {
