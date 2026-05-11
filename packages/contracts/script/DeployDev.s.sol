@@ -2,7 +2,7 @@
 pragma solidity ^0.8.28;
 
 import {Script, console2} from "forge-std/Script.sol";
-import {VerificationRegistry} from "../src/VerificationRegistry.sol";
+import {SigilRegistry} from "../src/SigilRegistry.sol";
 import {CSCAMerkleTree} from "../src/CSCAMerkleTree.sol";
 import {MockUltraHonkVerifier} from "../test/mocks/MockUltraHonkVerifier.sol";
 
@@ -24,7 +24,7 @@ contract DeployDev is Script {
     function run() public returns (
         MockUltraHonkVerifier verifier,
         CSCAMerkleTree cscaTree,
-        VerificationRegistry registry
+        SigilRegistry registry
     ) {
         address deployer = msg.sender;
 
@@ -40,13 +40,13 @@ contract DeployDev is Script {
         verifier = new MockUltraHonkVerifier();
         console2.log("MockUltraHonkVerifier:", address(verifier));
 
-        registry = new VerificationRegistry(
+        registry = new SigilRegistry(
             verifier,
             address(cscaTree),
             REGISTRATION_TTL,
             MAX_DAILY_REGISTRATIONS
         );
-        console2.log("VerificationRegistry: ", address(registry));
+        console2.log("SigilRegistry: ", address(registry));
 
         vm.stopBroadcast();
 

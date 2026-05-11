@@ -20,7 +20,7 @@ import { RPC_URLS } from '../../../infrastructure/blockchain/appKitConfig';
 import type { RootStackRouteProp, RootStackNavigationProp } from '../../../app/navigation/types';
 import { useProofGeneration } from '../hooks/useProofGeneration';
 import type { SigilProofOutput } from '../services/proofService';
-import { VERIFICATION_REGISTRY_ABI } from '../../../infrastructure/blockchain/contractAbis';
+import { SIGIL_REGISTRY_ABI } from '../../../infrastructure/blockchain/contractAbis';
 import { CONTRACT_ADDRESSES } from '../../../infrastructure/blockchain/contracts';
 import type { SupportedChainId } from '../../../shared/constants/chains';
 import { SUPPORTED_CHAIN_IDS } from '../../../shared/constants/chains';
@@ -37,32 +37,32 @@ type FlowStep = 'generating' | 'proof_ready' | 'submitting' | 'done' | 'error';
 
 const CONTRACT_ERRORS: { name: string; selector: string; message: string }[] = [
   {
-    name: 'VerificationRegistry__AlreadyRegistered',
+    name: 'SigilRegistry__AlreadyRegistered',
     selector: '0x88eed74a',
     message: 'This wallet is already sigilized.',
   },
   {
-    name: 'VerificationRegistry__PassportExpired',
+    name: 'SigilRegistry__PassportExpired',
     selector: '0xe6a693bc',
     message: 'Your passport has expired. A valid passport is required to sigilize.',
   },
   {
-    name: 'VerificationRegistry__RateLimitExceeded',
+    name: 'SigilRegistry__RateLimitExceeded',
     selector: '0x6a2e40a8',
     message: 'Daily registration limit reached for this passport. Try again tomorrow.',
   },
   {
-    name: 'VerificationRegistry__InvalidProof',
+    name: 'SigilRegistry__InvalidProof',
     selector: '0x3f9481dd',
     message: 'The proof was rejected by the verifier.',
   },
   {
-    name: 'VerificationRegistry__NotRegistered',
+    name: 'SigilRegistry__NotRegistered',
     selector: '0xc2996607',
     message: 'No active registration found for this address.',
   },
   {
-    name: 'VerificationRegistry__NullifierMismatch',
+    name: 'SigilRegistry__NullifierMismatch',
     selector: '',
     message: 'The passport does not match the existing registration.',
   },
@@ -341,7 +341,7 @@ export function ProofGenerationScreen(): React.JSX.Element {
     // register() and renew() take identical args; only the function name differs.
     const call = {
       address: registryAddress,
-      abi: VERIFICATION_REGISTRY_ABI,
+      abi: SIGIL_REGISTRY_ABI,
       functionName: mode,
       args: [
         decimalOrHexToBytes32(proofResult.nullifier),

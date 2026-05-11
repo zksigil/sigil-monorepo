@@ -210,10 +210,10 @@ anvil-env: ## Auto-detect LAN IP and update .env files for anvil testing
 ANVIL_KEY := 0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80
 ANVIL_DEPLOYER := 0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266
 
-anvil-update-env: ## Internal: extract VerificationRegistry address from latest broadcast and write to both .env files. Pass SCRIPT=Deploy.s.sol or SCRIPT=DeployDev.s.sol
+anvil-update-env: ## Internal: extract SigilRegistry address from latest broadcast and write to both .env files. Pass SCRIPT=Deploy.s.sol or SCRIPT=DeployDev.s.sol
 	@if [ -z "$(SCRIPT)" ]; then echo "❌ SCRIPT must be set (e.g. SCRIPT=Deploy.s.sol)"; exit 1; fi
-	@ADDR=$$(python3 -c "import json; d=json.load(open('$(CONTRACTS)/broadcast/$(SCRIPT)/31337/run-latest.json')); txs=[t for t in d['transactions'] if t.get('contractName')=='VerificationRegistry']; print(txs[-1]['contractAddress'] if txs else '')") && \
-	if [ -z "$$ADDR" ]; then echo "❌ Could not find VerificationRegistry in broadcast/$(SCRIPT)/31337/run-latest.json"; exit 1; fi && \
+	@ADDR=$$(python3 -c "import json; d=json.load(open('$(CONTRACTS)/broadcast/$(SCRIPT)/31337/run-latest.json')); txs=[t for t in d['transactions'] if t.get('contractName')=='SigilRegistry']; print(txs[-1]['contractAddress'] if txs else '')") && \
+	if [ -z "$$ADDR" ]; then echo "❌ Could not find SigilRegistry in broadcast/$(SCRIPT)/31337/run-latest.json"; exit 1; fi && \
 	echo "━━━ Registry deployed at: $$ADDR ━━━" && \
 	sed -i '' "s|EXPO_PUBLIC_ANVIL_REGISTRY_ADDRESS=.*|EXPO_PUBLIC_ANVIL_REGISTRY_ADDRESS=$$ADDR|" .env apps/mobile/.env && \
 	echo "✅ Updated EXPO_PUBLIC_ANVIL_REGISTRY_ADDRESS in .env and apps/mobile/.env"

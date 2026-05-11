@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.28;
 
-import {IVerificationRegistry} from "./interfaces/IVerificationRegistry.sol";
+import {ISigilRegistry} from "./interfaces/ISigilRegistry.sol";
 import {CSCAMerkleTree} from "./CSCAMerkleTree.sol";
 import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 
@@ -12,7 +12,7 @@ interface IUltraHonkVerifier {
     function verify(bytes calldata proof, bytes32[] calldata publicInputs) external view returns (bool);
 }
 
-/// @title VerificationRegistry
+/// @title SigilRegistry
 /// @notice Single-tier ZK passport identity registry for Sigil. Immutable after deploy.
 ///
 /// @dev One stable nullifier per passport. Multiple wallets can register under the same
@@ -30,19 +30,19 @@ interface IUltraHonkVerifier {
 ///      Privacy invariants enforced here (not in circuit):
 ///        - hashedAddress == keccak256(msg.sender) checked on every write.
 ///        - No nullifier in any event.
-contract VerificationRegistry is IVerificationRegistry, ReentrancyGuard {
+contract SigilRegistry is ISigilRegistry, ReentrancyGuard {
     // =========================================================================
     // Errors
     // =========================================================================
 
-    error VerificationRegistry__ZeroAddress();
-    error VerificationRegistry__InvalidConfig();
-    error VerificationRegistry__AlreadyRegistered();
-    error VerificationRegistry__NotRegistered();
-    error VerificationRegistry__PassportExpired();
-    error VerificationRegistry__RateLimitExceeded();
-    error VerificationRegistry__InvalidProof();
-    error VerificationRegistry__NullifierMismatch();
+    error SigilRegistry__ZeroAddress();
+    error SigilRegistry__InvalidConfig();
+    error SigilRegistry__AlreadyRegistered();
+    error SigilRegistry__NotRegistered();
+    error SigilRegistry__PassportExpired();
+    error SigilRegistry__RateLimitExceeded();
+    error SigilRegistry__InvalidProof();
+    error SigilRegistry__NullifierMismatch();
 
     // =========================================================================
     // Constants — hard bounds for constructor parameters
@@ -121,16 +121,16 @@ contract VerificationRegistry is IVerificationRegistry, ReentrancyGuard {
         uint256 registrationTTL_,
         uint8 maxDailyRegistrations_
     ) {
-        if (address(verifier_) == address(0)) revert VerificationRegistry__ZeroAddress();
-        if (cscaMerkleTree_ == address(0)) revert VerificationRegistry__ZeroAddress();
+        if (address(verifier_) == address(0)) revert SigilRegistry__ZeroAddress();
+        if (cscaMerkleTree_ == address(0)) revert SigilRegistry__ZeroAddress();
         if (registrationTTL_ < MIN_TTL || registrationTTL_ > MAX_TTL) {
-            revert VerificationRegistry__InvalidConfig();
+            revert SigilRegistry__InvalidConfig();
         }
         if (
             maxDailyRegistrations_ < MIN_DAILY_REGISTRATIONS ||
             maxDailyRegistrations_ > MAX_DAILY_REGISTRATIONS
         ) {
-            revert VerificationRegistry__InvalidConfig();
+            revert SigilRegistry__InvalidConfig();
         }
 
         i_verifier = verifier_;
@@ -143,7 +143,7 @@ contract VerificationRegistry is IVerificationRegistry, ReentrancyGuard {
     // Mutations
     // =========================================================================
 
-    /// @inheritdoc IVerificationRegistry
+    /// @inheritdoc ISigilRegistry
     function register(
         bytes32 nullifier,
         bytes32 epochNullifier,
@@ -153,14 +153,14 @@ contract VerificationRegistry is IVerificationRegistry, ReentrancyGuard {
         bytes32 hashedAddress = keccak256(abi.encodePacked(msg.sender));
 
         // Checks
-        if (block.timestamp >= passportExpiry) revert VerificationRegistry__PassportExpired();
-        if (s_registrations[hashedAddress].expiresAt > block.timestamp) revert VerificationRegistry__AlreadyRegistered();
+        if (block.timestamp >= passportExpiry) revert SigilRegistry__PassportExpired();
+        if (s_registrations[hashedAddress].expiresAt > block.timestamp) revert SigilRegistry__AlreadyRegistered();
 
         uint8 count = s_epochCounts[epochNullifier];
-        if (count >= i_maxDailyRegistrations) revert VerificationRegistry__RateLimitExceeded();
+        if (count >= i_maxDailyRegistrations) revert SigilRegistry__RateLimitExceeded();
 
         if (!_verifyProof(hashedAddress, nullifier, epochNullifier, proof)) {
-            revert VerificationRegistry__InvalidProof();
+            revert SigilRegistry__InvalidProof();
         }
 
         // Effects
@@ -188,7 +188,7 @@ contract VerificationRegistry is IVerificationRegistry, ReentrancyGuard {
         emit WalletVerified(msg.sender);
     }
 
-    /// @inheritdoc IVerificationRegistry
+    /// @inheritdoc ISigilRegistry
     function renew(
         bytes32 nullifier,
         bytes32 epochNullifier,
@@ -199,24 +199,24 @@ contract VerificationRegistry is IVerificationRegistry, ReentrancyGuard {
 
         // Checks — must already be registered, and renewal must use the same nullifier.
         // To replace the passport (different nullifier), unregister first then register fresh.
-        if (s_registrations[hashedAddress].expiresAt == 0) revert VerificationRegistry__NotRegistered();
-        if (s_nullifierByWallet[hashedAddress] != nullifier) revert VerificationRegistry__NullifierMismatch();
-        if (block.timestamp >= passportExpiry) revert VerificationRegistry__PassportExpired();
+        if (s_registrations[hashedAddress].expiresAt == 0) revert SigilRegistry__NotRegistered();
+        if (s_nullifierByWallet[hashedAddress] != nullifier) revert SigilRegistry__NullifierMismatch();
+        if (block.timestamp >= passportExpiry) revert SigilRegistry__PassportExpired();
 
         // The real epochNullifier is passed through to the verifier (the circuit always
         // constrains it). Rate limiting is NOT applied on renewals — `s_epochCounts` stays put.
         if (!_verifyProof(hashedAddress, nullifier, epochNullifier, proof)) {
-            revert VerificationRegistry__InvalidProof();
+            revert SigilRegistry__InvalidProof();
         }
 
         // Effects — preserve registeredAt; only extend expiresAt.
         s_registrations[hashedAddress].expiresAt = _cappedExpiry(passportExpiry);
     }
 
-    /// @inheritdoc IVerificationRegistry
+    /// @inheritdoc ISigilRegistry
     function unregister() external override nonReentrant {
         bytes32 hashedAddress = keccak256(abi.encodePacked(msg.sender));
-        if (s_registrations[hashedAddress].expiresAt == 0) revert VerificationRegistry__NotRegistered();
+        if (s_registrations[hashedAddress].expiresAt == 0) revert SigilRegistry__NotRegistered();
 
         bytes32 nullifier = s_nullifierByWallet[hashedAddress];
         _removeWalletFromArray(nullifier, msg.sender);
@@ -230,27 +230,27 @@ contract VerificationRegistry is IVerificationRegistry, ReentrancyGuard {
     // Protocol Integration
     // =========================================================================
 
-    /// @inheritdoc IVerificationRegistry
+    /// @inheritdoc ISigilRegistry
     function isVerified(address wallet) external view override returns (bool) {
         return s_registrations[keccak256(abi.encodePacked(wallet))].expiresAt > block.timestamp;
     }
 
-    /// @inheritdoc IVerificationRegistry
+    /// @inheritdoc ISigilRegistry
     function nullifierOf(address wallet) external view override returns (bytes32) {
         return s_nullifierByWallet[keccak256(abi.encodePacked(wallet))];
     }
 
-    /// @inheritdoc IVerificationRegistry
+    /// @inheritdoc ISigilRegistry
     function getExpiry(address wallet) external view override returns (uint48) {
         return s_registrations[keccak256(abi.encodePacked(wallet))].expiresAt;
     }
 
-    /// @inheritdoc IVerificationRegistry
+    /// @inheritdoc ISigilRegistry
     function getRegisteredAt(address wallet) external view override returns (uint48) {
         return s_registrations[keccak256(abi.encodePacked(wallet))].registeredAt;
     }
 
-    /// @inheritdoc IVerificationRegistry
+    /// @inheritdoc ISigilRegistry
     function getWallets(bytes32 nullifier) external view override returns (address[] memory) {
         return s_walletsByNullifier[nullifier];
     }

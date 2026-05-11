@@ -2,13 +2,13 @@
 pragma solidity 0.8.28;
 
 import {Test} from "forge-std/Test.sol";
-import {VerificationRegistry, IUltraHonkVerifier} from "../src/VerificationRegistry.sol";
+import {SigilRegistry, IUltraHonkVerifier} from "../src/SigilRegistry.sol";
 import {CSCAMerkleTree} from "../src/CSCAMerkleTree.sol";
-import {IVerificationRegistry} from "../src/interfaces/IVerificationRegistry.sol";
+import {ISigilRegistry} from "../src/interfaces/ISigilRegistry.sol";
 import {MockUltraHonkVerifier} from "./mocks/MockUltraHonkVerifier.sol";
 
-contract VerificationRegistryTest is Test {
-    VerificationRegistry public registry;
+contract SigilRegistryTest is Test {
+    SigilRegistry public registry;
     MockUltraHonkVerifier public verifier;
     CSCAMerkleTree public cscaTree;
 
@@ -35,7 +35,7 @@ contract VerificationRegistryTest is Test {
     function setUp() public {
         verifier = new MockUltraHonkVerifier();
         cscaTree = new CSCAMerkleTree(CSCA_MERKLE_ROOT, cscaOwner);
-        registry = new VerificationRegistry(verifier, address(cscaTree), TTL, MAX_DAILY);
+        registry = new SigilRegistry(verifier, address(cscaTree), TTL, MAX_DAILY);
     }
 
     // =========================================================================
@@ -52,33 +52,33 @@ contract VerificationRegistryTest is Test {
     // =========================================================================
 
     function test_Constructor_Reverts_ZeroVerifier() public {
-        vm.expectRevert(VerificationRegistry.VerificationRegistry__ZeroAddress.selector);
-        new VerificationRegistry(IUltraHonkVerifier(address(0)), address(cscaTree), TTL, MAX_DAILY);
+        vm.expectRevert(SigilRegistry.SigilRegistry__ZeroAddress.selector);
+        new SigilRegistry(IUltraHonkVerifier(address(0)), address(cscaTree), TTL, MAX_DAILY);
     }
 
     function test_Constructor_Reverts_ZeroCscaTree() public {
-        vm.expectRevert(VerificationRegistry.VerificationRegistry__ZeroAddress.selector);
-        new VerificationRegistry(verifier, address(0), TTL, MAX_DAILY);
+        vm.expectRevert(SigilRegistry.SigilRegistry__ZeroAddress.selector);
+        new SigilRegistry(verifier, address(0), TTL, MAX_DAILY);
     }
 
     function test_Constructor_Reverts_TTLBelowMin() public {
-        vm.expectRevert(VerificationRegistry.VerificationRegistry__InvalidConfig.selector);
-        new VerificationRegistry(verifier, address(cscaTree), 29 days, MAX_DAILY);
+        vm.expectRevert(SigilRegistry.SigilRegistry__InvalidConfig.selector);
+        new SigilRegistry(verifier, address(cscaTree), 29 days, MAX_DAILY);
     }
 
     function test_Constructor_Reverts_TTLAboveMax() public {
-        vm.expectRevert(VerificationRegistry.VerificationRegistry__InvalidConfig.selector);
-        new VerificationRegistry(verifier, address(cscaTree), 366 days, MAX_DAILY);
+        vm.expectRevert(SigilRegistry.SigilRegistry__InvalidConfig.selector);
+        new SigilRegistry(verifier, address(cscaTree), 366 days, MAX_DAILY);
     }
 
     function test_Constructor_Reverts_MaxDailyZero() public {
-        vm.expectRevert(VerificationRegistry.VerificationRegistry__InvalidConfig.selector);
-        new VerificationRegistry(verifier, address(cscaTree), TTL, 0);
+        vm.expectRevert(SigilRegistry.SigilRegistry__InvalidConfig.selector);
+        new SigilRegistry(verifier, address(cscaTree), TTL, 0);
     }
 
     function test_Constructor_Reverts_MaxDailyAboveMax() public {
-        vm.expectRevert(VerificationRegistry.VerificationRegistry__InvalidConfig.selector);
-        new VerificationRegistry(verifier, address(cscaTree), TTL, 51);
+        vm.expectRevert(SigilRegistry.SigilRegistry__InvalidConfig.selector);
+        new SigilRegistry(verifier, address(cscaTree), TTL, 51);
     }
 
     function test_Constructor_StoresImmutables() public view {
@@ -100,7 +100,7 @@ contract VerificationRegistryTest is Test {
 
     function test_Register_EmitsWalletVerified() public {
         vm.expectEmit(true, false, false, false);
-        emit IVerificationRegistry.WalletVerified(alice);
+        emit ISigilRegistry.WalletVerified(alice);
         _register(alice, NULL_A, EPOCH_A_DAY0);
     }
 
@@ -108,21 +108,21 @@ contract VerificationRegistryTest is Test {
         _register(alice, NULL_A, EPOCH_A_DAY0);
 
         vm.prank(alice);
-        vm.expectRevert(VerificationRegistry.VerificationRegistry__AlreadyRegistered.selector);
+        vm.expectRevert(SigilRegistry.SigilRegistry__AlreadyRegistered.selector);
         registry.register(NULL_A, EPOCH_A_DAY0, PASSPORT_EXPIRY, PROOF);
     }
 
     function test_Register_Reverts_PassportExpired() public {
         uint48 expiredPassport = uint48(block.timestamp - 1);
         vm.prank(alice);
-        vm.expectRevert(VerificationRegistry.VerificationRegistry__PassportExpired.selector);
+        vm.expectRevert(SigilRegistry.SigilRegistry__PassportExpired.selector);
         registry.register(NULL_A, EPOCH_A_DAY0, expiredPassport, PROOF);
     }
 
     function test_Register_Reverts_InvalidProof() public {
         verifier.setReject(true);
         vm.prank(alice);
-        vm.expectRevert(VerificationRegistry.VerificationRegistry__InvalidProof.selector);
+        vm.expectRevert(SigilRegistry.SigilRegistry__InvalidProof.selector);
         registry.register(NULL_A, EPOCH_A_DAY0, PASSPORT_EXPIRY, PROOF);
     }
 
@@ -177,7 +177,7 @@ contract VerificationRegistryTest is Test {
         }
 
         vm.prank(attacker);
-        vm.expectRevert(VerificationRegistry.VerificationRegistry__RateLimitExceeded.selector);
+        vm.expectRevert(SigilRegistry.SigilRegistry__RateLimitExceeded.selector);
         registry.register(NULL_A, EPOCH_A_DAY0, PASSPORT_EXPIRY, PROOF);
     }
 
@@ -194,7 +194,7 @@ contract VerificationRegistryTest is Test {
 
     /// @notice Bounds enforced at deploy: a registry deployed with a smaller cap behaves accordingly.
     function test_RateLimit_TighterCap_DeployedRegistry() public {
-        VerificationRegistry tight = new VerificationRegistry(verifier, address(cscaTree), TTL, 2);
+        SigilRegistry tight = new SigilRegistry(verifier, address(cscaTree), TTL, 2);
 
         vm.prank(alice);
         tight.register(NULL_A, EPOCH_A_DAY0, PASSPORT_EXPIRY, PROOF);
@@ -202,7 +202,7 @@ contract VerificationRegistryTest is Test {
         tight.register(NULL_A, EPOCH_A_DAY0, PASSPORT_EXPIRY, PROOF);
 
         vm.prank(carol);
-        vm.expectRevert(VerificationRegistry.VerificationRegistry__RateLimitExceeded.selector);
+        vm.expectRevert(SigilRegistry.SigilRegistry__RateLimitExceeded.selector);
         tight.register(NULL_A, EPOCH_A_DAY0, PASSPORT_EXPIRY, PROOF);
     }
 
@@ -301,7 +301,7 @@ contract VerificationRegistryTest is Test {
 
     function test_Renew_Reverts_NotRegistered() public {
         vm.prank(alice);
-        vm.expectRevert(VerificationRegistry.VerificationRegistry__NotRegistered.selector);
+        vm.expectRevert(SigilRegistry.SigilRegistry__NotRegistered.selector);
         registry.renew(NULL_A, EPOCH_A_DAY1, PASSPORT_EXPIRY, PROOF);
     }
 
@@ -309,14 +309,14 @@ contract VerificationRegistryTest is Test {
         _register(alice, NULL_A, EPOCH_A_DAY0);
         uint48 expired = uint48(block.timestamp - 1);
         vm.prank(alice);
-        vm.expectRevert(VerificationRegistry.VerificationRegistry__PassportExpired.selector);
+        vm.expectRevert(SigilRegistry.SigilRegistry__PassportExpired.selector);
         registry.renew(NULL_A, EPOCH_A_DAY1, expired, PROOF);
     }
 
     function test_Renew_Reverts_NullifierMismatch() public {
         _register(alice, NULL_A, EPOCH_A_DAY0);
         vm.prank(alice);
-        vm.expectRevert(VerificationRegistry.VerificationRegistry__NullifierMismatch.selector);
+        vm.expectRevert(SigilRegistry.SigilRegistry__NullifierMismatch.selector);
         registry.renew(NULL_B, EPOCH_A_DAY1, PASSPORT_EXPIRY, PROOF);
     }
 
@@ -424,7 +424,7 @@ contract VerificationRegistryTest is Test {
 
     function test_Unregister_Reverts_NotRegistered() public {
         vm.prank(alice);
-        vm.expectRevert(VerificationRegistry.VerificationRegistry__NotRegistered.selector);
+        vm.expectRevert(SigilRegistry.SigilRegistry__NotRegistered.selector);
         registry.unregister();
     }
 

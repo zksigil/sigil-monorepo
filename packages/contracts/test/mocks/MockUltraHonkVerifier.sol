@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.28;
 
-import {IUltraHonkVerifier} from "../../src/VerificationRegistry.sol";
+import {IUltraHonkVerifier} from "../../src/SigilRegistry.sol";
 
 /// @notice Configurable mock UltraHonk verifier for tests and the dev anvil deployment.
 ///         Defaults to returning true. Set `shouldReject = true` to simulate invalid proofs.

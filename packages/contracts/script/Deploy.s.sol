@@ -2,7 +2,7 @@
 pragma solidity ^0.8.28;
 
 import {Script, console2} from "forge-std/Script.sol";
-import {VerificationRegistry, IUltraHonkVerifier} from "../src/VerificationRegistry.sol";
+import {SigilRegistry, IUltraHonkVerifier} from "../src/SigilRegistry.sol";
 import {CSCAMerkleTree} from "../src/CSCAMerkleTree.sol";
 import {SigilUltraHonkVerifier} from "../src/verifiers/SigilUltraHonkVerifier.sol";
 
@@ -46,7 +46,7 @@ contract Deploy is Script {
     // CSCA Merkle root from certs/tree-root.ts (269 certs, depth 9)
     bytes32 public constant CSCA_MERKLE_ROOT = 0x2d656797b947d09105dcde4480bde0e03e9b7e6b02984c40d6391a91835580ef;
 
-    // Registry parameters — bounded by hard limits in VerificationRegistry's constructor.
+    // Registry parameters — bounded by hard limits in SigilRegistry's constructor.
     uint256 public constant REGISTRATION_TTL = 180 days;
     uint8 public constant MAX_DAILY_REGISTRATIONS = 10;
 
@@ -55,7 +55,7 @@ contract Deploy is Script {
         returns (
             SigilUltraHonkVerifier verifier,
             CSCAMerkleTree cscaTree,
-            VerificationRegistry registry
+            SigilRegistry registry
         )
     {
         // Forge sets msg.sender from --account / --sender, so this resolves to the
@@ -80,16 +80,16 @@ contract Deploy is Script {
         verifier = new SigilUltraHonkVerifier();
         console2.log("UltraHonk verifier:   ", address(verifier));
 
-        // 3. VerificationRegistry — immutable after this constructor returns.
+        // 3. SigilRegistry — immutable after this constructor returns.
         //    Cast is required because the generated SigilUltraHonkVerifier doesn't declare
         //    the IUltraHonkVerifier interface, but its `verify` signature matches.
-        registry = new VerificationRegistry(
+        registry = new SigilRegistry(
             IUltraHonkVerifier(address(verifier)),
             address(cscaTree),
             REGISTRATION_TTL,
             MAX_DAILY_REGISTRATIONS
         );
-        console2.log("VerificationRegistry: ", address(registry));
+        console2.log("SigilRegistry: ", address(registry));
         console2.log("  registrationTTL:    ", REGISTRATION_TTL / 1 days, "days");
         console2.log("  maxDailyRegs:       ", MAX_DAILY_REGISTRATIONS);
 

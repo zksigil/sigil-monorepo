@@ -53,7 +53,7 @@ prover does the reduction; the on-chain verifier mirrors it for `hashed_address`
   everything into the prover. The CSCA Merkle root is fetched from the on-chain
   `CSCAMerkleTree` so the proof can only succeed against the deployed registry's
   current root.
-- **On chain:** `VerificationRegistry.register` enforces `passport_expiry > now`
+- **On chain:** `SigilRegistry.register` enforces `passport_expiry > now`
   before calling the verifier; `hashed_address == keccak256(msg.sender)` is the
   binding that prevents cross-wallet proof replay.
 

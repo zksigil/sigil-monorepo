@@ -9,7 +9,7 @@ import { anvil, baseSepolia, base } from 'viem/chains';
 import { RPC_URLS } from '../../../infrastructure/blockchain/appKitConfig';
 import type { RootStackRouteProp, RootStackNavigationProp } from '../../../app/navigation/types';
 import { computeNullifierOnly } from '../services/proofService';
-import { VERIFICATION_REGISTRY_ABI } from '../../../infrastructure/blockchain/contractAbis';
+import { SIGIL_REGISTRY_ABI } from '../../../infrastructure/blockchain/contractAbis';
 import { CONTRACT_ADDRESSES } from '../../../infrastructure/blockchain/contracts';
 import { SUPPORTED_CHAIN_IDS, CHAIN_DISPLAY_NAMES } from '../../../shared/constants/chains';
 import type { SupportedChainId } from '../../../shared/constants/chains';
@@ -94,7 +94,7 @@ export function WalletDiscoveryScreen(): React.JSX.Element {
 
         const result = await client.readContract({
           address: registryAddress,
-          abi: VERIFICATION_REGISTRY_ABI,
+          abi: SIGIL_REGISTRY_ABI,
           functionName: 'getWallets',
           args: [nullifier],
         }) as readonly `0x${string}`[];

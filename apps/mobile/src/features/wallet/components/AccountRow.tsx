@@ -4,7 +4,7 @@ import { useAccount, useWriteContract, useWaitForTransactionReceipt, useChainId,
 import { useOpenWallet } from '../hooks/useOpenWallet';
 import { useEnsName } from '../hooks/useEnsName';
 import { useTrackedExternalAddresses } from '../hooks/useTrackedExternalAddresses';
-import { VERIFICATION_REGISTRY_ABI } from '../../../infrastructure/blockchain/contractAbis';
+import { SIGIL_REGISTRY_ABI } from '../../../infrastructure/blockchain/contractAbis';
 import { CONTRACT_ADDRESSES } from '../../../infrastructure/blockchain/contracts';
 import { SUPPORTED_CHAIN_IDS } from '../../../shared/constants/chains';
 import type { SupportedChainId } from '../../../shared/constants/chains';
@@ -119,7 +119,7 @@ export function AccountRow({ account, linkedSiblings, isActive, nowSec, onSigili
     try {
       const hash = await writeContractAsync({
         address: contractAddress,
-        abi: VERIFICATION_REGISTRY_ABI,
+        abi: SIGIL_REGISTRY_ABI,
         functionName: 'unregister',
         chainId,
       });
