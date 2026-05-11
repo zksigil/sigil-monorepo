@@ -1,0 +1,5 @@
+# `make ios` re-runs uniffi-bindgen-react-native, which regenerates a podspec
+# matching the package.json name (`mopro-ffi`). The Podfile uses the existing
+# MoproFfi.podspec (note the capitalization), so the regenerated one is a stale
+# duplicate. Ignore it so the working tree stays clean after `make ios`.
+mopro-ffi.podspec

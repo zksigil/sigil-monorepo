@@ -7,9 +7,12 @@ SHELL := /bin/bash
 # ─── Paths ─────────────────────────────────────────────────────────────
 CIRCUITS_SRC      := packages/circuits
 CIRCUITS_TARGET   := $(CIRCUITS_SRC)/target
-MOPRO_SRC         := packages/mopro-circuits/MoproReactNativeBindings
-MOPRO_XCFRAMEWORK := $(MOPRO_SRC)/MoproFfiFramework.xcframework
-APP_MODULES       := apps/mobile/modules/mopro
+# The Rust crate lives at packages/mopro-circuits/. The uniffi-bindgen-react-native
+# bindings package lives at apps/mobile/modules/mopro/ (with its own package.json,
+# podspec, and ubrn.config.yaml pointing at the Rust crate via relative path).
+# Build is invoked from MOPRO_BINDINGS so generated artifacts land there directly.
+MOPRO_CRATE       := packages/mopro-circuits
+MOPRO_BINDINGS    := apps/mobile/modules/mopro
 APP_ASSETS        := apps/mobile/assets/circuits
 CONTRACTS         := packages/contracts
 
@@ -33,21 +36,19 @@ circuits: ## Compile Noir circuit and copy to app assets
 	@echo "✅ Circuit built and copied to $(APP_ASSETS)/"
 
 # ─── Mopro iOS Framework ──────────────────────────────────────────────
-ios: ## Build Mopro Rust FFI for iOS and copy to app modules
-	@echo "━━━ Building Mopro iOS xcframework ━━━"
-	cd $(MOPRO_SRC) && uniffi-bindgen-react-native build ios --config ubrn.config.yaml --release --and-generate
-	@echo "━━━ Copying xcframework to app modules ━━━"
-	rm -rf $(APP_MODULES)/MoproFfiFramework.xcframework
-	cp -R $(MOPRO_XCFRAMEWORK) $(APP_MODULES)/
-	@echo "━━━ Copying generated TS + C++ bindings to app modules ━━━"
-	cp -R $(MOPRO_SRC)/src/generated/* $(APP_MODULES)/src/generated/
-	cp -R $(MOPRO_SRC)/cpp/generated/* $(APP_MODULES)/cpp/generated/
-	@echo "✅ iOS framework + bindings copied to $(APP_MODULES)/"
+# Generated artifacts (xcframework, src/generated/, cpp/generated/) land directly
+# inside MOPRO_BINDINGS — no copy step needed.
+ios: ## Build Mopro Rust FFI for iOS into the bindings package
+	@echo "━━━ Building Mopro iOS xcframework + bindings ━━━"
+	cd $(MOPRO_BINDINGS) && uniffi-bindgen-react-native build ios --config ubrn.config.yaml --release --and-generate
+	@echo "✅ iOS framework + bindings built at $(MOPRO_BINDINGS)/"
+	@echo "   Run 'pnpm install' (or 'rm -rf node_modules/mopro-ffi && pnpm install')"
+	@echo "   to refresh the hoisted copy used by the app build."
 
 # ─── Mopro Android (stub — adjust if you have Android set up) ─────────
 android: ## Build Mopro Rust FFI for Android
 	@echo "━━━ Building Mopro Android ━━━"
-	cd $(MOPRO_SRC) && uniffi-bindgen-react-native build android --config ubrn.config.yaml --release
+	cd $(MOPRO_BINDINGS) && uniffi-bindgen-react-native build android --config ubrn.config.yaml --release
 	@echo "✅ Android library built"
 
 # ─── Barretenberg (bb) Commands ───────────────────────────────────────
@@ -217,9 +218,9 @@ clean-circuits: ## Clean compiled circuits
 	rm -f $(APP_ASSETS)/passport_sigil.json
 	@echo "✅ Circuits cleaned"
 
-clean-ios: ## Clean iOS framework copy
-	rm -rf $(APP_MODULES)/MoproFfiFramework.xcframework
-	@echo "✅ iOS framework copy cleaned"
+clean-ios: ## Clean built iOS framework
+	rm -rf $(MOPRO_BINDINGS)/MoproFfiFramework.xcframework
+	@echo "✅ iOS framework cleaned"
 
 clean-contracts: ## Clean contract build artifacts
 	cd $(CONTRACTS) && forge clean
@@ -252,14 +253,9 @@ verify-sync: ## Verify that circuit JSON and xcframework are in sync with source
 		echo "⚠️  Circuit JSON not found — run 'make circuits'"; \
 	fi
 	@echo "━━━ Verifying iOS framework ━━━"
-	@if [ -d "$(MOPRO_XCFRAMEWORK)" ] && [ -d "$(APP_MODULES)/MoproFfiFramework.xcframework" ]; then \
-		SRC_SIZE=$$(du -sm "$(MOPRO_XCFRAMEWORK)/ios-arm64" | awk '{print $$1}'); \
-		DST_SIZE=$$(du -sm "$(APP_MODULES)/MoproFfiFramework.xcframework/ios-arm64" | awk '{print $$1}'); \
-		if [ "$$SRC_SIZE" != "$$DST_SIZE" ]; then \
-			echo "❌ iOS framework out of sync! Run 'make ios'"; \
-			exit 1; \
-		fi; \
-		echo "✅ iOS framework in sync ($$SRC_SIZE MB)"; \
+	@if [ -d "$(MOPRO_BINDINGS)/MoproFfiFramework.xcframework" ]; then \
+		SIZE=$$(du -sm "$(MOPRO_BINDINGS)/MoproFfiFramework.xcframework/ios-arm64" | awk '{print $$1}'); \
+		echo "✅ iOS framework present at $(MOPRO_BINDINGS) ($$SIZE MB)"; \
 	else \
 		echo "⚠️  iOS framework not found — run 'make ios'"; \
 	fi
