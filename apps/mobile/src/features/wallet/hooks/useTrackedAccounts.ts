@@ -4,7 +4,7 @@ import { useChainId, useAccount } from 'wagmi';
 import { createPublicClient, http } from 'viem';
 import { anvil, baseSepolia, base } from 'viem/chains';
 import { RPC_URLS } from '../../../infrastructure/blockchain/appKitConfig';
-import { VERIFICATION_REGISTRY_ABI } from '../../../infrastructure/blockchain/contractAbis';
+import { SIGIL_REGISTRY_ABI } from '../../../infrastructure/blockchain/contractAbis';
 import { CONTRACT_ADDRESSES } from '../../../infrastructure/blockchain/contracts';
 import { SUPPORTED_CHAIN_IDS } from '../../../shared/constants/chains';
 import type { SupportedChainId } from '../../../shared/constants/chains';
@@ -187,19 +187,19 @@ export function useTrackedAccounts(): {
           const [verified, expiry, nullifier] = await Promise.all([
             client.readContract({
               address: contractAddress,
-              abi: VERIFICATION_REGISTRY_ABI,
+              abi: SIGIL_REGISTRY_ABI,
               functionName: 'isVerified',
               args: [addr],
             }).catch(() => false as boolean),
             client.readContract({
               address: contractAddress,
-              abi: VERIFICATION_REGISTRY_ABI,
+              abi: SIGIL_REGISTRY_ABI,
               functionName: 'getExpiry',
               args: [addr],
             }).catch(() => null as bigint | null),
             client.readContract({
               address: contractAddress,
-              abi: VERIFICATION_REGISTRY_ABI,
+              abi: SIGIL_REGISTRY_ABI,
               functionName: 'nullifierOf',
               args: [addr],
             }).catch(() => null as `0x${string}` | null),

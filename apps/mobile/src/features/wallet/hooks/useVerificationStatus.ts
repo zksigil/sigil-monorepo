@@ -1,5 +1,5 @@
 import { useReadContract, useChainId } from 'wagmi';
-import { VERIFICATION_REGISTRY_ABI } from '../../../infrastructure/blockchain/contractAbis';
+import { SIGIL_REGISTRY_ABI } from '../../../infrastructure/blockchain/contractAbis';
 import { CONTRACT_ADDRESSES } from '../../../infrastructure/blockchain/contracts';
 import { SUPPORTED_CHAIN_IDS } from '../../../shared/constants/chains';
 import type { SupportedChainId } from '../../../shared/constants/chains';
@@ -31,7 +31,7 @@ export function useVerificationStatus(
     refetch,
   } = useReadContract({
     address: contractAddress,
-    abi: VERIFICATION_REGISTRY_ABI,
+    abi: SIGIL_REGISTRY_ABI,
     functionName: 'isVerified',
     args: address ? [address] : undefined,
     query: { enabled, staleTime: 0, refetchOnMount: 'always' },

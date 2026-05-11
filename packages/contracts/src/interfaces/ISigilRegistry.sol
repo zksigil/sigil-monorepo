@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.28;
 
-/// @title IVerificationRegistry
+/// @title ISigilRegistry
 /// @notice Single-tier on-chain identity registry backed by ZK passport proofs.
 ///
 /// @dev Model:
@@ -36,7 +36,7 @@ pragma solidity ^0.8.28;
 ///      Rate limiting:
 ///      - Max `maxDailyRegistrations` new wallets per passport per day, enforced via an
 ///        epoch nullifier (`Poseidon2(passport_secret, epoch_day)`). Renewals are exempt.
-interface IVerificationRegistry {
+interface ISigilRegistry {
     // =========================================================================
     // Events
     // =========================================================================

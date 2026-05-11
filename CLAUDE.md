@@ -149,7 +149,7 @@ To limit damage from a stolen passport being used to mass-sigilize wallets:
 
 ### Trust Model — Immutable Registry
 ```
-VerificationRegistry  ← immutable: no governor, no setters, no pause, no successor.
+SigilRegistry  ← immutable: no governor, no setters, no pause, no successor.
        │                  Parameters baked in as immutables at deploy time.
        │ reads root from
        ▼
@@ -264,7 +264,7 @@ fine and `DeployDev.s.sol` leaves it that way.
 - Consider ERC-4337 paymaster for gas (eliminates funder-address deanonymization)
 
 ### Phase 4 TODO
-- [x] Collapse two-tier into single-tier `VerificationRegistry.sol`
+- [x] Collapse two-tier into single-tier `SigilRegistry.sol`
 - [x] Consolidate `base/` + `primary/` Noir circuits into one `sigil/` circuit
 - [x] Regenerate `SigilUltraHonkVerifier.sol` from the unified circuit
 - [x] Update Mopro `compute_sigil_inputs` to emit both `nullifier` and `epoch_nullifier`
