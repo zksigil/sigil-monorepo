@@ -2,7 +2,7 @@
 pragma solidity ^0.8.28;
 
 import {IVerificationRegistry} from "./interfaces/IVerificationRegistry.sol";
-import {ICSCAMerkleTree} from "./interfaces/ICSCAMerkleTree.sol";
+import {CSCAMerkleTree} from "./CSCAMerkleTree.sol";
 import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 
 /// @dev Surface of the generated Noir UltraHonk verifier (SigilUltraHonkVerifier.sol).
@@ -82,7 +82,7 @@ contract VerificationRegistry is IVerificationRegistry, ReentrancyGuard {
     // =========================================================================
 
     IUltraHonkVerifier public immutable i_verifier;
-    ICSCAMerkleTree public immutable i_cscaMerkleTree;
+    CSCAMerkleTree public immutable i_cscaMerkleTree;
     uint256 public immutable i_registrationTTL;
     uint8 public immutable i_maxDailyRegistrations;
 
@@ -134,7 +134,7 @@ contract VerificationRegistry is IVerificationRegistry, ReentrancyGuard {
         }
 
         i_verifier = verifier_;
-        i_cscaMerkleTree = ICSCAMerkleTree(cscaMerkleTree_);
+        i_cscaMerkleTree = CSCAMerkleTree(cscaMerkleTree_);
         i_registrationTTL = registrationTTL_;
         i_maxDailyRegistrations = maxDailyRegistrations_;
     }

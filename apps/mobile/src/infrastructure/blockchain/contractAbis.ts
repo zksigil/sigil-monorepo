@@ -98,7 +98,7 @@ export const VERIFICATION_REGISTRY_ABI = [
       {
         "name": "",
         "type": "address",
-        "internalType": "contract ICSCAMerkleTree"
+        "internalType": "contract CSCAMerkleTree"
       }
     ],
     "stateMutability": "view"
