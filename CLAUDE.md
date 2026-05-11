@@ -41,12 +41,14 @@ pnpm mobile              # Start Expo dev server
 pnpm mobile:ios          # Run on iOS simulator
 pnpm mobile:android      # Run on Android emulator
 pnpm typecheck           # TypeScript check (mobile)
-pnpm contracts:sync-abi  # Copy compiled ABIs to apps/mobile/src/infrastructure/blockchain
+pnpm contracts:sync-abi  # Regen apps/mobile/.../contractAbis.ts from SigilRegistry artifact
 make contracts           # forge build + sync ABI
 make contracts-test      # forge test -vvv
 make circuits            # nargo compile + copy JSON to app assets
 make bb-verifier         # Regenerate SigilUltraHonkVerifier.sol from VK
-make ios                 # Rebuild Mopro Rust FFI for iOS + copy bindings
+make ios                 # Build Mopro Rust FFI; writes xcframework + bindings into apps/mobile/modules/mopro/
+make pods                # cd apps/mobile/ios && pod install (generates mobile.xcworkspace)
+make bootstrap           # Full first-time setup from a fresh checkout (chains all of the above)
 ```
 
 ## Contract Deployment
@@ -169,8 +171,8 @@ constructor call and can be transferred after deploy. See the production deploy
 procedure below for the three concrete options (Safe, TimelockController, EOA-for-dev).
 
 The registry contract has no governance surface. Every parameter is set in the constructor and frozen:
-- `i_verifier` (`IProofVerifier`) — frozen
-- `i_cscaMerkleTree` (`ICSCAMerkleTree`) — frozen (CSCA tree's OWN `setRoot` handles updates)
+- `i_verifier` (`IUltraHonkVerifier` — small interface declared inline in `SigilRegistry.sol`) — frozen
+- `i_cscaMerkleTree` (`CSCAMerkleTree` — concrete contract type, no separate interface) — frozen (CSCA tree's OWN `setRoot` handles updates)
 - `i_registrationTTL` (uint256) — frozen, bounded `[30 days, 365 days]` in constructor
 - `i_maxDailyRegistrations` (uint8) — frozen, bounded `[1, 50]` in constructor
 
@@ -196,8 +198,8 @@ function getRegisteredAt(address wallet) external view returns (uint48);
 function getWallets(bytes32 nullifier) external view returns (address[] memory);
 
 // Constructor immutables (read-only)
-function i_verifier() external view returns (IProofVerifier);
-function i_cscaMerkleTree() external view returns (ICSCAMerkleTree);
+function i_verifier() external view returns (IUltraHonkVerifier);
+function i_cscaMerkleTree() external view returns (CSCAMerkleTree);
 function i_registrationTTL() external view returns (uint256);
 function i_maxDailyRegistrations() external view returns (uint8);
 ```
@@ -270,5 +272,7 @@ fine and `DeployDev.s.sol` leaves it that way.
 - [x] Update Mopro `compute_sigil_inputs` to emit both `nullifier` and `epoch_nullifier`
 - [x] Refactor mobile app: single `Sigilize` CTA, first-sigilize education modal, `useTrackedAccounts` reads `isVerified` + `nullifierOf`
 - [x] Strip governance from registry — registry is immutable; only `CSCAMerkleTree.setRoot` is privileged
-- [ ] Transfer `CSCAMerkleTree` ownership to a multisig (or `TimelockController`) after deploy
-- [ ] App prompts renewal when registration is within 30 days of expiry
+- [x] App prompts renewal when registration is within 30 days of expiry (shipped in `ui/polish-pass-3`)
+- [x] Inline ProofVerifier into the registry, drop `ICSCAMerkleTree` interface (`refactor/inline-proof-verifier`)
+- [x] Rename `VerificationRegistry` → `SigilRegistry` (`refactor/sigil-registry-rename`)
+- [ ] Transfer `CSCAMerkleTree` ownership to a multisig (or `TimelockController`) before mainnet deploy

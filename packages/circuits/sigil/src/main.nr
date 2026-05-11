@@ -24,7 +24,7 @@ global MERKLE_DEPTH: u32 = 9;
 ///
 /// Trust chain: ICAO Master List -> CSCA -> signs DSC cert -> DSC signs SOD -> SOD covers DG1.
 ///
-/// Public inputs (declaration order -- must match contract `verifyProof` marshalling):
+/// Public inputs (declaration order -- must match SigilRegistry._verifyProof marshalling):
 ///   nullifier         -- stable sybil identifier per passport
 ///   epoch_nullifier   -- daily rate-limit key
 ///   hashed_address    -- keccak256(wallet) reduced mod p (prevents proof replay)

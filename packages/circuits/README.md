@@ -1,11 +1,11 @@
-# Sigil Circuit (Phase 4 — single-tier)
+# Sigil Circuit
 
 Noir circuit (`sigil/`) that proves a passport is signed up the ICAO trust chain
 and derives both a stable per-passport nullifier and a daily epoch nullifier.
 
 The circuit lives at [`sigil/src/main.nr`](sigil/src/main.nr). Source of truth
 for the public-input order, witness layout, and constants — all other packages
-(Mopro Rust FFI, mobile `proofService.ts`, Solidity `ProofVerifier.sol`) must
+(Mopro Rust FFI, mobile `proofService.ts`, Solidity `SigilRegistry.sol`) must
 mirror it.
 
 ## What the circuit proves
@@ -21,7 +21,7 @@ Passport expiry is NOT a circuit input — it's enforced on-chain at the `regist
 
 ## Public inputs (declaration order)
 
-The Solidity verifier marshals these in this exact order — see `packages/contracts/src/ProofVerifier.sol`:
+The registry marshals these in this exact order before calling the verifier — see `_verifyProof` in `packages/contracts/src/SigilRegistry.sol`:
 
 | Index | Name               | Description                                           |
 |-------|--------------------|-------------------------------------------------------|
