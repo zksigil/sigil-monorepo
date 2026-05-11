@@ -1,5 +1,6 @@
 # Sigil — Build & Development Makefile
-# Prevents the manual copy mistakes that caused the redc_param debug loop.
+# Orchestrates the multi-stage build: Noir circuits, bb verifier generation,
+# Mopro Rust FFI, Foundry contracts + ABI sync, and CocoaPods setup.
 
 SHELL := /bin/bash
 .PHONY: help circuits circuits-all refresh-mopro-bindings ios android contracts pods bootstrap test test-all typecheck clean clean-ios clean-circuits clean-contracts clean-pods deps build-all install-dev

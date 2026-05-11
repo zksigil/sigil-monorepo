@@ -39,7 +39,8 @@ import {SigilUltraHonkVerifier} from "../src/verifiers/SigilUltraHonkVerifier.so
 ///
 /// After deployment:
 ///   1. Update EXPO_PUBLIC_BASE_SEPOLIA_REGISTRY_ADDRESS (or EXPO_PUBLIC_BASE_REGISTRY_ADDRESS)
-///      in apps/mobile/.env, then rebuild the app — env vars are baked into the JS bundle.
+///      in BOTH root .env and apps/mobile/.env, then rebuild the app — Expo bakes env
+///      vars into the JS bundle at build time, and the root .env feeds Makefile targets.
 ///   2. Transfer CSCAMerkleTree ownership to a multisig via transferOwnership() →
 ///      acceptOwnership(). See CLAUDE.md "Production deploy procedure" for details.
 contract Deploy is Script {
