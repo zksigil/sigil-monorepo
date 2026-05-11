@@ -4,9 +4,9 @@ pragma solidity ^0.8.28;
 import {Script, console2} from "forge-std/Script.sol";
 import {VerificationRegistry} from "../src/VerificationRegistry.sol";
 import {CSCAMerkleTree} from "../src/CSCAMerkleTree.sol";
-import {MockProofVerifier} from "../test/mocks/MockProofVerifier.sol";
+import {MockUltraHonkVerifier} from "../test/mocks/MockUltraHonkVerifier.sol";
 
-/// @notice Dev deployment using MockProofVerifier (always accepts proofs).
+/// @notice Dev deployment using MockUltraHonkVerifier (always accepts proofs).
 ///         For local anvil testing only — stub proofs from the app will pass.
 ///
 /// Usage:
@@ -22,13 +22,13 @@ contract DeployDev is Script {
     uint8 public constant MAX_DAILY_REGISTRATIONS = 10;
 
     function run() public returns (
-        MockProofVerifier verifier,
+        MockUltraHonkVerifier verifier,
         CSCAMerkleTree cscaTree,
         VerificationRegistry registry
     ) {
         address deployer = msg.sender;
 
-        console2.log("=== Sigil Dev Deployment (MockProofVerifier) ===");
+        console2.log("=== Sigil Dev Deployment (MockUltraHonkVerifier) ===");
         console2.log("Deployer:", deployer);
         console2.log("Chain ID:", block.chainid);
 
@@ -37,8 +37,8 @@ contract DeployDev is Script {
         cscaTree = new CSCAMerkleTree(CSCA_MERKLE_ROOT, deployer);
         console2.log("CSCAMerkleTree:       ", address(cscaTree));
 
-        verifier = new MockProofVerifier();
-        console2.log("MockProofVerifier:    ", address(verifier));
+        verifier = new MockUltraHonkVerifier();
+        console2.log("MockUltraHonkVerifier:", address(verifier));
 
         registry = new VerificationRegistry(
             verifier,

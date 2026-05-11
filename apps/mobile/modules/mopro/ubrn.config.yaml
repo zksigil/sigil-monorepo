@@ -1,5 +1,5 @@
 rust:
-  directory: /Users/ytanaka/Projects/zkproof-verifier/packages/mopro-circuits
+  directory: ../../../../packages/mopro-circuits
   manifestPath: Cargo.toml
 
 android:

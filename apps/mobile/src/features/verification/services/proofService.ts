@@ -177,7 +177,7 @@ export async function generateSigilProof(input: ProofInput): Promise<SigilProofO
   // findCSCAMerkleProof would just hex-encode again.
   let cscaMerkleProof = findCSCAMerkleProof(chainResult.cscaModulusHex);
   if (!cscaMerkleProof) {
-    // Dev fallback: placeholder Merkle proof. Works only against MockProofVerifier;
+    // Dev fallback: placeholder Merkle proof. Works only against MockUltraHonkVerifier;
     // a real verifier would reject this proof.
     console.warn('[PROOF-DBG] CSCA pubkey not in Merkle tree - using dev fallback');
     cscaMerkleProof = {

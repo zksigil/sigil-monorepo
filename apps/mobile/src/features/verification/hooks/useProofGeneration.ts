@@ -60,7 +60,7 @@ export function useProofGeneration(): UseProofGenerationResult {
           const stub = generateStubProof(input);
 
           // Stub: nullifier and epoch_nullifier both derived from the keccak surrogate.
-          // Real circuit uses Poseidon2; stub is only valid against MockProofVerifier.
+          // Real circuit uses Poseidon2; stub is only valid against MockUltraHonkVerifier.
           const stubNullifier = stub.passportNullifierHex;
           proofOutput = {
             zkProof: {
