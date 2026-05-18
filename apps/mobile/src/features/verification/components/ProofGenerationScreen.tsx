@@ -14,9 +14,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRoute, useNavigation } from '@react-navigation/native';
 import { useAccount, useChainId, useSwitchChain, useWriteContract, useWaitForTransactionReceipt } from 'wagmi';
 import type { BaseError } from 'wagmi';
-import { createPublicClient, http } from 'viem';
-import { anvil, baseSepolia, base } from 'viem/chains';
-import { RPC_URLS } from '../../../infrastructure/blockchain/appKitConfig';
+import { getPublicClient } from '../../../infrastructure/blockchain/publicClient';
 import type { RootStackRouteProp, RootStackNavigationProp } from '../../../app/navigation/types';
 import { useProofGeneration } from '../hooks/useProofGeneration';
 import type { SigilProofOutput } from '../services/proofService';
@@ -155,23 +153,6 @@ function mrzExpiryToUnix(yymmdd: string): number {
 function decimalOrHexToBytes32(value: string): `0x${string}` {
   const hex = BigInt(value).toString(16);
   return `0x${hex.padStart(64, '0')}` as `0x${string}`;
-}
-
-// ---------------------------------------------------------------------------
-// Standalone public client for simulation — avoids wagmi/WalletConnect transport
-// which can fail when the app backgrounds during a WC session check.
-// ---------------------------------------------------------------------------
-
-const CHAIN_CONFIG = {
-  31337: { chain: anvil, rpc: RPC_URLS[anvil.id] },
-  84532: { chain: baseSepolia, rpc: RPC_URLS[baseSepolia.id] },
-  8453: { chain: base, rpc: RPC_URLS[base.id] },
-} as const;
-
-function getPublicClient(chainId: number) {
-  const cfg = CHAIN_CONFIG[chainId as keyof typeof CHAIN_CONFIG];
-  if (!cfg) return null;
-  return createPublicClient({ chain: cfg.chain, transport: http(cfg.rpc) });
 }
 
 // ---------------------------------------------------------------------------

@@ -1,9 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { AppState } from 'react-native';
 import { useChainId, useAccount } from 'wagmi';
-import { createPublicClient, http } from 'viem';
-import { anvil, baseSepolia, base } from 'viem/chains';
-import { RPC_URLS } from '../../../infrastructure/blockchain/appKitConfig';
+import { getPublicClient } from '../../../infrastructure/blockchain/publicClient';
 import { SIGIL_REGISTRY_ABI } from '../../../infrastructure/blockchain/contractAbis';
 import { CONTRACT_ADDRESSES } from '../../../infrastructure/blockchain/contracts';
 import { SUPPORTED_CHAIN_IDS } from '../../../shared/constants/chains';
@@ -46,23 +44,6 @@ export function formatQuarter(timestamp: bigint): string {
 }
 
 const ZERO_NULLIFIER = '0x0000000000000000000000000000000000000000000000000000000000000000' as `0x${string}`;
-
-// ---------------------------------------------------------------------------
-// Standalone viem clients — bypass wagmi/WalletConnect transport so reads
-// work reliably even when the app returns from background.
-// ---------------------------------------------------------------------------
-
-const CHAIN_CONFIG = {
-  31337: { chain: anvil, rpc: RPC_URLS[anvil.id] },
-  84532: { chain: baseSepolia, rpc: RPC_URLS[baseSepolia.id] },
-  8453: { chain: base, rpc: RPC_URLS[base.id] },
-} as const;
-
-function getPublicClient(chainId: number) {
-  const cfg = CHAIN_CONFIG[chainId as keyof typeof CHAIN_CONFIG];
-  if (!cfg) return null;
-  return createPublicClient({ chain: cfg.chain, transport: http(cfg.rpc) });
-}
 
 // ---------------------------------------------------------------------------
 // Hook
