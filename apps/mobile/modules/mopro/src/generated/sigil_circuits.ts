@@ -29,7 +29,7 @@ import nativeModule, {
   type UniffiForeignFutureCompleteRustBuffer,
   type UniffiForeignFutureStructVoid,
   type UniffiForeignFutureCompleteVoid,
-} from "./zkpassport_circuits-ffi";
+} from "./sigil_circuits-ffi";
 import {
   type UniffiByteArray, 
   AbstractFfiConverterByteArray, 
@@ -73,7 +73,7 @@ export function computeRedcParam(modulusBytes: ArrayBuffer): ArrayBuffer /*throw
         uniffiCaller.rustCallWithError(
             /*liftError:*/ FfiConverterTypeMoproError.lift.bind(FfiConverterTypeMoproError),
             /*caller:*/ (callStatus) => {
-                return nativeModule().ubrn_uniffi_zkpassport_circuits_fn_func_compute_redc_param(
+                return nativeModule().ubrn_uniffi_sigil_circuits_fn_func_compute_redc_param(
         FfiConverterArrayBuffer.lower(modulusBytes),
                 callStatus);
             },
@@ -101,7 +101,7 @@ export function computeSigilInputs(dg1Hash: string, sodHash: string, epochDay: s
         uniffiCaller.rustCallWithError(
             /*liftError:*/ FfiConverterTypeMoproError.lift.bind(FfiConverterTypeMoproError),
             /*caller:*/ (callStatus) => {
-                return nativeModule().ubrn_uniffi_zkpassport_circuits_fn_func_compute_sigil_inputs(
+                return nativeModule().ubrn_uniffi_sigil_circuits_fn_func_compute_sigil_inputs(
         FfiConverterString.lower(dg1Hash),
         FfiConverterString.lower(sodHash),
         FfiConverterString.lower(epochDay),
@@ -139,7 +139,7 @@ export function generateNoirProof(circuitPath: string, srsPath: string | undefin
         uniffiCaller.rustCallWithError(
             /*liftError:*/ FfiConverterTypeMoproError.lift.bind(FfiConverterTypeMoproError),
             /*caller:*/ (callStatus) => {
-                return nativeModule().ubrn_uniffi_zkpassport_circuits_fn_func_generate_noir_proof(
+                return nativeModule().ubrn_uniffi_sigil_circuits_fn_func_generate_noir_proof(
         FfiConverterString.lower(circuitPath),
         FfiConverterOptionalString.lower(srsPath),
         FfiConverterArrayString.lower(inputs),
@@ -163,7 +163,7 @@ export function getNoirVerificationKey(circuitPath: string, srsPath: string | un
         uniffiCaller.rustCallWithError(
             /*liftError:*/ FfiConverterTypeMoproError.lift.bind(FfiConverterTypeMoproError),
             /*caller:*/ (callStatus) => {
-                return nativeModule().ubrn_uniffi_zkpassport_circuits_fn_func_get_noir_verification_key(
+                return nativeModule().ubrn_uniffi_sigil_circuits_fn_func_get_noir_verification_key(
         FfiConverterString.lower(circuitPath),
         FfiConverterOptionalString.lower(srsPath),
         FfiConverterBool.lower(onChain),
@@ -186,7 +186,7 @@ export function verifyNoirProof(circuitPath: string, proof: ArrayBuffer, onChain
         uniffiCaller.rustCallWithError(
             /*liftError:*/ FfiConverterTypeMoproError.lift.bind(FfiConverterTypeMoproError),
             /*caller:*/ (callStatus) => {
-                return nativeModule().ubrn_uniffi_zkpassport_circuits_fn_func_verify_noir_proof(
+                return nativeModule().ubrn_uniffi_sigil_circuits_fn_func_verify_noir_proof(
         FfiConverterString.lower(circuitPath),
         FfiConverterArrayBuffer.lower(proof),
         FfiConverterBool.lower(onChain),
@@ -237,18 +237,18 @@ export const SigilInputs = (() => {
     return Object.freeze({
         /**
          * Create a frozen instance of {@link SigilInputs}, with defaults specified
-         * in Rust, in the {@link zkpassport_circuits} crate.
+         * in Rust, in the {@link sigil_circuits} crate.
          */
         create,
 
         /**
          * Create a frozen instance of {@link SigilInputs}, with defaults specified
-         * in Rust, in the {@link zkpassport_circuits} crate.
+         * in Rust, in the {@link sigil_circuits} crate.
          */
         new: create,
 
         /**
-         * Defaults specified in the {@link zkpassport_circuits} crate.
+         * Defaults specified in the {@link sigil_circuits} crate.
          */
         defaults: () => Object.freeze(defaults()) as Partial<SigilInputs>,
     });
@@ -424,24 +424,24 @@ function uniffiEnsureInitialized() {
     // Get the bindings contract version from our ComponentInterface
     const bindingsContractVersion = 29;
     // Get the scaffolding contract version by calling the into the dylib
-    const scaffoldingContractVersion = nativeModule().ubrn_ffi_zkpassport_circuits_uniffi_contract_version();
+    const scaffoldingContractVersion = nativeModule().ubrn_ffi_sigil_circuits_uniffi_contract_version();
     if (bindingsContractVersion !== scaffoldingContractVersion) {
         throw new UniffiInternalError.ContractVersionMismatch(scaffoldingContractVersion, bindingsContractVersion);
     }
-    if (nativeModule().ubrn_uniffi_zkpassport_circuits_checksum_func_compute_redc_param() !== 49397) {
-        throw new UniffiInternalError.ApiChecksumMismatch("uniffi_zkpassport_circuits_checksum_func_compute_redc_param");
+    if (nativeModule().ubrn_uniffi_sigil_circuits_checksum_func_compute_redc_param() !== 34933) {
+        throw new UniffiInternalError.ApiChecksumMismatch("uniffi_sigil_circuits_checksum_func_compute_redc_param");
     }
-    if (nativeModule().ubrn_uniffi_zkpassport_circuits_checksum_func_compute_sigil_inputs() !== 48585) {
-        throw new UniffiInternalError.ApiChecksumMismatch("uniffi_zkpassport_circuits_checksum_func_compute_sigil_inputs");
+    if (nativeModule().ubrn_uniffi_sigil_circuits_checksum_func_compute_sigil_inputs() !== 29214) {
+        throw new UniffiInternalError.ApiChecksumMismatch("uniffi_sigil_circuits_checksum_func_compute_sigil_inputs");
     }
-    if (nativeModule().ubrn_uniffi_zkpassport_circuits_checksum_func_generate_noir_proof() !== 35127) {
-        throw new UniffiInternalError.ApiChecksumMismatch("uniffi_zkpassport_circuits_checksum_func_generate_noir_proof");
+    if (nativeModule().ubrn_uniffi_sigil_circuits_checksum_func_generate_noir_proof() !== 38298) {
+        throw new UniffiInternalError.ApiChecksumMismatch("uniffi_sigil_circuits_checksum_func_generate_noir_proof");
     }
-    if (nativeModule().ubrn_uniffi_zkpassport_circuits_checksum_func_get_noir_verification_key() !== 5025) {
-        throw new UniffiInternalError.ApiChecksumMismatch("uniffi_zkpassport_circuits_checksum_func_get_noir_verification_key");
+    if (nativeModule().ubrn_uniffi_sigil_circuits_checksum_func_get_noir_verification_key() !== 5570) {
+        throw new UniffiInternalError.ApiChecksumMismatch("uniffi_sigil_circuits_checksum_func_get_noir_verification_key");
     }
-    if (nativeModule().ubrn_uniffi_zkpassport_circuits_checksum_func_verify_noir_proof() !== 47919) {
-        throw new UniffiInternalError.ApiChecksumMismatch("uniffi_zkpassport_circuits_checksum_func_verify_noir_proof");
+    if (nativeModule().ubrn_uniffi_sigil_circuits_checksum_func_verify_noir_proof() !== 61150) {
+        throw new UniffiInternalError.ApiChecksumMismatch("uniffi_sigil_circuits_checksum_func_verify_noir_proof");
     }
 
     }

@@ -9,7 +9,7 @@ if (!rustInstalled) {
   try {
     const result = installer.installRustCrate();
     console.log('[MOPRO-INDEX] installRustCrate result:', result);
-    console.log('[MOPRO-INDEX] globalThis.NativeZkpassportCircuits:', typeof (globalThis as any).NativeZkpassportCircuits);
+    console.log('[MOPRO-INDEX] globalThis.NativeSigilCircuits:', typeof (globalThis as any).NativeSigilCircuits);
   } catch (e) {
     console.error('[MOPRO-INDEX] installRustCrate CRASHED:', e);
   }
@@ -17,12 +17,12 @@ if (!rustInstalled) {
 }
 
 // Export the generated bindings to the app.
-export * from './generated/zkpassport_circuits';
+export * from './generated/sigil_circuits';
 
 // Now import the bindings so we can:
 // - intialize them
 // - export them as namespaced objects as the default export.
-import * as zkpassport_circuits from './generated/zkpassport_circuits';
+import * as sigil_circuits from './generated/sigil_circuits';
 
 // Initialize the generated bindings: mostly checksums, but also callbacks.
 // - the boolean flag ensures this loads exactly once, even if the JS code
@@ -30,7 +30,7 @@ import * as zkpassport_circuits from './generated/zkpassport_circuits';
 let initialized = false;
 if (!initialized) {
   try {
-    zkpassport_circuits.default.initialize();
+    sigil_circuits.default.initialize();
     console.log('[MOPRO-INDEX] initialize succeeded');
   } catch (e) {
     console.error('[MOPRO-INDEX] initialize FAILED:', e);
@@ -47,6 +47,5 @@ export async function uniffiInitAsync() {
 
 // Export the crates as individually namespaced objects.
 export default {
-  zkpassport_circuits,
+  sigil_circuits,
 };
-

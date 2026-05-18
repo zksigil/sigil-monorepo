@@ -3225,6 +3225,20 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0fda2ff0d084019ba4d7c6f371c95d8fd75ce3524c3cb8fb653a3023f6323e64"
 
 [[package]]
+name = "sigil-circuits"
+version = "0.1.0"
+dependencies = [
+ "bn254_blackbox_solver",
+ "mopro-ffi",
+ "noir",
+ "num-bigint",
+ "serde",
+ "serde_json",
+ "serial_test",
+ "thiserror 2.0.18",
+]
+
+[[package]]
 name = "signature"
 version = "3.0.0-rc.10"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4626,20 +4640,6 @@ dependencies = [
  "proc-macro2",
  "quote",
  "syn 2.0.117",
-]
-
-[[package]]
-name = "zkpassport-circuits"
-version = "0.1.0"
-dependencies = [
- "bn254_blackbox_solver",
- "mopro-ffi",
- "noir",
- "num-bigint",
- "serde",
- "serde_json",
- "serial_test",
- "thiserror 2.0.18",
 ]
 
 [[package]]
