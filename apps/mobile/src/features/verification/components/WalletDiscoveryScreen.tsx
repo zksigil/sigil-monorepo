@@ -4,9 +4,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import * as Clipboard from 'expo-clipboard';
 import { useRoute, useNavigation } from '@react-navigation/native';
 import { useChainId } from 'wagmi';
-import { createPublicClient, http } from 'viem';
-import { anvil, baseSepolia, base } from 'viem/chains';
-import { RPC_URLS } from '../../../infrastructure/blockchain/appKitConfig';
+import { getPublicClient } from '../../../infrastructure/blockchain/publicClient';
 import type { RootStackRouteProp, RootStackNavigationProp } from '../../../app/navigation/types';
 import { computeNullifierOnly } from '../services/proofService';
 import { SIGIL_REGISTRY_ABI } from '../../../infrastructure/blockchain/contractAbis';
@@ -18,18 +16,6 @@ import { useTrackedExternalAddresses } from '../../wallet/hooks/useTrackedExtern
 import { useAccount } from 'wagmi';
 
 type Step = 'computing' | 'querying' | 'done' | 'error';
-
-const CHAIN_CONFIG = {
-  31337: { chain: anvil, rpc: RPC_URLS[anvil.id] },
-  84532: { chain: baseSepolia, rpc: RPC_URLS[baseSepolia.id] },
-  8453: { chain: base, rpc: RPC_URLS[base.id] },
-} as const;
-
-function getPublicClient(chainId: number) {
-  const cfg = CHAIN_CONFIG[chainId as keyof typeof CHAIN_CONFIG];
-  if (!cfg) return null;
-  return createPublicClient({ chain: cfg.chain, transport: http(cfg.rpc) });
-}
 
 function decimalToBytes32(decimal: string): `0x${string}` {
   return `0x${BigInt(decimal).toString(16).padStart(64, '0')}` as `0x${string}`;
