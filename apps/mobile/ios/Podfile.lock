@@ -1,6 +1,4 @@
 PODS:
-  - EXApplication (7.0.8):
-    - ExpoModulesCore
   - EXConstants (18.0.13):
     - ExpoModulesCore
   - EXJSONUtils (0.15.0)
@@ -216,8 +214,6 @@ PODS:
     - ExpoModulesCore
   - ExpoKeepAwake (15.0.8):
     - ExpoModulesCore
-  - ExpoLinking (8.0.11):
-    - ExpoModulesCore
   - ExpoModulesCore (3.0.29):
     - hermes-engine
     - RCTRequired
@@ -319,29 +315,6 @@ PODS:
     - GTMSessionFetcher/Core (< 4.0, >= 3.3.2)
     - MLImage (= 1.0.0-beta7)
     - MLKitCommon (~> 13.0)
-  - mopro-ffi (0.1.0):
-    - hermes-engine
-    - RCTRequired
-    - RCTTypeSafety
-    - React-Core
-    - React-Core-prebuilt
-    - React-debug
-    - React-Fabric
-    - React-featureflags
-    - React-graphics
-    - React-ImageManager
-    - React-jsi
-    - React-NativeModulesApple
-    - React-RCTFabric
-    - React-renderercss
-    - React-rendererdebug
-    - React-utils
-    - ReactCodegen
-    - ReactCommon/turbomodule/bridging
-    - ReactCommon/turbomodule/core
-    - ReactNativeDependencies
-    - uniffi-bindgen-react-native (= 0.29.0-0)
-    - Yoga
   - MoproFfi (0.1.0):
     - hermes-engine
     - RCTRequired
@@ -2375,7 +2348,6 @@ PODS:
     - ZXingObjC/Core
 
 DEPENDENCIES:
-  - EXApplication (from `../../../node_modules/expo-application/ios`)
   - EXConstants (from `../../../node_modules/expo-constants/ios`)
   - EXJSONUtils (from `../../../node_modules/expo-json-utils/ios`)
   - EXManifests (from `../../../node_modules/expo-manifests/ios`)
@@ -2390,12 +2362,10 @@ DEPENDENCIES:
   - ExpoFileSystem (from `../../../node_modules/expo-file-system/ios`)
   - ExpoFont (from `../../../node_modules/expo-font/ios`)
   - ExpoKeepAwake (from `../../../node_modules/expo-keep-awake/ios`)
-  - ExpoLinking (from `../node_modules/expo-linking/ios`)
   - ExpoModulesCore (from `../../../node_modules/expo-modules-core`)
   - EXUpdatesInterface (from `../../../node_modules/expo-updates-interface/ios`)
   - FBLazyVector (from `../../../node_modules/react-native/Libraries/FBLazyVector`)
   - hermes-engine (from `../../../node_modules/react-native/sdks/hermes-engine/hermes-engine.podspec`)
-  - mopro-ffi (from `../modules/mopro`)
   - MoproFfi (from `../modules/mopro`)
   - RCTDeprecation (from `../../../node_modules/react-native/ReactApple/Libraries/RCTFoundation/RCTDeprecation`)
   - RCTRequired (from `../../../node_modules/react-native/Libraries/Required`)
@@ -2498,8 +2468,6 @@ SPEC REPOS:
     - ZXingObjC
 
 EXTERNAL SOURCES:
-  EXApplication:
-    :path: "../../../node_modules/expo-application/ios"
   EXConstants:
     :path: "../../../node_modules/expo-constants/ios"
   EXJSONUtils:
@@ -2528,8 +2496,6 @@ EXTERNAL SOURCES:
     :path: "../../../node_modules/expo-font/ios"
   ExpoKeepAwake:
     :path: "../../../node_modules/expo-keep-awake/ios"
-  ExpoLinking:
-    :path: "../node_modules/expo-linking/ios"
   ExpoModulesCore:
     :path: "../../../node_modules/expo-modules-core"
   EXUpdatesInterface:
@@ -2539,8 +2505,6 @@ EXTERNAL SOURCES:
   hermes-engine:
     :podspec: "../../../node_modules/react-native/sdks/hermes-engine/hermes-engine.podspec"
     :tag: hermes-2025-07-07-RNv0.81.0-e0fc67142ec0763c6b6153ca2bf96df815539782
-  mopro-ffi:
-    :path: "../modules/mopro"
   MoproFfi:
     :path: "../modules/mopro"
   RCTDeprecation:
@@ -2699,7 +2663,6 @@ EXTERNAL SOURCES:
     :path: "../../../node_modules/react-native/ReactCommon/yoga"
 
 SPEC CHECKSUMS:
-  EXApplication: 1e98d4b1dccdf30627f92917f4b2c5a53c330e5f
   EXConstants: fce59a631a06c4151602843667f7cfe35f81e271
   EXJSONUtils: 1d3e4590438c3ee593684186007028a14b3686cd
   EXManifests: a8d97683e5c7a3b026ffbd58559c64dc655b747b
@@ -2714,7 +2677,6 @@ SPEC CHECKSUMS:
   ExpoFileSystem: 858a44267a3e6e9057e0888ad7c7cfbf55d52063
   ExpoFont: f543ce20a228dd702813668b1a07b46f51878d47
   ExpoKeepAwake: 55f75eca6499bb9e4231ebad6f3e9cb8f99c0296
-  ExpoLinking: 8f0aaf69aa56f832913030503b6263dc6f647f37
   ExpoModulesCore: f3da4f1ab5a8375d0beafab763739dbee8446583
   EXUpdatesInterface: 5adf50cb41e079c861da6d9b4b954c3db9a50734
   FBLazyVector: e95a291ad2dadb88e42b06e0c5fb8262de53ec12
@@ -2733,7 +2695,6 @@ SPEC CHECKSUMS:
   MLKitTextRecognitionJapanese: 776fddee29ac10dc304fccea1588accc32f4640c
   MLKitTextRecognitionKorean: dc1273aa2ef41f363b585d3dde1cf2de68c7c6d8
   MLKitVision: fa8dea9012ac59497c79ddbe9ebf32051047ac4c
-  mopro-ffi: c08707bc038cfbcba6d7982e49a877fb01459a48
   MoproFfi: 0c9c1de74315c5d11ed519df5294b4c06d0b2f09
   nanopb: fad817b59e0457d11a5dfbde799381cd727c1275
   PromisesObjC: f5707f49cb48b9636751c5b2e7d227e43fba9f47

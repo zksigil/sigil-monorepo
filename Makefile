@@ -42,6 +42,12 @@ circuits: ## Compile Noir circuit and copy to app assets
 ios: ## Build Mopro Rust FFI for iOS into the bindings package
 	@echo "━━━ Building Mopro iOS xcframework + bindings ━━━"
 	cd $(MOPRO_BINDINGS) && uniffi-bindgen-react-native build ios --config ubrn.config.yaml --release --and-generate
+	# ubrn regenerates a lowercase mopro-ffi.podspec next to the curated
+	# MoproFfi.podspec. Expo autolinking picks up BOTH (by package.json name
+	# `mopro-ffi` AND the explicit `pod 'MoproFfi'` in the Podfile), causing
+	# duplicate symbols at link time. Delete the auto-generated one so only
+	# MoproFfi is integrated.
+	rm -f $(MOPRO_BINDINGS)/mopro-ffi.podspec
 	@echo "✅ iOS framework + bindings built at $(MOPRO_BINDINGS)/"
 	@echo "   Run 'pnpm install' (or 'rm -rf node_modules/mopro-ffi && pnpm install')"
 	@echo "   to refresh the hoisted copy used by the app build."

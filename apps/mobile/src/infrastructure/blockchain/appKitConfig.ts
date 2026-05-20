@@ -3,14 +3,16 @@ import { ApiController, AssetController, OptionsController } from '@reown/appkit
 import { WagmiAdapter } from '@reown/appkit-wagmi-react-native';
 import { http } from 'wagmi';
 import { baseSepolia, base, anvil as anvilDefault } from 'wagmi/chains';
-import { defineChain } from 'viem';
+import { defineChain, type Chain } from 'viem';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { subscribeKey } from 'valtio/utils';
 import type { Storage } from '@reown/appkit-react-native';
+import { IS_DEV_BUILD } from '../../shared/constants/build';
 
 // ---------------------------------------------------------------------------
-// Override anvil's default RPC (127.0.0.1) with the LAN IP so that all
-// viem/wagmi internals use the correct URL on a physical device.
+// Anvil (dev-only) — override default RPC (127.0.0.1) with the LAN IP so that
+// all viem/wagmi internals use the correct URL on a physical device. Skipped
+// in production bundles so the chain never appears in the wallet picker.
 // ---------------------------------------------------------------------------
 const ANVIL_RPC = process.env['EXPO_PUBLIC_ANVIL_RPC_URL'] ?? 'http://192.168.45.10:8545';
 const anvil = defineChain({
@@ -67,25 +69,39 @@ export const appKitStorage: Storage = {
 };
 
 // ---------------------------------------------------------------------------
-// RPC URLs — single source of truth for all transports (wagmi + standalone viem clients)
+// RPC URLs — single source of truth for all transports (wagmi + standalone
+// viem clients). Anvil entry only present in dev bundles.
 // ---------------------------------------------------------------------------
-export const RPC_URLS = {
-  [anvil.id]: process.env['EXPO_PUBLIC_ANVIL_RPC_URL'] ?? 'http://192.168.45.10:8545',
+const _rpcUrls: Record<number, string> = {
   [baseSepolia.id]: process.env['EXPO_PUBLIC_BASE_SEPOLIA_RPC_URL'] ?? 'https://sepolia.base.org',
   [base.id]: process.env['EXPO_PUBLIC_BASE_RPC_URL'] ?? 'https://mainnet.base.org',
-} as const;
+};
+if (IS_DEV_BUILD) {
+  _rpcUrls[anvil.id] = ANVIL_RPC;
+}
+export const RPC_URLS = _rpcUrls;
 
 // ---------------------------------------------------------------------------
-// WagmiAdapter — requires wagmi Chain tuple (readonly non-empty)
+// WagmiAdapter — requires wagmi Chain tuple (readonly non-empty). Production
+// bundles never include anvil so the wallet picker shows only Base + Base Sepolia.
 // ---------------------------------------------------------------------------
+const NETWORKS: readonly [Chain, ...Chain[]] = IS_DEV_BUILD
+  ? [baseSepolia, base, anvil]
+  : [baseSepolia, base];
+
 export const wagmiAdapter = new WagmiAdapter({
   projectId,
-  networks: [baseSepolia, base, anvil] as const,
-  transports: {
-    [baseSepolia.id]: http(RPC_URLS[baseSepolia.id]),
-    [base.id]: http(RPC_URLS[base.id]),
-    [anvil.id]: http(RPC_URLS[anvil.id]),
-  },
+  networks: NETWORKS,
+  transports: IS_DEV_BUILD
+    ? {
+        [baseSepolia.id]: http(RPC_URLS[baseSepolia.id]),
+        [base.id]: http(RPC_URLS[base.id]),
+        [anvil.id]: http(RPC_URLS[anvil.id]),
+      }
+    : {
+        [baseSepolia.id]: http(RPC_URLS[baseSepolia.id]),
+        [base.id]: http(RPC_URLS[base.id]),
+      },
 });
 
 // ---------------------------------------------------------------------------
@@ -94,7 +110,7 @@ export const wagmiAdapter = new WagmiAdapter({
 export const appKit = createAppKit({
   projectId,
   // wagmi Chain objects are structurally compatible with AppKit's Network type
-  networks: [baseSepolia, base, anvil] as unknown as Parameters<typeof createAppKit>[0]['networks'],
+  networks: NETWORKS as unknown as Parameters<typeof createAppKit>[0]['networks'],
   defaultNetwork: baseSepolia,
   adapters: [wagmiAdapter],
   storage: appKitStorage,

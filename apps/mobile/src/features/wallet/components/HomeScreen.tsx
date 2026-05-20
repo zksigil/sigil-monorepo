@@ -13,6 +13,7 @@ import { AccountRow } from './AccountRow';
 import { PreConnectInfo } from './PreConnectInfo';
 import { CHAIN_DISPLAY_NAMES, SUPPORTED_CHAIN_IDS } from '../../../shared/constants/chains';
 import { CONTRACT_ADDRESSES } from '../../../infrastructure/blockchain/contracts';
+import { IS_DEV_BUILD } from '../../../shared/constants/build';
 import type { SupportedChainId } from '../../../shared/constants/chains';
 
 const ZERO_ADDR = '0x0000000000000000000000000000000000000000';
@@ -138,7 +139,7 @@ export function HomeScreen(): React.JSX.Element {
           </View>
         )}
 
-        {process.env.EXPO_PUBLIC_DEV_BYPASS === 'true' && (
+        {IS_DEV_BUILD && (
           <Pressable
             onPress={switchToAnvil}
             className="border border-dracula-orange/50 rounded-2xl p-3 items-center active:bg-dracula-orange/20"

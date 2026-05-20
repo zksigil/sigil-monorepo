@@ -6,6 +6,7 @@ import {
   type ProofInput,
   type SigilProofOutput,
 } from '../services/proofService';
+import { IS_DEV_BUILD } from '../../../shared/constants/build';
 
 export interface UseProofGenerationResult {
   generate: (input: ProofInput) => Promise<SigilProofOutput>;
@@ -50,12 +51,16 @@ export function useProofGeneration(): UseProofGenerationResult {
           ? String((moproErr as { inner: unknown[] }).inner[0])
           : null;
         const msg = innerMsg ?? (moproErr instanceof Error ? moproErr.message : '');
-        if (
+        // Stub fallback is a dev-only safety net for when Mopro hasn't been
+        // built (e.g. fresh checkout, JS reload). Production bundles always
+        // ship the native module, so this branch is stripped — any real prod
+        // proof failure should surface, not be swallowed by a useless stub.
+        const moproUnavailable =
           msg.includes('Mopro native module not available') ||
           msg.includes('circuit path not set') ||
           msg.includes('Incompatible versions of uniffi') ||
-          msg.includes('ContractVersionMismatch')
-        ) {
+          msg.includes('ContractVersionMismatch');
+        if (IS_DEV_BUILD && moproUnavailable) {
           console.warn('[PROOF] Mopro unavailable - using stub proof for development');
           const stub = generateStubProof(input);
 
