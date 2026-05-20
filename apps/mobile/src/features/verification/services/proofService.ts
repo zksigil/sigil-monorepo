@@ -26,6 +26,7 @@ import { keccak256, encodePacked, type Hex } from 'viem';
 import type { SigilZKProof, ZKProof } from '../../../shared/types/verification';
 import { parseSod, verifyDSCChain, extractDSCChainData } from '../../../infrastructure/sod/parseSod';
 import { findCSCAMerkleProof, CSCA_MERKLE_ROOT } from './cscaMerkleProof';
+import { IS_DEV_BUILD } from '../../../shared/constants/build';
 export { CSCA_MERKLE_ROOT };
 
 // ---------------------------------------------------------------------------
@@ -177,8 +178,11 @@ export async function generateSigilProof(input: ProofInput): Promise<SigilProofO
   // findCSCAMerkleProof would just hex-encode again.
   let cscaMerkleProof = findCSCAMerkleProof(chainResult.cscaModulusHex);
   if (!cscaMerkleProof) {
+    if (!IS_DEV_BUILD) {
+      throw new Error('CSCA pubkey not found in Merkle tree — passport country not yet supported');
+    }
     // Dev fallback: placeholder Merkle proof. Works only against MockUltraHonkVerifier;
-    // a real verifier would reject this proof.
+    // a real verifier would reject this proof. Stripped from production bundles.
     console.warn('[PROOF-DBG] CSCA pubkey not in Merkle tree - using dev fallback');
     cscaMerkleProof = {
       siblings: new Array(9).fill('0'),

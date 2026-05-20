@@ -6,6 +6,7 @@ import { useNFCReader } from '../hooks/useNFCReader';
 import type { NFCError, NFCReadResult } from '../../../infrastructure/nfc';
 import type { MRZInput } from '../services/mrzParser';
 import { inspectPassportCompatibility, type PassportCompatibility } from '../../../infrastructure/sod/parseSod';
+import { IS_DEV_BUILD } from '../../../shared/constants/build';
 
 type NFCScanState = 'ready' | 'scanning' | 'checking' | 'success' | 'unsupported' | 'error';
 
@@ -175,7 +176,7 @@ export function NFCScanStep({ mrz, onBack, mode }: Props): React.JSX.Element {
           <ErrorState
             message={errorMessage}
             onRetry={handleRetry}
-            onDevSkip={process.env.EXPO_PUBLIC_DEV_BYPASS === 'true' ? handleDevSkip : null}
+            onDevSkip={IS_DEV_BUILD ? handleDevSkip : null}
           />
         )}
       </View>
