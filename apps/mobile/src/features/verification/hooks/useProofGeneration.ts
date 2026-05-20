@@ -33,7 +33,7 @@ export function useProofGeneration(): UseProofGenerationResult {
 
     try {
       if (!input.walletAddress || !input.walletAddress.startsWith('0x')) {
-        throw new Error('Invalid wallet address');
+        throw new Error('Invalid address');
       }
       if (!input.rawDG1Hex) {
         throw new Error('Raw DG1 data is required');

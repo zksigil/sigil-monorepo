@@ -254,7 +254,7 @@ export function AccountRow({ account, linkedSiblings, isActive, nowSec, onSigili
 
               {linkedSiblingCount > 0 && (
                 <Text className="text-dracula-comment/60 text-xs">
-                  Linked to {linkedSiblingCount} other sigilized {linkedSiblingCount === 1 ? 'wallet' : 'wallets'} on-chain.
+                  Linked to {linkedSiblingCount} other sigilized {linkedSiblingCount === 1 ? 'address' : 'addresses'} on-chain.
                 </Text>
               )}
 

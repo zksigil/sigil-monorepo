@@ -20,7 +20,9 @@ export type RegistrationMode = 'register' | 'renew';
 /**
  * The full set of scan-flow entry points. `discover` is a passport tap that
  * does NOT submit a transaction — it derives the nullifier locally and queries
- * `getWallets(nullifier)` on-chain to enumerate sigilized wallets.
+ * `getWallets(nullifier)` on-chain to enumerate sigilized addresses. (The
+ * registry's getter is `getWallets` for compatibility — the name predates the
+ * wallet/address terminology cleanup.)
  */
 export type ScanMode = RegistrationMode | 'discover';
 
@@ -33,7 +35,7 @@ export type RootStackParamList = {
     verifiedAddress: `0x${string}`;
     mode: RegistrationMode;
   };
-  WalletDiscovery: { passportData: PassportMRZData };
+  AddressDiscovery: { passportData: PassportMRZData };
 };
 
 export type RootStackNavigationProp<Screen extends keyof RootStackParamList> =

@@ -107,7 +107,7 @@ describe('useProofGeneration', () => {
       await result.current.generate(invalidInput).catch(() => undefined);
     });
 
-    expect(result.current.error).toBe('Invalid wallet address');
+    expect(result.current.error).toBe('Invalid address');
     expect(result.current.isGenerating).toBe(false);
   });
 

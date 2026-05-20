@@ -131,7 +131,7 @@ export function NFCScanStep({ mrz, onBack, mode }: Props): React.JSX.Element {
       rawSODHex: nfcResult.rawSODHex ?? '',
     };
     if (mode === 'discover') {
-      navigation.navigate('WalletDiscovery', { passportData });
+      navigation.navigate('AddressDiscovery', { passportData });
     } else {
       navigation.navigate('ProofGeneration', { mode, passportData });
     }
@@ -161,7 +161,7 @@ export function NFCScanStep({ mrz, onBack, mode }: Props): React.JSX.Element {
             onToggleDebug={() => setDebugExpanded((p) => !p)}
             onContinue={handleContinueToProof}
             continueLabel={
-              mode === 'discover' ? 'Look Up Wallets'
+              mode === 'discover' ? 'Look Up Addresses'
               : mode === 'renew' ? 'Continue to Renewal'
               : 'Continue to Proof Generation'
             }

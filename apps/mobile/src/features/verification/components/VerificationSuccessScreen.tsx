@@ -44,10 +44,10 @@ export function VerificationSuccessScreen(): React.JSX.Element {
           </View>
 
           <View className="items-center gap-y-2">
-            <Text className="text-dracula-fg text-2xl font-bold">Wallet Sigilized!</Text>
+            <Text className="text-dracula-fg text-2xl font-bold">Address Sigilized!</Text>
             <Text className="text-dracula-comment text-sm text-center max-w-xs">
-              This wallet is now publicly tied to your passport identity on-chain.
-              Other wallets you sigilize will share the same identity.
+              This address is now publicly tied to your passport identity on-chain.
+              Other addresses you sigilize will share the same identity.
             </Text>
           </View>
 
