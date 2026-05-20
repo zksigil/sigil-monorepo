@@ -21,12 +21,12 @@ const STEPS: readonly Step[] = [
   {
     icon: 'lock',
     title: 'Generate a proof on-device',
-    description: 'Your phone does the math. Nothing is uploaded',
+    description: 'Your phone does the math, nothing is uploaded',
   },
   {
     icon: 'check-circle',
-    title: 'Sigilize your wallet',
-    description: 'One on-chain mark — protocols can verify you',
+    title: 'Sigilize your address',
+    description: 'One on-chain mark — protocols verify you',
   },
 ] as const;
 
@@ -53,10 +53,10 @@ export function PreConnectInfo(): React.JSX.Element {
       <View className="items-center">
         <SigilMark size={56} variant="gradient" />
         <Text className="text-text-primary text-center font-bold mt-4" style={{ fontSize: 28, lineHeight: 34, letterSpacing: -0.4 }}>
-          Prove you're a real person.{'\n'}Keep your privacy.
+          Proof of personhood{'\n'}for your address.
         </Text>
         <Text className="text-text-secondary text-[15px] leading-[22px] text-center mt-3 px-2">
-          Sigil verifies your wallet against your government-issued passport using zero-knowledge proofs.
+          Backed by your passport, verified on-device with zero-knowledge proofs.
         </Text>
       </View>
 

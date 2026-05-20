@@ -68,13 +68,13 @@ export function MRZEntryStep({ mrz, onChange, onContinue, mode }: Props): React.
   return (
     <>
       <Text className="text-dracula-fg text-2xl font-bold mb-2">
-        {mode === 'renew' ? 'Renew Sigil' : mode === 'discover' ? 'Find Sigilized Wallets' : 'Scan Passport'}
+        {mode === 'renew' ? 'Renew Sigil' : mode === 'discover' ? 'Find Sigilized Addresses' : 'Scan Passport'}
       </Text>
       <Text className="text-dracula-comment text-sm mb-6">
         {mode === 'renew'
-          ? 'Re-tap your passport to extend the registration on this wallet.'
+          ? 'Re-tap your passport to extend the registration on this address.'
           : mode === 'discover'
-          ? 'Tap your passport to look up wallets registered under it. No transaction is sent.'
+          ? 'Tap your passport to look up addresses registered under it. No transaction is sent.'
           : 'Enter your passport MRZ details to enable NFC reading'}
       </Text>
 

@@ -117,7 +117,7 @@ export const appKit = createAppKit({
   enableAnalytics: false,
   metadata: {
     name: 'Sigil',
-    description: 'Verify your Ethereum wallet with your passport — privately.',
+    description: 'Verify your Ethereum address with your passport — privately.',
     url: 'https://sigil.app',
     // Inline data-URI icon: a real CDN URL means MetaMask waits on the fetch
     // (the placeholder host returns 502 today) before showing its approval

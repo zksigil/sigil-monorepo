@@ -37,7 +37,7 @@ const CONTRACT_ERRORS: { name: string; selector: string; message: string }[] = [
   {
     name: 'SigilRegistry__AlreadyRegistered',
     selector: '0x88eed74a',
-    message: 'This wallet is already sigilized.',
+    message: 'This address is already sigilized.',
   },
   {
     name: 'SigilRegistry__PassportExpired',
@@ -499,7 +499,7 @@ export function ProofGenerationScreen(): React.JSX.Element {
             === Generated Proof Debug ===
           </Text>
 
-          <DebugRow label="Wallet Address" value={address ?? '(not connected)'} mono />
+          <DebugRow label="Address" value={address ?? '(not connected)'} mono />
           <DebugRow label="Chain ID" value={String(chainId)} mono />
           <DebugRow label="Doc Number" value={passportData.documentNumber} mono />
           <DebugRow

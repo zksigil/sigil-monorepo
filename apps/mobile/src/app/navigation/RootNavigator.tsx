@@ -6,7 +6,7 @@ import { HomeScreen } from '../../features/wallet/components/HomeScreen';
 import { PassportScanScreen } from '../../features/verification/components/PassportScanScreen';
 import { ProofGenerationScreen } from '../../features/verification/components/ProofGenerationScreen';
 import { VerificationSuccessScreen } from '../../features/verification/components/VerificationSuccessScreen';
-import { WalletDiscoveryScreen } from '../../features/verification/components/WalletDiscoveryScreen';
+import { AddressDiscoveryScreen } from '../../features/verification/components/AddressDiscoveryScreen';
 
 // React Navigation defaults colors.background to '#fff' which paints white
 // behind any screen before the screen mounts. Override to the dracula canvas
@@ -73,9 +73,9 @@ export function RootNavigator(): React.JSX.Element {
           }}
         />
         <Stack.Screen
-          name="WalletDiscovery"
-          component={WalletDiscoveryScreen}
-          options={{ title: 'Find Wallets' }}
+          name="AddressDiscovery"
+          component={AddressDiscoveryScreen}
+          options={{ title: 'Find Addresses' }}
         />
       </Stack.Navigator>
     </NavigationContainer>

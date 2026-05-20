@@ -199,17 +199,17 @@ export function HomeScreen(): React.JSX.Element {
         )}
 
         {/* Recovery / discovery entry point. Tap passport → derive nullifier → list
-            wallets registered under it. No tx, no proof. Useful when migrating
+            addresses registered under it. No tx, no proof. Useful when migrating
             phones or just confirming what's sigilized. */}
         <Pressable
           onPress={() => navigation.navigate('PassportScan', { mode: 'discover' })}
           className="w-full rounded-2xl py-3.5 items-center border border-dracula-purple/40 active:bg-dracula-purple/10"
         >
           <Text className="text-dracula-purple text-sm font-semibold">
-            Find my sigilized wallets
+            Look up addresses by passport
           </Text>
           <Text className="text-dracula-comment/60 text-[11px] mt-0.5">
-            Tap your passport — no transaction
+            Tap your passport — no transaction needed
           </Text>
         </Pressable>
       </ScrollView>
@@ -253,15 +253,15 @@ export function HomeScreen(): React.JSX.Element {
       <Modal visible={educationOpen} transparent animationType="fade" statusBarTranslucent onRequestClose={handleEducationCancel}>
         <View className="flex-1 bg-black/70 items-center justify-center px-8">
           <View className="bg-dracula-surface rounded-3xl px-6 py-7 w-full max-w-md gap-y-4">
-            <Text className="text-dracula-fg text-lg font-bold">Sigilize this wallet?</Text>
+            <Text className="text-dracula-fg text-lg font-bold">Sigilize this address?</Text>
             <Text className="text-dracula-comment text-sm leading-5">
-              This wallet will be publicly tied to your passport identity. Other wallets you
-              sigilize will share this identity on-chain — anyone can see they belong to the
-              same person.
+              This address will be publicly tied to your passport identity. Other addresses
+              you sigilize will share this identity on-chain — anyone can see they belong to
+              the same person.
             </Text>
             <Text className="text-dracula-comment text-sm leading-5">
-              Wallets you don't sigilize stay anonymous. Use a separate, non-sigilized wallet
-              for activity you want to keep unconnected.
+              Addresses you don't sigilize stay anonymous. Use a separate, non-sigilized
+              address for activity you want to keep unconnected.
             </Text>
             <View className="flex-row gap-3 mt-2">
               <Pressable

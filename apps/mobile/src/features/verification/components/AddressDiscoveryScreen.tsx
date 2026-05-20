@@ -26,7 +26,7 @@ function decimalToBytes32(decimal: string): `0x${string}` {
  * can act on. Falls back to the raw message (truncated) for unrecognized errors.
  */
 function humanizeDiscoveryError(raw: string | null, chainName: string): string {
-  if (!raw) return 'Could not look up wallets for this passport.';
+  if (!raw) return 'Could not look up addresses for this passport.';
   if (raw.includes('Mopro native module not available')) {
     return 'The on-device prover is not loaded. Try restarting the app.';
   }
@@ -42,9 +42,9 @@ function humanizeDiscoveryError(raw: string | null, chainName: string): string {
   return raw;
 }
 
-export function WalletDiscoveryScreen(): React.JSX.Element {
-  const route = useRoute<RootStackRouteProp<'WalletDiscovery'>>();
-  const navigation = useNavigation<RootStackNavigationProp<'WalletDiscovery'>>();
+export function AddressDiscoveryScreen(): React.JSX.Element {
+  const route = useRoute<RootStackRouteProp<'AddressDiscovery'>>();
+  const navigation = useNavigation<RootStackNavigationProp<'AddressDiscovery'>>();
   const chainId = useChainId();
   const { passportData } = route.params;
 
@@ -57,7 +57,7 @@ export function WalletDiscoveryScreen(): React.JSX.Element {
 
   const [step, setStep] = useState<Step>('computing');
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
-  const [wallets, setWallets] = useState<`0x${string}`[]>([]);
+  const [addresses, setAddresses] = useState<`0x${string}`[]>([]);
 
   useEffect(() => {
     let cancelled = false;
@@ -86,7 +86,7 @@ export function WalletDiscoveryScreen(): React.JSX.Element {
         }) as readonly `0x${string}`[];
 
         if (cancelled) return;
-        setWallets([...result]);
+        setAddresses([...result]);
         setStep('done');
       } catch (err) {
         if (cancelled) return;
@@ -109,12 +109,12 @@ export function WalletDiscoveryScreen(): React.JSX.Element {
             <ActivityIndicator size="large" color="#bd93f9" />
           </View>
           <Text className="text-dracula-fg text-xl font-bold text-center mb-2">
-            {step === 'computing' ? 'Deriving nullifier…' : 'Looking up wallets…'}
+            {step === 'computing' ? 'Deriving nullifier…' : 'Looking up addresses…'}
           </Text>
           <Text className="text-dracula-comment text-sm text-center max-w-xs">
             {step === 'computing'
               ? 'Hashing passport data and computing your sigil identity locally.'
-              : `Querying ${queryChainName} for wallets registered under your passport.`}
+              : `Querying ${queryChainName} for addresses registered under your passport.`}
           </Text>
         </View>
       </SafeAreaView>
@@ -143,7 +143,7 @@ export function WalletDiscoveryScreen(): React.JSX.Element {
 
   // step === 'done' — distinct visual treatment for found vs empty so the
   // celebratory checkmark only shows when there's actually something to find.
-  const isEmpty = wallets.length === 0;
+  const isEmpty = addresses.length === 0;
   return (
     <SafeAreaView className="flex-1 bg-dracula-bg" edges={['bottom']}>
       <ScrollView className="flex-1 px-6 py-6" contentContainerClassName="pb-8">
@@ -159,8 +159,8 @@ export function WalletDiscoveryScreen(): React.JSX.Element {
           </View>
           <Text className="text-dracula-fg text-xl font-bold">
             {isEmpty
-              ? 'No sigilized wallets'
-              : `${wallets.length} sigilized ${wallets.length === 1 ? 'wallet' : 'wallets'} found`}
+              ? 'No sigilized addresses'
+              : `${addresses.length} sigilized ${addresses.length === 1 ? 'address' : 'addresses'} found`}
           </Text>
           <Text className="text-dracula-comment/70 text-xs mt-1">on {queryChainName}</Text>
         </View>
@@ -172,13 +172,13 @@ export function WalletDiscoveryScreen(): React.JSX.Element {
             </Text>
             <Text className="text-dracula-comment text-xs leading-5">
               Either this passport has never been sigilized, or you sigilized on a different
-              chain. Switch your wallet network to {queryChainName === 'Base Sepolia' ? 'Base mainnet' : 'Base Sepolia'} and tap "Find my sigilized wallets" again to check there.
+              chain. Switch your wallet network to {queryChainName === 'Base Sepolia' ? 'Base mainnet' : 'Base Sepolia'} and tap "Look up addresses by passport" again to check there.
             </Text>
           </View>
         ) : (
           <View className="gap-y-2 mb-6">
-            {wallets.map((address) => (
-              <DiscoveredWalletRow key={address} address={address} />
+            {addresses.map((address) => (
+              <DiscoveredAddressRow key={address} address={address} />
             ))}
           </View>
         )}
@@ -202,10 +202,10 @@ export function WalletDiscoveryScreen(): React.JSX.Element {
 }
 
 // ---------------------------------------------------------------------------
-// Row — one discovered wallet, with ENS name + copy + view-on-explorer
+// Row — one discovered address, with ENS name + copy + view-on-explorer
 // ---------------------------------------------------------------------------
 
-function DiscoveredWalletRow({ address }: { address: `0x${string}` }): React.JSX.Element {
+function DiscoveredAddressRow({ address }: { address: `0x${string}` }): React.JSX.Element {
   const ensName = useEnsName(address);
   const short = `${address.slice(0, 6)}…${address.slice(-4)}`;
   const [copied, setCopied] = useState(false);
