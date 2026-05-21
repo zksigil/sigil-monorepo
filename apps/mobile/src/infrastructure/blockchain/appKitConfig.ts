@@ -118,7 +118,7 @@ export const appKit = createAppKit({
   metadata: {
     name: 'Sigil',
     description: 'Verify your Ethereum address with your passport — privately.',
-    url: 'https://sigil.app',
+    url: 'https://zksigil.xyz',
     // Inline data-URI icon: a real CDN URL means MetaMask waits on the fetch
     // (the placeholder host returns 502 today) before showing its approval
     // prompt — measurable extra seconds. Data URI renders instantly with no
@@ -128,7 +128,7 @@ export const appKit = createAppKit({
     ],
     redirect: {
       native: 'sigil://',
-      universal: 'https://sigil.app',
+      universal: 'https://zksigil.xyz',
     },
   },
   features: {

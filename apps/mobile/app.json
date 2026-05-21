@@ -21,7 +21,7 @@
       "buildNumber": "1",
       "infoPlist": {
         "NSAppTransportSecurity": {
-          "NSAllowsArbitraryLoads": true
+          "NSAllowsLocalNetworking": true
         },
         "NSCameraUsageDescription": "Camera is used to scan QR codes for wallet connection and to help you read your passport MRZ for NFC access.",
         "NFCReaderUsageDescription": "NFC is used to read your passport chip for identity verification. Your passport data never leaves this device.",

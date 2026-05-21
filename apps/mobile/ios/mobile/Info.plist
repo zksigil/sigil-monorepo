@@ -48,8 +48,6 @@
 	<string>NFC is used to read your passport chip for identity verification. Your passport data never leaves this device.</string>
 	<key>NSAppTransportSecurity</key>
 	<dict>
-		<key>NSAllowsArbitraryLoads</key>
-		<true/>
 		<key>NSAllowsLocalNetworking</key>
 		<true/>
 	</dict>

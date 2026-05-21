@@ -22,6 +22,7 @@ import { SIGIL_REGISTRY_ABI } from '../../../infrastructure/blockchain/contractA
 import { CONTRACT_ADDRESSES } from '../../../infrastructure/blockchain/contracts';
 import type { SupportedChainId } from '../../../shared/constants/chains';
 import { SUPPORTED_CHAIN_IDS } from '../../../shared/constants/chains';
+import { IS_DEV_BUILD } from '../../../shared/constants/build';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -494,50 +495,52 @@ export function ProofGenerationScreen(): React.JSX.Element {
           <View className="h-1.5 rounded-full flex-1 bg-dracula-surface/70" />
         </View>
 
-        <View className="bg-dracula-surface rounded-2xl p-4 mb-6">
-          <Text className="text-dracula-orange text-xs font-bold uppercase tracking-wider mb-3">
-            === Generated Proof Debug ===
-          </Text>
+        {IS_DEV_BUILD && (
+          <View className="bg-dracula-surface rounded-2xl p-4 mb-6">
+            <Text className="text-dracula-orange text-xs font-bold uppercase tracking-wider mb-3">
+              === Generated Proof Debug ===
+            </Text>
 
-          <DebugRow label="Address" value={address ?? '(not connected)'} mono />
-          <DebugRow label="Chain ID" value={String(chainId)} mono />
-          <DebugRow label="Doc Number" value={passportData.documentNumber} mono />
-          <DebugRow
-            label="DG1 Hex"
-            value={passportData.rawDG1Hex.length > 32
-              ? `${passportData.rawDG1Hex.slice(0, 32)}...`
-              : passportData.rawDG1Hex}
-            mono
-          />
-          <DebugRow
-            label="SOD Hex"
-            value={passportData.rawSODHex.length > 32
-              ? `${passportData.rawSODHex.slice(0, 32)}...`
-              : passportData.rawSODHex}
-            mono
-          />
+            <DebugRow label="Address" value={address ?? '(not connected)'} mono />
+            <DebugRow label="Chain ID" value={String(chainId)} mono />
+            <DebugRow label="Doc Number" value={passportData.documentNumber} mono />
+            <DebugRow
+              label="DG1 Hex"
+              value={passportData.rawDG1Hex.length > 32
+                ? `${passportData.rawDG1Hex.slice(0, 32)}...`
+                : passportData.rawDG1Hex}
+              mono
+            />
+            <DebugRow
+              label="SOD Hex"
+              value={passportData.rawSODHex.length > 32
+                ? `${passportData.rawSODHex.slice(0, 32)}...`
+                : passportData.rawSODHex}
+              mono
+            />
 
-          {proofResult && (
-            <>
-              <View className="h-px bg-dracula-comment/30 my-3" />
-              <Text className="text-dracula-purple text-xs font-bold uppercase tracking-wider mb-2">
-                Proof Values
-              </Text>
-              <DebugRow label="Nullifier" value={proofResult.nullifier} mono />
-              <DebugRow label="Epoch Nullifier" value={proofResult.epochNullifier} mono />
-              <DebugRow
-                label="Passport Expiry"
-                value={proofResult.zkProof.passportExpiry}
-                mono
-              />
-              <DebugRow
-                label="ZK Proof bytes"
-                value={`${proofResult.zkProof.proof.slice(0, 34)}...`}
-                mono
-              />
-            </>
-          )}
-        </View>
+            {proofResult && (
+              <>
+                <View className="h-px bg-dracula-comment/30 my-3" />
+                <Text className="text-dracula-purple text-xs font-bold uppercase tracking-wider mb-2">
+                  Proof Values
+                </Text>
+                <DebugRow label="Nullifier" value={proofResult.nullifier} mono />
+                <DebugRow label="Epoch Nullifier" value={proofResult.epochNullifier} mono />
+                <DebugRow
+                  label="Passport Expiry"
+                  value={proofResult.zkProof.passportExpiry}
+                  mono
+                />
+                <DebugRow
+                  label="ZK Proof bytes"
+                  value={`${proofResult.zkProof.proof.slice(0, 34)}...`}
+                  mono
+                />
+              </>
+            )}
+          </View>
+        )}
 
         <Pressable
           onPress={handleSubmit}
