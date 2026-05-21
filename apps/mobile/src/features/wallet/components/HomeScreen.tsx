@@ -8,6 +8,7 @@ import type { RegistrationMode, RootStackNavigationProp } from '../../../app/nav
 import { useWalletConnection } from '../hooks/useWalletConnection';
 import { useChainGuard } from '../hooks/useChainGuard';
 import { useTrackedAccounts } from '../hooks/useTrackedAccounts';
+import { useTrackedExternalAddresses } from '../hooks/useTrackedExternalAddresses';
 import { useOpenWallet } from '../hooks/useOpenWallet';
 import { AccountRow } from './AccountRow';
 import { PreConnectInfo } from './PreConnectInfo';
@@ -25,6 +26,7 @@ export function HomeScreen(): React.JSX.Element {
   const { isConnected, isConnecting, connect, disconnect } = useWalletConnection();
   const { isWrongChain, switchToBaseSepolia, switchToAnvil } = useChainGuard();
   const { accounts, nowSec, refetch } = useTrackedAccounts();
+  const { isHydrated: externalHydrated } = useTrackedExternalAddresses();
   const { address: activeAddress } = useAccount();
   const chainId = useChainId();
   const chainName = CHAIN_DISPLAY_NAMES[chainId] ?? `Chain ${chainId}`;
@@ -113,6 +115,19 @@ export function HomeScreen(): React.JSX.Element {
     }
   }, [activeAddress, pending, navigation]);
 
+  // View-state decisions:
+  //   - When connected, always show the accounts list (even if empty, so the
+  //     "No accounts authorized" hint can render).
+  //   - When not connected but the user has tracked addresses (from a passport
+  //     discovery scan), show the accounts list with a "Not Connected" banner
+  //     instead of the onboarding screen.
+  //   - When not connected and there's nothing to show, render the onboarding.
+  //     Gate on externalHydrated so we don't flash onboarding then swap to the
+  //     accounts list once AsyncStorage hydrates.
+  const hasAccounts = accounts.length > 0;
+  const showAccountsView = isConnected || hasAccounts;
+  const showOnboarding = !isConnected && externalHydrated && !hasAccounts;
+
   return (
     <SafeAreaView className="flex-1 bg-dracula-bg" edges={['bottom']}>
       <ScrollView
@@ -148,15 +163,36 @@ export function HomeScreen(): React.JSX.Element {
           </Pressable>
         )}
 
-        {!isConnected && <PreConnectInfo />}
+        {/* When not connected but the user has tracked addresses (from the
+            discovery flow), show the accounts list with a "Not Connected"
+            banner instead of the full onboarding screen — they've already
+            seen it. The banner is tappable so they don't have to scroll to
+            the fixed footer to connect. */}
+        {!isConnected && hasAccounts && (
+          <Pressable
+            onPress={connect}
+            disabled={isConnecting}
+            className="bg-dracula-yellow/15 border border-dracula-yellow/60 rounded-2xl p-4 active:bg-dracula-yellow/25"
+          >
+            <View className="flex-row items-center justify-center gap-x-2">
+              <Text className="text-base">⚠️</Text>
+              <Text className="text-dracula-yellow text-sm font-semibold">Not Connected</Text>
+            </View>
+            <Text className="text-dracula-yellow/80 text-xs text-center mt-1 leading-4">
+              Tap to connect a wallet — needed to sigilize, renew, or unregister
+            </Text>
+          </Pressable>
+        )}
 
-        {isConnected && (
+        {showOnboarding && <PreConnectInfo />}
+
+        {showAccountsView && (
           <View className="gap-y-3">
             <Text className="text-dracula-comment/70 text-xs font-semibold uppercase tracking-widest">
               Accounts
             </Text>
 
-            {accounts.length === 0 ? (
+            {isConnected && accounts.length === 0 ? (
               <View className="bg-dracula-surface/50 rounded-2xl px-4 py-6 gap-y-1.5">
                 <Text className="text-dracula-fg text-sm font-semibold text-center">
                   No accounts authorized
@@ -166,7 +202,7 @@ export function HomeScreen(): React.JSX.Element {
                   Disconnect and reconnect.
                 </Text>
               </View>
-            ) : !registryDeployedHere && isChainSupported ? (
+            ) : isConnected && !registryDeployedHere && isChainSupported ? (
               // Chain is supported by the app but no registry is deployed there.
               <View className="bg-dracula-yellow/10 border border-dracula-yellow/40 rounded-2xl px-4 py-3 gap-y-1">
                 <Text className="text-dracula-yellow text-xs font-semibold">
@@ -192,7 +228,7 @@ export function HomeScreen(): React.JSX.Element {
           </View>
         )}
 
-        {isConnected && (
+        {showAccountsView && (
           <Text className="text-dracula-comment/40 text-xs text-center leading-5">
             Your passport data never leaves your device.{'\n'}ZK proofs are generated locally.
           </Text>

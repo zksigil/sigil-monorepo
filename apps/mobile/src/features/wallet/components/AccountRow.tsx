@@ -176,12 +176,12 @@ export function AccountRow({ account, linkedSiblings, isActive, nowSec, onSigili
 
   const handleStopTracking = useCallback(() => {
     Alert.alert(
-      'Stop tracking?',
-      `Remove ${ensName ?? account.shortAddress} from your accounts list. This does not change anything on-chain.`,
+      'Remove from Home?',
+      `Remove ${ensName ?? account.shortAddress} from your accounts list. Does not change anything on-chain.`,
       [
         { text: 'Cancel', style: 'cancel' },
         {
-          text: 'Stop tracking',
+          text: 'Remove',
           style: 'destructive',
           onPress: () => { void removeExternal(account.address); onUnregistered(); },
         },
@@ -276,7 +276,7 @@ export function AccountRow({ account, linkedSiblings, isActive, nowSec, onSigili
                   <Text className="text-dracula-comment text-sm">Submitting…</Text>
                 </View>
               ) : isExternal ? (
-                <DestructiveButton label="Stop tracking" onPress={handleStopTracking} />
+                <DestructiveButton label="Remove from Home" onPress={handleStopTracking} />
               ) : (
                 <Actions
                   state={state}

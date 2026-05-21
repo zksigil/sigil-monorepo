@@ -128,6 +128,13 @@ export function useTrackedAccounts(): {
   }, [stubAccounts]);
 
   const fetchStatus = useCallback(async () => {
+    // Bump first so any in-flight previous fetch is invalidated even when this
+    // call returns early. Without this, removing the last tracked address
+    // races: the new fetch returns early without bumping, then the old fetch
+    // resolves with stale data and `id === fetchIdRef.current` still passes,
+    // putting the removed row back.
+    const id = ++fetchIdRef.current;
+
     // Wrong chain: leave isStatusLoading=true so rows show "Loading…" rather
     // than misleadingly claiming "Not sigilized". The HomeScreen also shows a
     // prominent Wrong Network banner above, which is the user's actual cue.
@@ -149,8 +156,6 @@ export function useTrackedAccounts(): {
       setAccounts((prev) => prev.map((a) => ({ ...a, isStatusLoading: false })));
       return;
     }
-
-    const id = ++fetchIdRef.current;
 
     // Pull the latest block timestamp alongside per-address reads. One extra
     // RPC call per refresh; negligible cost.
