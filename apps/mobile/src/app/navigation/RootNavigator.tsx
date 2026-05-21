@@ -22,13 +22,17 @@ const navTheme = {
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
 
-// Deep-link config for WalletConnect callbacks
+// Deep-link config for WalletConnect callbacks. We declare the URL prefix so
+// iOS knows this app handles `sigil://`, but we deliberately do NOT map any
+// path → screen. WalletConnect returns from MetaMask (and other wallets) open
+// the app via `sigil://` to bring it back to foreground; if we mapped the
+// empty path to Home, that return would force-navigate the user to Home,
+// dismissing whatever screen they were on (e.g. VerificationSuccess flashed
+// for one frame before getting replaced).
 const linking = {
   prefixes: ['sigil://'],
   config: {
-    screens: {
-      Home: '',
-    },
+    screens: {},
   },
 };
 
