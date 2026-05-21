@@ -282,12 +282,14 @@ function SuccessState({ mrz, nfcResult, debugExpanded, onToggleDebug, onContinue
       </View>
       <Text className="text-dracula-green text-lg font-semibold">Passport read successfully!</Text>
 
-      <NFCDebugPanel
-        mrz={mrz}
-        nfcResult={nfcResult}
-        expanded={debugExpanded}
-        onToggle={onToggleDebug}
-      />
+      {IS_DEV_BUILD && (
+        <NFCDebugPanel
+          mrz={mrz}
+          nfcResult={nfcResult}
+          expanded={debugExpanded}
+          onToggle={onToggleDebug}
+        />
+      )}
 
       <Pressable
         onPress={onContinue}

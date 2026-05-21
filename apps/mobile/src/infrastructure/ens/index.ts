@@ -7,7 +7,13 @@
 import { http, createPublicClient } from 'viem';
 import { mainnet } from 'viem/chains';
 
-const DEFAULT_MAINNET_RPC = 'https://eth.llamarpc.com';
+// publicnode.com (Allnodes) chosen over the previous eth.llamarpc.com default
+// because llamarpc has been returning Cloudflare 525 (origin SSL handshake)
+// intermittently. publicnode has been more stable in practice, no API key
+// required, and is a common pick in the Ethereum tooling stack. Override
+// via EXPO_PUBLIC_ETH_MAINNET_RPC_URL for production reliability (Alchemy /
+// Infura tier).
+const DEFAULT_MAINNET_RPC = 'https://ethereum.publicnode.com';
 const RPC_URL =
   process.env.EXPO_PUBLIC_ETH_MAINNET_RPC_URL ?? DEFAULT_MAINNET_RPC;
 
