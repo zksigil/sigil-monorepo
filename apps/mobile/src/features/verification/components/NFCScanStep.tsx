@@ -202,7 +202,7 @@ function ReadyState({ onBegin }: { onBegin: () => void }): React.JSX.Element {
         <Text className="text-6xl">📔</Text>
       </View>
       <Text className="text-dracula-fg/80 text-base text-center leading-6 max-w-xs">
-        Hold the back of your phone against the data page of your passport
+        Hold the back of your phone against the back cover of your passport
       </Text>
       <Pressable
         onPress={onBegin}

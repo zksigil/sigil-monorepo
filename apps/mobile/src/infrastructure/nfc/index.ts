@@ -1236,7 +1236,7 @@ export async function readPassportNFC(mrzInput: MRZBACInput): Promise<NFCReadRes
     // Request IsoDep technology (ISO 14443-4, used by eMRTD)
     await NfcManager.requestTechnology(NfcTech.IsoDep, {
       alertMessage: Platform.OS === 'ios'
-        ? 'Hold your iPhone near the passport photo page'
+        ? 'Hold your iPhone against the back cover of your passport'
         : undefined,
     });
 
