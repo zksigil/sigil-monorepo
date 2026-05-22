@@ -191,6 +191,140 @@ User opens app
 
 ---
 
+## Behavior and trade-offs
+
+This section describes what each contract operation does at a user level
+and why the system is shaped the way it is. The on-chain surface lives in
+`SigilRegistry.sol`; the app maps each UI action 1:1 onto one of these
+calls.
+
+### Registration
+
+`register(nullifier, epochNullifier, passportExpiry, proof)` writes a
+`Registration` for `msg.sender` after the ZK proof verifies. The wallet
+is added to the nullifier's wallet list, and `nullifierOf(wallet)`
+returns the per-passport stable identifier from then on.
+
+The proof is bound to the caller via
+`hashed_address = keccak256(msg.sender) mod p`, which is a public
+input. A proof generated for wallet A cannot be replayed from wallet B.
+
+There's no session or two-step flow because the wallet has to sign the
+registration tx itself anyway (the proof binds to `msg.sender`), so any
+preparatory step would just add a round trip without changing what the
+user does on each wallet.
+
+### Expiration
+
+A registration has two independent expiry conditions. The contract
+takes the stricter of the two.
+
+1. **Passport expiry**, rounded up to the next 90-day boundary on the
+   Unix epoch. This is a privacy choice. The raw passport expiry has
+   ~365 distinguishable values per year; rounding collapses that into 4
+   so the on-chain timestamp doesn't fingerprint a specific issuance
+   batch. Trade-off: a registration can read as valid for up to ~89 days
+   past the real passport expiry. We accept this because the check is
+   not safety-critical (a protocol just sees a stale `true`).
+2. **Registration TTL**, default 180 days from the most recent
+   `register`/`renew`. Forces a periodic re-tap. The point isn't expiry
+   per se; it's that we want occasional re-proof of physical possession
+   of the passport so a long-lost phone with cached state doesn't keep
+   acting as a "live" identity in the registry.
+
+The effective `expiresAt` is `min(now + ttl, ceilQuarter(passportExpiry))`.
+`isVerified(wallet)` reads `expiresAt` only, so expiry is lazy: no one
+has to pay gas to evict an expired registration.
+
+### Renewal
+
+`renew(nullifier, epochNullifier, passportExpiry, proof)` refreshes
+`expiresAt` without touching `registeredAt`. Renewals skip the daily
+rate limit (they're liveness refreshes, not new commitments). The
+supplied nullifier has to match the one the wallet was originally
+registered with; trying to renew under a different passport reverts
+with `__NullifierMismatch`. To swap passports the user has to
+`unregister` first and re-register fresh.
+
+The app prompts for renewal once the registration is within 30 days of
+`expiresAt`.
+
+### Unregister
+
+`unregister()` removes `msg.sender` from `s_registrations`,
+`s_nullifierByWallet`, and the nullifier's wallet array. Wallet
+removal is O(1) via 1-based-index swap-and-pop.
+
+No event is emitted. That's deliberate. A `WalletUnregistered(wallet, nullifier)`
+event would let any indexer link the wallet to its nullifier in
+perpetuity, undoing most of the privacy gain from unregistering.
+
+There's no cooldown. A wallet can re-register the same block, subject
+to the daily limit.
+
+### Registering multiple wallets
+
+A user can call `register` from any number of wallets under the same
+passport. Each call:
+
+- Derives the same `nullifier` (Poseidon2 of the passport secret with
+  the constant `1`), so all sigilized wallets under one passport share
+  one identifier
+- Generates a fresh proof bound to that wallet's address
+- Counts against the daily rate limit
+
+After multiple registrations:
+- `isVerified(walletA)` and `isVerified(walletB)` both return true
+- `nullifierOf(walletA) == nullifierOf(walletB)`
+- `getWallets(nullifier)` returns the full list
+
+This is also the recovery path on a new phone. The passport secret is
+re-derived from a fresh tap; the app computes the nullifier and reads
+`getWallets(nullifier)` to surface every previously sigilized wallet
+without any cached app state.
+
+### Linkability trade-off
+
+Two sigilized wallets under the same passport are publicly linkable
+on-chain. Anyone reading `s_nullifierByWallet` can see they share a
+nullifier and conclude they're held by one person. That's the explicit
+cost of giving protocols a one-mapping-lookup sybil signal.
+
+What is NOT exposed:
+
+- The passport itself. The nullifier is an opaque 32-byte hash; it
+  doesn't carry name, DOB, nationality, or DSC pubkey.
+- Wallets the user does not sigilize. Sigilization is opt-in per
+  wallet, so users who want a wallet to stay anonymous simply don't
+  register it.
+
+Cross-protocol unlinkability (the Worldcoin pattern of an action-scoped
+nullifier, so the same passport produces a different nullifier per
+protocol) was considered and cut. It would have required a larger
+circuit, made `nullifierOf` non-constant per wallet, and complicated
+the "one mapping lookup" integration story.
+
+### Rate limit
+
+Max 10 new registrations per passport per day, default. Renewals don't
+count.
+
+The intent is to bound damage if a passport secret leaks (stolen phone
+before unlock, malicious app that read DG1+SOD over NFC). Without a
+cap, the attacker could mass-sigilize wallets they control under the
+victim's passport, polluting the victim's `getWallets` set. With a cap
+of 10, the damage is bounded and visible.
+
+The mechanism: the contract counts registrations bucketed by
+`epochNullifier = Poseidon2(passport_secret, epoch_day)`. Same passport,
+same day, same bucket.
+
+Currently `epoch_day` is a private circuit input, not derived from
+`block.timestamp` on-chain, so the bucket isn't actually pinned to
+today. See `docs/audits/security.md` finding **H-1** for the open fix.
+
+---
+
 ## Key Packages & Tooling
 
 | Category | Package | Version | Purpose |
