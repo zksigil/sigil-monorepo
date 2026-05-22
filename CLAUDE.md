@@ -265,14 +265,6 @@ fine and `DeployDev.s.sol` leaves it that way.
 - Events: `WalletVerified(address indexed wallet)` only — NO nullifiers in events
 - Consider ERC-4337 paymaster for gas (eliminates funder-address deanonymization)
 
-### Phase 4 TODO
-- [x] Collapse two-tier into single-tier `SigilRegistry.sol`
-- [x] Consolidate `base/` + `primary/` Noir circuits into one `sigil/` circuit
-- [x] Regenerate `SigilUltraHonkVerifier.sol` from the unified circuit
-- [x] Update Mopro `compute_sigil_inputs` to emit both `nullifier` and `epoch_nullifier`
-- [x] Refactor mobile app: single `Sigilize` CTA, first-sigilize education modal, `useTrackedAccounts` reads `isVerified` + `nullifierOf`
-- [x] Strip governance from registry — registry is immutable; only `CSCAMerkleTree.setRoot` is privileged
-- [x] App prompts renewal when registration is within 30 days of expiry (shipped in `ui/polish-pass-3`)
-- [x] Inline ProofVerifier into the registry, drop `ICSCAMerkleTree` interface (`refactor/inline-proof-verifier`)
-- [x] Rename `VerificationRegistry` → `SigilRegistry` (`refactor/sigil-registry-rename`)
+### Open items (post-App-Store-submission)
 - [ ] Transfer `CSCAMerkleTree` ownership to a multisig (or `TimelockController`) before mainnet deploy
+- [ ] Fix the daily rate-limit bypass — `epoch_day` is unconstrained against on-chain time. See `docs/audits/security.md` finding **H-1**. Requires a circuit change + verifier regen; not exploitable for fund loss but the rate-limit isn't a real sybil defense until fixed.

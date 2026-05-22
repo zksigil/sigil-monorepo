@@ -85,7 +85,7 @@ Mobile app for verifying Ethereum wallets against government-issued passports us
 │                    ON-CHAIN (Base Sepolia / Base)                     │
 │                                                                       │
 │  ┌────────────────────────────────────────────────────────────────┐  │
-│  │                    VerificationRegistry.sol                     │  │
+│  │                       SigilRegistry.sol                         │  │
 │  │                                                                 │  │
 │  │  register(nullifier, epochNullifier, passportExpiry, proof)    │  │
 │  │  renew(nullifier, epochNullifier, passportExpiry, proof)       │  │
@@ -93,9 +93,11 @@ Mobile app for verifying Ethereum wallets against government-issued passports us
 │  │                                                                 │  │
 │  │  isVerified(wallet) / nullifierOf(wallet) / getWallets(null)   │  │
 │  │                                                                 │  │
-│  │  Delegates to (all immutables, set in constructor, frozen):    │  │
-│  │  ├── ProofVerifier        → SigilUltraHonkVerifier (generated) │  │
-│  │  ├── CSCAMerkleTree       → ICAO Master List Merkle root       │  │
+│  │  Talks directly to (all immutables, frozen in constructor):    │  │
+│  │  ├── IUltraHonkVerifier  → SigilUltraHonkVerifier (generated)  │  │
+│  │  │   (inline interface; private _verifyProof helper does the   │  │
+│  │  │    BN254 reduction on hashedAddress + public-input marshal) │  │
+│  │  ├── CSCAMerkleTree      → ICAO Master List Merkle root        │  │
 │  │  └── i_registrationTTL, i_maxDailyRegistrations (uint params)  │  │
 │  │                                                                 │  │
 │  │  State:                                                         │  │
@@ -128,8 +130,7 @@ Mobile app for verifying Ethereum wallets against government-issued passports us
 │                                                                          │
 │  packages/contracts/                                                      │
 │  ├── src/                                                                 │
-│  │   ├── VerificationRegistry.sol  (immutable, no governor)               │
-│  │   ├── ProofVerifier.sol                                                │
+│  │   ├── SigilRegistry.sol          (immutable, no governor)              │
 │  │   ├── CSCAMerkleTree.sol         (Ownable2Step — only setRoot)         │
 │  │   └── verifiers/SigilUltraHonkVerifier.sol (regenerated)               │
 │  └── test/                                                                │
@@ -170,14 +171,14 @@ User opens app
      │      ├─ verifyDSCChain() — off-circuit DSC←CSCA via @noble RSA
      │      ├─ Mopro.computeRedcParam(pubkey) for Barrett reduction
      │      ├─ Mopro.computeSigilInputs(dg1Hash, sodHash, epochDay, ...)
-     │      │     → {inputs[4375], nullifier, epochNullifier}
+     │      │     → {inputs[4376], nullifier, epochNullifier}
      │      └─ Mopro.generateNoirProof(...) → ~16 KB UltraHonk-Keccak proof
      │
      ├─ 5. On-chain registration
-     │      └─ VerificationRegistry.register(nullifier, epochNullifier,
-     │                                        passportExpiry, proof)
-     │           ├─ ProofVerifier.verifyProof(...) → SigilUltraHonkVerifier
-     │           │      → pairing check
+     │      └─ SigilRegistry.register(nullifier, epochNullifier,
+     │                                 passportExpiry, proof)
+     │           ├─ _verifyProof(...) → SigilUltraHonkVerifier
+     │           │      (inline; BN254-reduces hashedAddress + pairing check)
      │           ├─ Append wallet to s_walletsByNullifier[nullifier]
      │           ├─ Set s_nullifierByWallet[hashedAddr] = nullifier
      │           └─ Set s_registrations[hashedAddr] = {expiresAt, registeredAt}
@@ -201,10 +202,10 @@ User opens app
 | **Web3** | @reown/appkit-react-native | 2.0.2 | Wallet connection modal |
 | | wagmi | 2.15.0 | React hooks for blockchain |
 | | viem | 2.23.0 | Ethereum client library |
-| **ZK Proving** | mopro-ffi | file:./modules/mopro | Rust FFI bridge |
-| | noir-rs | 1.0.0 (PR #37) | Noir prover |
-| | barretenberg-rs | 4.2.0-aztecnr-rc.2 | UltraHonk-Keccak backend |
-| | bn254_blackbox_solver | beta.19 | Poseidon2 permutation |
+| **ZK Proving** | mopro-ffi | 0.3.5 (`packages/mopro-circuits/Cargo.toml`) | Rust FFI bridge (Rust ↔ Hermes via UniFFI) |
+| | noir_rs (`zkmopro/noir-rs`) | git rev `0e4fdc9f…` | Noir prover; rev pinned to match `barretenberg-rs` |
+| | barretenberg-rs | =4.2.0-aztecnr-rc.2 | UltraHonk-Keccak backend; `bb` CLI must match |
+| | bn254_blackbox_solver | v1.0.0-beta.19 | BN254 ops used by off-chain Poseidon2 helper |
 | **Circuits** | Noir | 1.0.0 | ZK circuit language |
 | | noir-bignum | v0.9.2 | Big number arithmetic |
 | | noir_rsa | v0.10.0 | RSA signature verification |
@@ -274,7 +275,14 @@ make anvil-deploy          # deploy with MockProofVerifier + write registry addr
 
 - ✅ **Phase 1:** Wallet connection
 - ✅ **Phase 2:** NFC scan, MRZ OCR, stub proof generation
-- ✅ **Phase 3a/b/c:** Real RSA verification + DSC↔CSCA chain + CSCA Merkle inclusion in-circuit; UltraHonk on-chain verification working end-to-end on anvil
-- ✅ **Phase 4:** Single-tier sigil model (this document) — contracts + circuit + Mopro + app refactored. E2E with physical device pending.
-- ✅ **Phase 4b:** Stripped governance from registry — contract is immutable post-deploy. Only privileged action in the system is `CSCAMerkleTree.setRoot` (Ownable2Step).
-- 🚧 **Pending:** Transfer `CSCAMerkleTree` ownership to multisig / `TimelockController`; renewal prompts in app.
+- ✅ **Phase 3a/b/c:** Real RSA verification + DSC↔CSCA chain + CSCA Merkle inclusion in-circuit; UltraHonk on-chain verification working end-to-end on anvil and Base Sepolia
+- ✅ **Phase 4:** Single-tier sigil model (this document) — contracts + circuit + Mopro + app refactored; E2E verified on physical device
+- ✅ **Phase 4b:** Stripped governance from registry — contract is immutable post-deploy. Only privileged action in the system is `CSCAMerkleTree.setRoot` (Ownable2Step). `VerificationRegistry` renamed to `SigilRegistry`; `ProofVerifier` inlined into the registry.
+- ✅ **Polish + App Store:** Renewal flow in-app, tracked external addresses, ENS, App Store v1.0 submitted as Sigil.xyz.
+- 🚧 **Pending:** Transfer `CSCAMerkleTree` ownership to multisig / `TimelockController` before mainnet.
+
+> **Open audit finding:** the documented daily rate limit (max 10 registrations per
+> passport per day) is currently bypassable — `epoch_day` is a private circuit input
+> and not bound to on-chain time. See [`docs/audits/security.md`](docs/audits/security.md)
+> finding **H-1**. Not exploitable for fund loss; it does mean the rate limit isn't a
+> real sybil defense until fixed.

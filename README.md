@@ -87,7 +87,8 @@ then rebuild the app — env vars are baked into the JS bundle.
 ## Status
 
 - Phase 1 ✅ — wallet connection (MetaMask / WC wallets via AppKit)
-- Phase 2 ✅ — MRZ entry, camera OCR, NFC + BAC auth, stub proof generation
+- Phase 2 ✅ — MRZ entry, camera OCR, NFC + BAC auth
 - Phase 3 ✅ — real Noir circuit, Mopro integration, in-circuit RSA + DSC↔CSCA chain + CSCA Merkle inclusion, UltraHonk on-chain verification
 - Phase 4 ✅ — single-tier sigil model + immutable registry (no governor)
-- Pending — transfer `CSCAMerkleTree` ownership to a multisig before mainnet. See [HIGH-LEVEL-ARCHITECTURE.md](HIGH-LEVEL-ARCHITECTURE.md) for details.
+- App Store ✅ — v1.0 submitted as Sigil.xyz, deployed live on Base Sepolia
+- Pending — transfer `CSCAMerkleTree` ownership to a multisig before mainnet, and the rate-limit-bypass fix tracked in [`docs/audits/security.md`](docs/audits/security.md) (H-1). See [HIGH-LEVEL-ARCHITECTURE.md](HIGH-LEVEL-ARCHITECTURE.md) for details.
